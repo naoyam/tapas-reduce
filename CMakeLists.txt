@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 
+find_package(MPI)
+
 # --------------------------------------------------------------------------------
 # Find MassiveThreads
 # MassiveThreads is available via https://code.google.com/p/massivethreads/
@@ -20,7 +22,7 @@ message(STATUS ${MYTH_LIBRARY})
 mark_as_advanced(MYTH_INCLUDE_DIRS MYTH_LIBRARIES)
 
 if (MYTH_INCLUDE_DIR AND MYTH_LIBRARY)
-  message(STATUS "Found MassiveThreads in ${MYHT_INCLUDE_DIR}")
+  message(STATUS "Found MassiveThreads in ${MYTH_INCLUDE_DIR}")
   set(MYTH_FOUND 1)
 endif()
 

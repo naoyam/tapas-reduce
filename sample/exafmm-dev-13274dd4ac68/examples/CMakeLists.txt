@@ -60,6 +60,44 @@ if (EXAFMM_ENABLE_MT)
 endif()
 
 #------------------------------------------------------------------
+# Original ExaFMM with multithreading (w/o SIMD)
+#------------------------------------------------------------------
+if (EXAFMM_ENABLE_MPI)
+  add_executable(parallel
+    parallel.cxx
+    ../kernels/${EXAFMM_EQUATION}${EXAFMM_BASIS}${EXAFMM_DEVICE}.cxx
+    ../kernels/${EXAFMM_EQUATION}P2P${EXAFMM_DEVICE}.cxx
+    )
+
+  set_property(TARGET parallel APPEND PROPERTY COMPILE_FLAGS       "${MPI_CXX_COMPILE_FLAGS}")
+  set_property(TARGET parallel APPEND PROPERTY COMPILE_FLAGS       "-DTO_SERIAL")
+  set_property(TARGET parallel APPEND PROPERTY INCLUDE_DIRECTORIES "${MPI_CXX_INCLUDE_PATH}")
+  set_property(TARGET parallel APPEND PROPERTY LINK_FLAGS          "${MPI_CXX_LINK_FLAGS}")
+  #set_property(TARGET parallel APPEND PROPERTY LINK_LIBRARIES      "${MPI_CXX_LIBRARIES}")
+
+  target_link_libraries(parallel ${MPI_CXX_LIBRARIES})
+endif()
+
+
+#------------------------------------------------------------------
+# Original ExaFMM with multithreading (w/ MPI&SIMD)
+#------------------------------------------------------------------
+if(EXAFMM_ENABLE_MPI)
+  add_executable(parallel_simd
+    parallel.cxx
+    ../kernels/${EXAFMM_EQUATION}${EXAFMM_BASIS}${EXAFMM_DEVICE}.cxx
+    ../kernels/${EXAFMM_EQUATION}P2P${EXAFMM_DEVICE}.cxx
+    )
+
+  set_property(TARGET parallel_simd APPEND PROPERTY COMPILE_FLAGS       "${MPI_CXX_COMPILE_FLAGS} -DTO_SERIAL ${SIMD_FLAG}")
+  set_property(TARGET parallel_simd APPEND PROPERTY INCLUDE_DIRECTORIES "${MPI_CXX_INCLUDE_PATH}")
+  set_property(TARGET parallel_simd APPEND PROPERTY LINK_FLAGS          "${MPI_CXX_LINK_FLAGS}")
+  #set_property(TARGET parallel APPEND PROPERTY LINK_LIBRARIES      "${MPI_CXX_LIBRARIES}")
+
+  target_link_libraries(parallel_simd ${MPI_CXX_LIBRARIES})
+endif()
+
+#------------------------------------------------------------------
 # Tapas implementation of ExaFMM w/o multithreading
 #------------------------------------------------------------------
 add_executable(serial_tapas
