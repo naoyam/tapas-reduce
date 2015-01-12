@@ -1,9 +1,9 @@
 /**
- * @file single_node_morton_hot.h
- * @brief Implements single node Morton-order HOT (Hashed Octree) implementation
+ * @file morton_hot.h
+ * @brief Implements MPI-based, Morton-order HOT (Hashed Octree) implementation of Tapas's tree
  */
-#ifndef TAPAS_SINGLE_NODE_MORTON_HOT_
-#define TAPAS_SINGLE_NODE_MORTON_HOT_
+#ifndef TAPAS_MORTON_HOT_
+#define TAPAS_MORTON_HOT_
 
 #include "tapas/stdcbug.h"
 
@@ -701,4 +701,4 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, SingleNodeMortonHOT> {
 
 } // namespace tapas
 
-#endif // TAPAS_SINGLE_NODE_MORTON_HOT_
+#endif // TAPAS_MORTON_HOT_
