@@ -5,6 +5,7 @@
 
 #include "tapas.h"
 #include "tapas/single_node_morton_hot.h" // Morton-key based single node partitioning
+#include "tapas/morton_hot.h" // Morton-key based partitioning with MPI
 
 struct CellAttr {
     real_t R;
@@ -13,7 +14,8 @@ struct CellAttr {
 };
 
 typedef tapas::BodyInfo<Body, 0> BodyInfo;
-typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr, tapas::SingleNodeMortonHOT> Tapas;
+typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr, tapas::MortonHOT> Tapas;
+//typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr, tapas::SingleNodeMortonHOT> Tapas;
 typedef Tapas::Region Region;
 
 namespace tapas_kernel {
