@@ -12,7 +12,7 @@ template <class CellType> class BodyIterator;
 template <class CellType> class SubCellIterator;
 
 template<class TSP> // TSP=TapasStaticParams
-class Cell {
+class BasicCell {
   public:
     static const int Dim = TSP::Dim;
     typedef typename TSP::FP FP;
@@ -29,7 +29,7 @@ class Cell {
     index_t bid_;
     index_t nb_;
   public:
-  Cell(const Region<TSP> &region, index_t bid, index_t nb):
+    BasicCell(const Region<TSP> &region, index_t bid, index_t nb):
       region_(region), bid_(bid), nb_(nb) {}
   index_t bid() const { return bid_; }
   index_t nb() const { return nb_; }
@@ -49,7 +49,7 @@ class Cell {
     return region_.min() + width() / 2;
   }
   
-  bool operator==(const Cell &c) const;
+  bool operator==(const BasicCell &c) const;
   template <class T>
   bool operator==(const T &) const { return false; }
   
@@ -60,13 +60,13 @@ class Cell {
   typedef ATTR attr_type;
 #if 0  
   unsigned size() const { return 1; }
-  Cell &operator*() {
+  BasicCell &operator*() {
     return *this;
   }
-  const Cell &operator++() const {
+  const BasicCell &operator++() const {
     return *this;
   }
-  const Cell &operator++(int) const {
+  const BasicCell &operator++(int) const {
     return *this;
   }
   void rewind(int idx) const {
@@ -77,7 +77,7 @@ class Cell {
   //SubCellIterator<CELL_TEMPLATE_ARGS> subcells() const;
   //BodyIterator<CELL_TEMPLATE_ARGS> bodies() const;
 
-  // Cell attributes
+  // BasicCell attributes
   ATTR &attr() {
     return attr_;
   }
@@ -89,15 +89,15 @@ class Cell {
   bool IsRoot() const;
   bool IsLeaf() const;
   int nsubcells() const;
-  Cell &subcell(int idx) const; 
-  Cell &parent() const;
+  BasicCell &subcell(int idx) const; 
+  BasicCell &parent() const;
   typename BT::type &body(index_t idx) const;
   BT_ATTR *body_attrs() const;
 
  protected:
   BT_ATTR &attr(index_t idx) const;
   virtual void make_pure_virtual() const = 0;
-}; // class Cell
+}; // class BasicCell
 
 
 } // namespace tapas

@@ -120,7 +120,7 @@ template <class TSP>
 class Partition;
 
 template <class TSP> // TapasStaticParams
-class Cell: public tapas::Cell<TSP> { 
+class Cell: public tapas::BasicCell<TSP> { 
     friend class Partition<TSP>;
     friend class BodyIterator<Cell>;
   public:
@@ -129,13 +129,12 @@ class Cell: public tapas::Cell<TSP> {
     KeyType key_;
     HashTable *ht_;
   public:
-
     Cell(const Region<TSP> &region,
          index_t bid, index_t nb, KeyType key,
          HashTable *ht,
          typename TSP::BT::type *bodies,
          typename TSP::BT_ATTR *body_attrs) :
-            tapas::Cell<TSP>(region, bid, nb), key_(key),
+            tapas::BasicCell<TSP>(region, bid, nb), key_(key),
             ht_(ht), bodies_(bodies), body_attrs_(body_attrs),
             is_leaf_(true) {}
     
