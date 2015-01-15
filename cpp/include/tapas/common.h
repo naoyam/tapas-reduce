@@ -1,6 +1,15 @@
 #ifndef TAPAS_COMMON_H_
 #define TAPAS_COMMON_H_
 
+#if defined(__GNUG__) && !defined(__llvm__)
+# define GCC_VERSION (__GNUC__ * 10000              \
+                      + __GNUC_MINOR__ * 100        \
+                      + __GNUC_PATCHLEVEL__)
+# if GCC_VERSION < 40801
+#  error "Tapas requires gcc/g++ >= 4.8.1"
+# endif
+#endif
+
 #include <string>
 #include <cstdlib>
 #include <sstream>
