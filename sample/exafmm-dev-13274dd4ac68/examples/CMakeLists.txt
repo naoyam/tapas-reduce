@@ -129,3 +129,44 @@ if (EXAFMM_ENABLE_MT)
   target_link_libraries(serial_tapas_mt ${MYTH_LIBRARIES})
 endif()
 
+#------------------------------------------------------------------
+# Tapas implementation of ExaFMM with MPI
+#------------------------------------------------------------------
+if(EXAFMM_ENABLE_MPI)
+  add_executable(parallel_tapas
+    serial_tapas.cxx
+    ${EXAFMM_EQUATION}${EXAFMM_BASIS}${EXAFMM_DEVICE}_tapas.cxx
+    ${EXAFMM_EQUATION}P2P${EXAFMM_DEVICE}_tapas.cxx
+    ../kernels/${EXAFMM_EQUATION}${EXAFMM_BASIS}${EXAFMM_DEVICE}.cxx
+    ../kernels/${EXAFMM_EQUATION}P2P${EXAFMM_DEVICE}.cxx
+    )
+  set_property(TARGET parallel_tapas APPEND PROPERTY COMPILE_FLAGS       "${MPI_CXX_COMPILE_FLAGS} -DTO_SERIAL ${SIMD_FLAG}")
+  set_property(TARGET parallel_tapas APPEND PROPERTY INCLUDE_DIRECTORIES "${MPI_CXX_INCLUDE_PATH}")
+  set_property(TARGET parallel_tapas APPEND PROPERTY LINK_FLAGS          "${MPI_CXX_LINK_FLAGS}")
+  
+  target_link_libraries(parallel_tapas ${MPI_CXX_LIBRARIES})
+endif()
+
+#------------------------------------------------------------------
+# Tapas implementation of ExaFMM with MPI & Mutlithreading
+#------------------------------------------------------------------
+if(EXAFMM_ENABLE_MPI AND EXAFMM_ENABLE_MT)
+  add_executable(parallel_tapas
+    serial_tapas.cxx
+    ${EXAFMM_EQUATION}${EXAFMM_BASIS}${EXAFMM_DEVICE}_tapas.cxx
+    ${EXAFMM_EQUATION}P2P${EXAFMM_DEVICE}_tapas.cxx
+    ../kernels/${EXAFMM_EQUATION}${EXAFMM_BASIS}${EXAFMM_DEVICE}.cxx
+    ../kernels/${EXAFMM_EQUATION}P2P${EXAFMM_DEVICE}.cxx
+    )
+  set_property(TARGET parallel_tapas APPEND PROPERTY COMPILE_FLAGS       "${MPI_CXX_COMPILE_FLAGS} -DTO_SERIAL ${SIMD_FLAG}")
+  set_property(TARGET parallel_tapas APPEND PROPERTY INCLUDE_DIRECTORIES "${MPI_CXX_INCLUDE_PATH}")
+  set_property(TARGET parallel_tapas APPEND PROPERTY LINK_FLAGS          "${MPI_CXX_LINK_FLAGS}")
+  
+  target_link_libraries(parallel_tapas ${MPI_CXX_LIBRARIES})
+  
+  set_property(TARGET parallel_tapas_mt APPEND PROPERTY INCLUDE_DIRECTORIES ${MYTH_INCLUDE_DIRS})
+  set_property(TARGET parallel_tapas_mt APPEND PROPERTY COMPILE_FLAGS "-DMTHREAD ${SIMD_FLAG}")
+  target_link_libraries(parallel_tapas_mt ${MYTH_LIBRARIES})
+  
+  set_property(TARGET parallel_tapas_mt APPEND PROPERTY COMPILE_FLAGS "-DEXAFMM_TAPAS_MPI")
+endif()

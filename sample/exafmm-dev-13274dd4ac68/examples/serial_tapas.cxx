@@ -1,3 +1,7 @@
+#ifdef EXAFMM_TAPAS_MPI
+# include <mpi.h>
+#endif
+
 #include "args.h"
 #include "bound_box.h"
 #ifdef CILK
@@ -19,6 +23,9 @@
 #endif
 
 int main(int argc, char ** argv) {
+#ifdef EXAFMM_TAPAS_MPI
+    MPI_Init(&argc, &argv);
+#endif
   Args args(argc, argv);
   Bodies bodies, bodies2, bodies3, jbodies;
   BoundBox boundBox(args.nspawn);
@@ -161,5 +168,8 @@ int main(int argc, char ** argv) {
     data.initTarget(bodies);
   }
   logger::writeDAG();
+#ifdef EXAFMM_TAPAS_MPI
+  MPI_Finalize();
+#endif
   return 0;
 }

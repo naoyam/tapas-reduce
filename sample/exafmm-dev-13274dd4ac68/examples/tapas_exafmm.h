@@ -14,8 +14,11 @@ struct CellAttr {
 };
 
 typedef tapas::BodyInfo<Body, 0> BodyInfo;
+#ifdef EXAFMM_TAPAS_MPI
 typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr, tapas::MortonHOT> Tapas;
-//typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr, tapas::SingleNodeMortonHOT> Tapas;
+#else
+typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr, tapas::SingleNodeMortonHOT> Tapas;
+#endif
 typedef Tapas::Region Region;
 
 namespace tapas_kernel {
