@@ -26,6 +26,9 @@
 #define TAPAS_DEBUG // default
 #endif // TAPAS_DEBUG
 
+/**
+ * @brief Main namespae of Tapas
+ */
 namespace tapas {
 
 using std::string;

@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 2.8)
 
+project(Tapas)
+
 find_package(MPI REQUIRED)
+
+find_package(Doxygen)
 
 # --------------------------------------------------------------------------------
 # Find MassiveThreads
@@ -44,3 +48,17 @@ endif()
 
 add_subdirectory(sample)
 
+# --------------------------------------------------------------------------------
+# Generating documentation using Doxygen when available.
+if (DOXYGEN_FOUND)
+  set(doxyfile_in ${CMAKE_CURRENT_SOURCE_DIR}/doxyfile.in)
+  set(doxyfile ${CMAKE_CURRENT_BINARY_DIR}/doxyfile)
+
+  configure_file(${doxyfile_in} ${doxyfile})
+  
+  add_custom_target(doc
+    ALL
+    COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/doxyfile
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    VERBATIM)
+endif()

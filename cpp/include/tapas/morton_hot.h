@@ -28,6 +28,9 @@
 
 namespace tapas {
 
+/**
+ * @brief Provides MPI-based distributed Morton-order octree partitioning
+ */
 namespace morton_hot {
 
 /** 
@@ -59,9 +62,9 @@ static HelperNode<TSP::Dim>*
 CreateInitialNodes(const typename TSP::BT::type *p, index_t np, 
                    const Region<TSP> &r);
 
-static KeyType MortonKeyAppendDepth(KeyType k, int depth);
+KeyType MortonKeyAppendDepth(KeyType k, int depth);
 
-static int MortonKeyGetDepth(KeyType k);
+int MortonKeyGetDepth(KeyType k);
 
 KeyType MortonKeyRemoveDepth(KeyType k);
     

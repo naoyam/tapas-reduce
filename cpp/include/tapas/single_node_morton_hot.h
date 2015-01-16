@@ -28,6 +28,9 @@
 
 namespace tapas {
 
+/**
+ * @brief Provides Morton-order octree partitioning for shared memory single node
+ */
 namespace single_node_morton_hot {
 
 /** 
