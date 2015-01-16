@@ -49,6 +49,11 @@ struct HelperNode {
     index_t p_index;
     index_t np;
 };
+
+template<int Dim>
+int operator<(const HelperNode<Dim> &x, const HelperNode<Dim> &y) {
+    return x.key < y.key;
+}
     
 template <class TSP>
 static HelperNode<TSP::Dim>*
@@ -87,9 +92,6 @@ KeyType MortonKeyChild(KeyType k, int child_idx);
 
 template <int DIM, class T>
 void AppendChildren(KeyType k, T &s);
-
-template <int DIM>
-void SortNodes(HelperNode<DIM> *nodes, index_t n);
 
 template <int DIM, class BT>
 void SortBodies(const typename BT::type *b, typename BT::type *sorted,
@@ -296,15 +298,6 @@ HelperNode<TSP::Dim> *CreateInitialNodes(const typename TSP::BT::type *p,
     }
   
     return nodes;
-}
-
-template <int DIM>
-void SortNodes(HelperNode<DIM> *nodes, index_t n) {
-    std::qsort(nodes, n, sizeof(HelperNode<DIM>),
-               [] (const void *x, const void *y) {
-                   return static_cast<const HelperNode<DIM>*>(x)->key -
-                           static_cast<const HelperNode<DIM>*>(y)->key;
-               });
 }
 
 template <int DIM, class BT>
@@ -569,7 +562,7 @@ Partition<TSP>::operator() (typename TSP::BT::type *b,
     Btype *b_work = new Btype[nb];
     HelperNode<Dim> *hn = CreateInitialNodes<TSP>(b, nb, r);
 
-    SortNodes<Dim>(hn, nb);
+    std::sort(hn, hn + nb);
     SortBodies<Dim, BT>(b, b_work, hn, nb);
     std::memcpy(b, b_work, sizeof(Btype) * nb);
     //BT_ATTR *attrs = new BT_ATTR[nb];
