@@ -15,10 +15,8 @@ struct CellAttr {
 
 typedef tapas::BodyInfo<Body, 0> BodyInfo;
 #ifdef EXAFMM_TAPAS_MPI
-#warning "Building MPI version"
 typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr, tapas::MortonHOT> Tapas;
 #else
-#warning "Building single node version"
 typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr, tapas::SingleNodeMortonHOT> Tapas;
 #endif
 typedef Tapas::Region Region;
