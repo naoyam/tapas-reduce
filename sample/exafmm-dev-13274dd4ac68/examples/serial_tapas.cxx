@@ -69,7 +69,6 @@ int main(int argc, char ** argv) {
     bounds = boundBox.getBounds(bodies);
 #ifdef TAPAS
     asn(tr, bounds);
-    std::cerr << "#1" << std::endl;
     TAPAS_LOG_DEBUG() << "Bounding box: " << tr << std::endl;
 #endif
 
