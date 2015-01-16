@@ -57,7 +57,6 @@ if (DOXYGEN_FOUND)
   configure_file(${doxyfile_in} ${doxyfile})
   
   add_custom_target(doc
-    ALL
     COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/doxyfile
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     VERBATIM)
