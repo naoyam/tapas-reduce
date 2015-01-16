@@ -39,6 +39,8 @@ public:
   int verbose;
   const char * distribution;
   int repeat;
+    int mpi_size; //!< MPI size
+    int mpi_rank; //!< MPI rank
 
 private:
   void usage(char * name) {
@@ -94,8 +96,8 @@ private:
 
 public:
   Args(int argc=0, char ** argv=NULL) : numBodies(1000000), ncrit(16), nspawn(1000), threads(16), images(0),
-					theta(.4), useRmax(1), useRopt(1), mutual(1), graft(1),
-					verbose(1), distribution("cube"), repeat(1) {
+                                        theta(.4), useRmax(0), useRopt(0), mutual(1), graft(1),
+                                        verbose(1), distribution("cube"), repeat(1), mpi_size(1), mpi_rank(0) {
     while (1) {
       int option_index;
       int c = getopt_long(argc, argv, "n:c:s:T:i:t:x:o:m:g:v:d:r:h", long_options, &option_index);
@@ -186,7 +188,14 @@ public:
 		<< std::setw(stringLength)                      //  Set format
 		<< "distribution" << " : " << distribution << std::endl// Print distribution
 		<< std::setw(stringLength)                      //  Set format
-		<< "repeat" << " : " << repeat << std::endl;    //  Print distribution
+		<< "repeat" << " : " << repeat << std::endl     //  Print distribution
+#ifdef EXAFMM_TAPAS_MPI
+		<< std::setw(stringLength)                      //  Set format
+		<< "MPI size" << " : " << mpi_size << std::endl //  Print distribution
+		<< std::setw(stringLength)                      //  Set format
+		<< "MPI rank" << " : " << mpi_rank << std::endl //  Print distribution
+#endif
+      ;
     }                                                           // End if for verbose flag
   }
 };

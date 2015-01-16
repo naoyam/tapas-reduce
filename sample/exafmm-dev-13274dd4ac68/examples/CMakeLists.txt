@@ -144,6 +144,7 @@ if(EXAFMM_ENABLE_MPI)
   set_property(TARGET parallel_tapas APPEND PROPERTY INCLUDE_DIRECTORIES "${MPI_CXX_INCLUDE_PATH}")
   set_property(TARGET parallel_tapas APPEND PROPERTY LINK_FLAGS          "${MPI_CXX_LINK_FLAGS}")
   
+  set_property(TARGET parallel_tapas APPEND_STRING PROPERTY COMPILE_FLAGS " -DEXAFMM_TAPAS_MPI")
   target_link_libraries(parallel_tapas ${MPI_CXX_LIBRARIES})
 endif()
 

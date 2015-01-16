@@ -23,9 +23,6 @@
 #endif
 
 int main(int argc, char ** argv) {
-#ifdef EXAFMM_TAPAS_MPI
-    MPI_Init(&argc, &argv);
-#endif
   Args args(argc, argv);
   Bodies bodies, bodies2, bodies3, jbodies;
   BoundBox boundBox(args.nspawn);
@@ -34,6 +31,13 @@ int main(int argc, char ** argv) {
   Cells cells, jcells;
   Dataset data;
   Traversal traversal(args.nspawn, args.images);
+
+#ifdef EXAFMM_TAPAS_MPI
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &args.mpi_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &args.mpi_size);
+#endif
+  
   if (args.useRmax) {
     std::cerr << "Rmax not supported." << std::endl;
     std::cerr << "Use --useRmax 0 option." << std::endl;
@@ -52,7 +56,7 @@ int main(int argc, char ** argv) {
   num_threads(args.threads);
 
   const real_t cycle = 2 * M_PI;
-  logger::verbose = args.verbose;
+  logger::verbose = args.verbose && (args.mpi_rank == 0);
   logger::printTitle("FMM Parameters");
   args.print(logger::stringLength, P);
   bodies = data.initBodies(args.numBodies, args.distribution, 0);
@@ -65,6 +69,7 @@ int main(int argc, char ** argv) {
     bounds = boundBox.getBounds(bodies);
 #ifdef TAPAS
     asn(tr, bounds);
+    std::cerr << "#1" << std::endl;
     TAPAS_LOG_DEBUG() << "Bounding box: " << tr << std::endl;
 #endif
 

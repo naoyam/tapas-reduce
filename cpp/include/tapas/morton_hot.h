@@ -191,6 +191,83 @@ class Partition {
                 KeyType cur_key) const;
 }; // class Partition
 
+template <class TSP> // TSP : Tapas Static Params
+Cell<TSP>*
+Partition<TSP>::operator() (typename TSP::BT::type *b,
+                            index_t nb,
+                            const Region<TSP> &r) {
+    const int Dim = TSP::Dim;
+    typedef typename TSP::FP FP;
+    typedef typename TSP::BT BT;
+    typedef typename TSP::BT_ATTR BT_ATTR;
+    typedef typename BT::type BodyType;
+    typedef Cell<TSP> CellT;
+    
+    BodyType *b_work = new BodyType[nb];
+    HelperNode<Dim> *hn = CreateInitialNodes<TSP>(b, nb, r);
+
+    SortNodes<Dim>(hn, nb);
+    SortBodies<Dim, BT>(b, b_work, hn, nb);
+    std::memcpy(b, b_work, sizeof(BodyType) * nb);
+    //BT_ATTR *attrs = new BT_ATTR[nb];
+    BT_ATTR *attrs = (BT_ATTR*)calloc(nb, sizeof(BT_ATTR));
+
+    KeyType root_key = 0;
+    KeyPair kp = GetBodyRange(root_key, hn, 0, nb);
+    TAPAS_LOG_DEBUG() << "Root range: offset: " << kp.first << ", "
+                      << "length: " << kp.second << "\n";
+
+    auto *ht = new typename CellT::HashTable();
+    auto *root = new CellT(r, 0, nb, root_key, ht, b, attrs);
+    ht->insert(std::make_pair(root_key, root));
+    Refine(root, hn, b, 0, 0);
+    
+    return root;
+}
+
+template <class TSP>
+void Partition<TSP>::Refine(Cell<TSP> *c,
+                            const HelperNode<TSP::Dim> *hn,
+                            const typename TSP::BT::type *b,
+                            int cur_depth,
+                            KeyType cur_key) const {
+    const int Dim = TSP::Dim;
+    typedef typename TSP::FP FP;
+    typedef typename TSP::BT BT;
+    
+    TAPAS_LOG_INFO() << "Current depth: " << cur_depth << std::endl;
+    if (c->nb() <= max_nb_) {
+        TAPAS_LOG_INFO() << "Small enough cell" << std::endl;
+        return;
+    }
+    if (cur_depth >= MAX_DEPTH) {
+        TAPAS_LOG_INFO() << "Reached maximum depth" << std::endl;
+        return;
+    }
+    KeyType child_key = MortonKeyFirstChild<Dim>(cur_key);
+    index_t cur_offset = c->bid();
+    index_t cur_len = c->nb();
+    for (int i = 0; i < (1 << Dim); ++i) {
+        TAPAS_LOG_DEBUG() << "Child key: " << child_key << std::endl; 
+        index_t child_bn = GetBodyNumber(child_key, hn, cur_offset, cur_len);
+        TAPAS_LOG_DEBUG() << "Range: offset: " << cur_offset << ", length: "
+                          << child_bn << "\n";
+        auto child_r = c->region().PartitionBSP(i);
+        auto *child_cell = new Cell<TSP>(
+            child_r, cur_offset, child_bn, child_key, c->ht(),
+            c->bodies_, c->body_attrs_);
+        c->ht()->insert(std::make_pair(child_key, child_cell));
+        TAPAS_LOG_DEBUG() << "Particles: \n";
+#ifdef TAPAS_DEBUG    
+        tapas::debug::PrintBodies<Dim, FP, BT>(b+cur_offset, child_bn, std::cerr);
+#endif    
+        Refine(child_cell, hn, b, cur_depth+1, child_key);
+        child_key = CalcMortonKeyNext<Dim>(child_key);
+        cur_offset = cur_offset + child_bn;
+        cur_len = cur_len - child_bn;
+    }
+    c->is_leaf_ = false;
+}
 
 inline
 KeyType MortonKeyAppendDepth(KeyType k, int depth) {
@@ -559,83 +636,6 @@ BodyIterator<Cell<TSP>> Cell<TSP>::bodies() const {
     return BodyIterator<Cell<TSP> >(*this);
 }
 
-template <class TSP> // Tapas Static Params
-Cell<TSP>*
-Partition<TSP>::operator() (typename TSP::BT::type *b,
-                            index_t nb,
-                            const Region<TSP> &r) {
-    const int Dim = TSP::Dim;
-    typedef typename TSP::FP FP;
-    typedef typename TSP::BT BT;
-    typedef typename TSP::BT_ATTR BT_ATTR;
-    typedef typename BT::type Btype;
-    typedef Cell<TSP> CellT;
-    
-    Btype *b_work = new Btype[nb];
-    HelperNode<Dim> *hn = CreateInitialNodes<TSP>(b, nb, r);
-
-    SortNodes<Dim>(hn, nb);
-    SortBodies<Dim, BT>(b, b_work, hn, nb);
-    std::memcpy(b, b_work, sizeof(Btype) * nb);
-    //BT_ATTR *attrs = new BT_ATTR[nb];
-    BT_ATTR *attrs = (BT_ATTR*)calloc(nb, sizeof(BT_ATTR));
-
-    KeyType root_key = 0;
-    KeyPair kp = GetBodyRange(root_key, hn, 0, nb);
-    TAPAS_LOG_DEBUG() << "Root range: offset: " << kp.first << ", "
-                      << "length: " << kp.second << "\n";
-
-    auto *ht = new typename CellT::HashTable();
-    auto *root = new CellT(r, 0, nb, root_key, ht, b, attrs);
-    ht->insert(std::make_pair(root_key, root));
-    Refine(root, hn, b, 0, 0);
-    
-    return root;
-}
-
-template <class TSP>
-void Partition<TSP>::Refine(Cell<TSP> *c,
-                            const HelperNode<TSP::Dim> *hn,
-                            const typename TSP::BT::type *b,
-                            int cur_depth,
-                            KeyType cur_key) const {
-    const int Dim = TSP::Dim;
-    typedef typename TSP::FP FP;
-    typedef typename TSP::BT BT;
-    
-    TAPAS_LOG_INFO() << "Current depth: " << cur_depth << std::endl;
-    if (c->nb() <= max_nb_) {
-        TAPAS_LOG_INFO() << "Small enough cell" << std::endl;
-        return;
-    }
-    if (cur_depth >= MAX_DEPTH) {
-        TAPAS_LOG_INFO() << "Reached maximum depth" << std::endl;
-        return;
-    }
-    KeyType child_key = MortonKeyFirstChild<Dim>(cur_key);
-    index_t cur_offset = c->bid();
-    index_t cur_len = c->nb();
-    for (int i = 0; i < (1 << Dim); ++i) {
-        TAPAS_LOG_DEBUG() << "Child key: " << child_key << std::endl; 
-        index_t child_bn = GetBodyNumber(child_key, hn, cur_offset, cur_len);
-        TAPAS_LOG_DEBUG() << "Range: offset: " << cur_offset << ", length: "
-                          << child_bn << "\n";
-        auto child_r = c->region().PartitionBSP(i);
-        auto *child_cell = new Cell<TSP>(
-            child_r, cur_offset, child_bn, child_key, c->ht(),
-            c->bodies_, c->body_attrs_);
-        c->ht()->insert(std::make_pair(child_key, child_cell));
-        TAPAS_LOG_DEBUG() << "Particles: \n";
-#ifdef TAPAS_DEBUG    
-        tapas::debug::PrintBodies<Dim, FP, BT>(b+cur_offset, child_bn, std::cerr);
-#endif    
-        Refine(child_cell, hn, b, cur_depth+1, child_key);
-        child_key = CalcMortonKeyNext<Dim>(child_key);
-        cur_offset = cur_offset + child_bn;
-        cur_len = cur_len - child_bn;
-    }
-    c->is_leaf_ = false;
-}
 
 } // namespace morton_hot
 
@@ -696,8 +696,12 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, MortonHOT> {
   public:
     typedef tapas::Region<TSP> Region;  
     typedef morton_hot::Cell<TSP> Cell;
-    //typedef tapas::BodyIterator<DIM, BT, BT_ATTR, Cell> BodyIterator;
-    typedef tapas::BodyIterator<Cell> BodyIterator;  
+    typedef tapas::BodyIterator<Cell> BodyIterator;
+
+    /**
+     * @brief Partition and build an octree of the target space.
+     * @param b Array of body of BT::type.
+     */
     static Cell *Partition(typename BT::type *b,
                            index_t nb, const Region &r,
                            int max_nb) {
