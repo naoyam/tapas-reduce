@@ -1,3 +1,5 @@
+#include <unistd.h> // usleep
+
 #ifdef EXAFMM_TAPAS_MPI
 # include <mpi.h>
 #endif
@@ -24,6 +26,13 @@
 
 int main(int argc, char ** argv) {
   Args args(argc, argv);
+  
+#ifdef EXAFMM_TAPAS_MPI
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &args.mpi_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &args.mpi_size);
+#endif
+    
   Bodies bodies, bodies2, bodies3, jbodies;
   BoundBox boundBox(args.nspawn);
   Bounds bounds;
@@ -32,11 +41,6 @@ int main(int argc, char ** argv) {
   Dataset data;
   Traversal traversal(args.nspawn, args.images);
 
-#ifdef EXAFMM_TAPAS_MPI
-    MPI_Init(&argc, &argv);
-    MPI_Comm_rank(MPI_COMM_WORLD, &args.mpi_rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &args.mpi_size);
-#endif
   
   if (args.useRmax) {
     std::cerr << "Rmax not supported." << std::endl;
@@ -57,9 +61,38 @@ int main(int argc, char ** argv) {
 
   const real_t cycle = 2 * M_PI;
   logger::verbose = args.verbose && (args.mpi_rank == 0);
-  logger::printTitle("FMM Parameters");
-  args.print(logger::stringLength, P);
-  bodies = data.initBodies(args.numBodies, args.distribution, 0);
+  if (args.mpi_rank == 0) {
+      logger::printTitle("FMM Parameters");
+      args.print(logger::stringLength, P);
+  }
+
+#ifdef EXAFMM_TAPAS_MPI
+  for (int i = 0; i < args.mpi_size; i++) {
+      if (args.mpi_rank == i) {
+          bodies = data.initBodies(args.numBodies, args.distribution, args.mpi_rank, args.mpi_size);
+      }
+  }
+#else
+  bodies = data.initBodies(args.numBodies, args.distribution, args.mpi_rank, args.mpi_size);
+#endif
+
+#if 0
+#ifdef EXAFMM_TAPAS_MPI
+  MPI_Barrier(MPI_COMM_WORLD);
+  for (int i = 0; i < args.mpi_size; i++) {
+      if (args.mpi_rank == i) {
+          data.DumpToFile(bodies, "init_bodies.dat");
+      }
+      usleep(10000);
+      MPI_Barrier(MPI_COMM_WORLD);
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+#else
+  if (args.mpi_rank == 0) {
+      data.DumpToFile(bodies, "init_bodies.dat");
+  }
+#endif
+#endif
 
   for (int t=0; t<args.repeat; t++) {
     logger::printTitle("FMM Profiling");
