@@ -548,6 +548,14 @@ class Partitioner {
                 KeyType cur_key) const;
 }; // class Partitioner
 
+/**
+ * @brief Partition the simulation space and build Morton-key based octree
+ * @tparam TSP Tapas static params
+ * @param b Array of particles
+ * @param nb Length of nb
+ * @param r Geometry of the target space
+ * @return The root cell of the constructed tree
+ */
 template <class TSP> // TSP : Tapas Static Params
 Cell<TSP>*
 Partitioner<TSP>::Partition(typename TSP::BT::type *b,
