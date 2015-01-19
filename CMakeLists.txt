@@ -50,6 +50,7 @@ add_subdirectory(sample)
 
 # --------------------------------------------------------------------------------
 # Generating documentation using Doxygen when available.
+# --------------------------------------------------------------------------------
 if (DOXYGEN_FOUND)
   set(doxyfile_in ${CMAKE_CURRENT_SOURCE_DIR}/doxyfile.in)
   set(doxyfile ${CMAKE_CURRENT_BINARY_DIR}/doxyfile)
@@ -61,3 +62,14 @@ if (DOXYGEN_FOUND)
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     VERBATIM)
 endif()
+
+# --------------------------------------------------------------------------------
+# test
+# --------------------------------------------------------------------------------
+
+enable_testing()
+add_test(
+  NAME exafmm
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/sample/exafmm-dev-13274dd4ac68/examples
+  COMMAND python test.py
+  )
