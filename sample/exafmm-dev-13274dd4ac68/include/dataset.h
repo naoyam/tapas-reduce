@@ -25,12 +25,13 @@ private:
   }
 
   //! Uniform distribution on [-1,1]^3 lattice
-  Bodies lattice(int numBodies, int mpirank, int mpisize) {
+  Bodies lattice(int &numBodies, int mpirank, int mpisize) {
     int nx = int(std::pow(numBodies*mpisize, 1./3));            // Number of points in x direction
     int ny = nx;                                                // Number of points in y direction
     int nz = nx;                                                // Number of points in z direction
     int begin = 0;                                              // Begin index in z direction
     int end = nz;                                               // End index in z direction
+    numBodies = nx * ny * nz;                                   // Actual number of generated points
     splitRange(begin, end, mpirank, mpisize);                   // Split range in z direction
     int numLattice = nx * ny * (end - begin);                   // Total number of lattice points
     Bodies bodies(numLattice);                                  // Initialize bodies
@@ -153,30 +154,35 @@ public:
     }                                                           // End loop over bodies
   }
 
-  //! Initialize dsitribution, source & target value of bodies
-  Bodies initBodies(int numBodies, const char * distribution,
-		    int mpirank=0, int mpisize=1, int numSplit=1) {
-    Bodies bodies;                                              // Initialize bodies
-    switch (distribution[0]) {                                  // Switch between data distribution type
-    case 'l':                                                   // Case for lattice
-      bodies = lattice(numBodies,mpirank,mpisize);              //  Uniform distribution on [-1,1]^3 lattice
-      break;                                                    // End case for lattice
-    case 'c':                                                   // Case for cube
-      bodies = cube(numBodies,mpirank,numSplit);                //  Random distribution in [-1,1]^3 cube
-      break;                                                    // End case for cube
-    case 's':                                                   // Case for sphere
-      bodies = sphere(numBodies,mpirank,numSplit);              //  Random distribution on surface of r = 1 sphere
-      break;                                                    // End case for sphere
-    case 'p':                                                   // Case plummer
-      bodies = plummer(numBodies,mpirank,numSplit);             //  Plummer distribution in a r = M_PI/2 sphere
-      break;                                                    // End case for plummer
-    default:                                                    // If none of the above
-      fprintf(stderr, "Unknown data distribution %s\n", distribution);// Print error message
-    }                                                           // End switch between data distribution type
-    initSource(bodies,mpirank,numSplit);                        // Initialize source values
-    initTarget(bodies);                                         // Initialize target values
-    return bodies;                                              // Return bodies
-  }
+    /**
+     * @brief  Initialize dsitribution, source & target value of bodies
+     * @note The argument numBodies might be overwritten by the actual size of bodies
+     * because bodies.size() is sometimes less than the requested value (numBodies) especially in lattice
+     * distribution due to the restriction of body placement.
+     */
+    Bodies initBodies(int &numBodies, const char * distribution,
+                      int mpirank=0, int mpisize=1, int numSplit=1) {
+        Bodies bodies;                                              // Initialize bodies
+        switch (distribution[0]) {                                  // Switch between data distribution type
+            case 'l':                                                   // Case for lattice
+                bodies = lattice(numBodies,mpirank,mpisize);              //  Uniform distribution on [-1,1]^3 lattice
+                break;                                                    // End case for lattice
+            case 'c':                                                   // Case for cube
+                bodies = cube(numBodies,mpirank,numSplit);                //  Random distribution in [-1,1]^3 cube
+                break;                                                    // End case for cube
+            case 's':                                                   // Case for sphere
+                bodies = sphere(numBodies,mpirank,numSplit);              //  Random distribution on surface of r = 1 sphere
+                break;                                                    // End case for sphere
+            case 'p':                                                   // Case plummer
+                bodies = plummer(numBodies,mpirank,numSplit);             //  Plummer distribution in a r = M_PI/2 sphere
+                break;                                                    // End case for plummer
+            default:                                                    // If none of the above
+                fprintf(stderr, "Unknown data distribution %s\n", distribution);// Print error message
+        }                                                           // End switch between data distribution type
+        initSource(bodies,mpirank,numSplit);                        // Initialize source values
+        initTarget(bodies);                                         // Initialize target values
+        return bodies;                                              // Return bodies
+    }
 
   //! Read source values from file
   void readSources(Bodies & bodies, int mpirank) {
@@ -281,5 +287,25 @@ public:
     buffer.resize(B2-buffer.begin());                           // Resize buffer
     return buffer;                                              // Return buffer
   }
+    
+    void Dump(const Bodies &bodies, std::ostream & strm) const {
+        for(auto b : bodies) {
+            strm << std::scientific << std::showpos << b.X[0] << " "
+                 << std::scientific << std::showpos << b.X[1] << " "
+                 << std::scientific << std::showpos << b.X[2] << " "
+                 << std::endl;
+        }
+    }
+
+    void DumpToFile(const Bodies &bodies, const std::string &fname, bool append=false) const {
+        std::ios_base::openmode mode = std::ios_base::out;
+        if (append) mode |= std::ios_base::app;
+        std::ofstream ofs;
+        ofs.open(fname.c_str(), mode);
+        
+        assert(ofs.good());
+        Dump(bodies, ofs);
+        ofs.close();
+    }
 };
 #endif

@@ -76,12 +76,12 @@ int main(int argc, char ** argv) {
   bodies = data.initBodies(args.numBodies, args.distribution, args.mpi_rank, args.mpi_size);
 #endif
 
-#if 0
 #ifdef EXAFMM_TAPAS_MPI
   MPI_Barrier(MPI_COMM_WORLD);
   for (int i = 0; i < args.mpi_size; i++) {
       if (args.mpi_rank == i) {
-          data.DumpToFile(bodies, "init_bodies.dat");
+          bool append_mode = (i > 0); // Previously existing file is truncated by rank 0
+          data.DumpToFile(bodies, "init_bodies.dat", append_mode);
       }
       usleep(10000);
       MPI_Barrier(MPI_COMM_WORLD);
@@ -91,7 +91,6 @@ int main(int argc, char ** argv) {
   if (args.mpi_rank == 0) {
       data.DumpToFile(bodies, "init_bodies.dat");
   }
-#endif
 #endif
 
   for (int t=0; t<args.repeat; t++) {
@@ -195,8 +194,6 @@ int main(int argc, char ** argv) {
     logger::printTitle("FMM vs. direct");
     verify.print("Rel. L2 Error (pot)",std::sqrt(potDif/potNrm));
     verify.print("Rel. L2 Error (acc)",std::sqrt(accDif/accNrm));
-    std::cerr << "M2L calls: " << numM2L << std::endl;
-    std::cerr << "P2P calls: " << numP2P << std::endl;
     buildTree.printTreeData(cells);
     traversal.printTraversalData();
     logger::printPAPI();
