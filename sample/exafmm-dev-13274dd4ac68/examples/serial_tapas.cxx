@@ -24,6 +24,28 @@
 #include "serial_tapas_helper.cxx"
 #endif
 
+#ifdef EXAFMM_TAPAS_MPI
+template<class F>
+void BarrierExec(F func) {
+    int size, rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Barrier(MPI_COMM_WORLD);
+    for (int i = 0; i < size; i++) {
+        if (rank == i) {
+            func();
+        }
+        usleep(10000);
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+}
+#else
+template<class F>
+void BarrierExec(F func) {
+    func();
+}
+#endif
+
 int main(int argc, char ** argv) {
   Args args(argc, argv);
   
@@ -59,41 +81,18 @@ int main(int argc, char ** argv) {
 
   num_threads(args.threads);
 
-#ifdef EXAFMM_TAPAS_MPI
-  for (int i = 0; i < args.mpi_size; i++) {
-      if (args.mpi_rank == i) {
-          bodies = data.initBodies(args.numBodies, args.distribution, args.mpi_rank, args.mpi_size);
-      }
-      MPI_Barrier(MPI_COMM_WORLD);
-  }
-#else
   bodies = data.initBodies(args.numBodies, args.distribution, args.mpi_rank, args.mpi_size);
-#endif
 
-#ifdef EXAFMM_TAPAS_MPI
-  MPI_Barrier(MPI_COMM_WORLD);
-  for (int i = 0; i < args.mpi_size; i++) {
-      if (args.mpi_rank == i) {
-          bool append_mode = (i > 0); // Previously existing file is truncated by rank 0
+  BarrierExec([&]() {
+          bool append_mode = (args.mpi_rank > 0); // Previously existing file is truncated by rank 0
           data.DumpToFile(bodies, "init_bodies.dat", append_mode);
-      }
-      usleep(10000);
-      MPI_Barrier(MPI_COMM_WORLD);
-  }
-  MPI_Barrier(MPI_COMM_WORLD);
-#else
-  if (args.mpi_rank == 0) {
-      data.DumpToFile(bodies, "init_bodies.dat");
-  }
-#endif
+      });
 
   const real_t cycle = 2 * M_PI;
   logger::verbose = args.verbose && (args.mpi_rank == 0);
-  if (args.mpi_rank == 0) {
-      logger::printTitle("FMM Parameters");
-      args.print(logger::stringLength, P);
-  }
-
+  logger::printTitle("FMM Parameters");
+  args.print(logger::stringLength, P);
+  
   for (int t=0; t<args.repeat; t++) {
     logger::printTitle("FMM Profiling");
     logger::startTimer("Total FMM");
@@ -116,9 +115,9 @@ int main(int argc, char ** argv) {
     }
 #endif
     
-    logger::startTimer("Upward pass");                          // Start timer
+    logger::startTimer("Upward pass");
     tapas::Map(FMM_P2M, *root, args.theta);
-    logger::stopTimer("Upward pass");                          // Start timer
+    logger::stopTimer("Upward pass");
     TAPAS_LOG_DEBUG() << "P2M done\n";
 #if 0
     {
@@ -128,7 +127,6 @@ int main(int argc, char ** argv) {
       }
     }
 #endif
-
 
     logger::startTimer("Traverse");
     numM2L = 0; numP2P = 0;
@@ -171,7 +169,7 @@ int main(int argc, char ** argv) {
       }
     }
 #endif
-
+    
     logger::printTitle("Total runtime");
     logger::stopPAPI();
     logger::stopTimer("Total FMM");
@@ -179,6 +177,8 @@ int main(int argc, char ** argv) {
 #if WRITE_TIME
     logger::writeTime();
 #endif
+
+#ifdef DIRECT
     const int numTargets = 100;
     bodies3 = bodies;
     data.sampleBodies(bodies, numTargets);
@@ -195,6 +195,7 @@ int main(int argc, char ** argv) {
     logger::printTitle("FMM vs. direct");
     verify.print("Rel. L2 Error (pot)",std::sqrt(potDif/potNrm));
     verify.print("Rel. L2 Error (acc)",std::sqrt(accDif/accNrm));
+#endif
     buildTree.printTreeData(cells);
     traversal.printTraversalData();
     logger::printPAPI();
@@ -202,9 +203,10 @@ int main(int argc, char ** argv) {
     bodies = bodies3;
     data.initTarget(bodies);
   }
-  logger::writeDAG();
+    
 #ifdef EXAFMM_TAPAS_MPI
   MPI_Finalize();
 #endif
+    
   return 0;
 }
