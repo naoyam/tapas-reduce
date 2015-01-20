@@ -107,8 +107,7 @@ index_t FindFirst(const KeyType k, const HelperNode<DIM> *hn,
                   const index_t offset, const index_t len);
 
 template <int DIM>
-KeyPair GetBodyRange(const KeyType k, const HelperNode<DIM> *hn,
-                     index_t offset, index_t len);
+KeyPair GetBodyRange(const KeyType k, const HelperNode<DIM> *hn, index_t len);
 
 template <int DIM>
 index_t GetBodyNumber(const KeyType k, const HelperNode<DIM> *hn,
@@ -446,15 +445,19 @@ tapas::index_t FindFirst(const KeyType k,
 template <int DIM>
 KeyPair GetBodyRange(const KeyType k,
                      const HelperNode<DIM> *hn,
-                     index_t offset,
                      index_t len) {
-    TAPAS_ASSERT(len > 0);
-    index_t body_begin = FindFirst(k, hn, offset, len);
-    TAPAS_ASSERT(body_begin >= offset);
-    TAPAS_ASSERT(body_begin < len);
-    index_t body_num = GetBodyNumber(k, hn, body_begin,
-                                     len-(body_begin-offset));
-    return std::make_pair(body_begin, body_num);
+    assert(len > 0);
+    auto beg = hn, end = hn + len;
+
+    auto less_than = [](const HelperNode<DIM> &hn, KeyType k) {
+        return hn.key < k;
+    };
+
+    auto first = std::lower_bound(beg, end, k, less_than);
+    assert(beg <= first && first < end);
+    
+    auto last = std::lower_bound(first, end, CalcMortonKeyNext<DIM>(k), less_than);
+    return std::make_pair(first - beg, last - first);
 }
 
 template <int DIM>
@@ -615,7 +618,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     BodyAttrType *attrs = (BodyAttrType*)calloc(nb, sizeof(BodyAttrType));
 
     KeyType root_key = 0;
-    KeyPair kp = GetBodyRange(root_key, hn, 0, nb);
+    KeyPair kp = GetBodyRange(root_key, hn, nb);
     assert(kp.first == 0 && kp.second == nb);
     TAPAS_LOG_DEBUG() << "Root range: offset: " << kp.first << ", "
                       << "length: " << kp.second << "\n";
