@@ -90,18 +90,22 @@ std::ostream &operator<<(std::ostream &os, const Region<TSP> &r) {
     return r.Print(os);
 }
 
+/**
+ * @brief returns a pointer to Dim-length array of particle coordinate.
+ * @tparam Dim dimension
+ * @tparam FP Floating point type (usually float or double)
+ * @tparam Byte offset to coordinate values
+ */
 template <int Dim, class FP, int OFFSET>
 struct ParticlePosOffset {
-  static FP *pos(const void *base, int dim) {
-    return (FP *)(((intptr_t)base) + OFFSET + dim * sizeof(FP));
-  }
-  static Vec<Dim, FP> vec(const void *base) {
-    FP *p = (FP *)(((intptr_t)base) + OFFSET);
-    return Vec<Dim, FP>(p);
-  }
-
+    static FP *pos(const void *base, int dim) {
+        return (FP *)(((intptr_t)base) + OFFSET + dim * sizeof(FP));
+    }
+    static Vec<Dim, FP> vec(const void *base) {
+        FP *p = (FP *)(((intptr_t)base) + OFFSET);
+        return Vec<Dim, FP>(p);
+    }
 };
-
 } // namespace tapas
 
 #endif // TAPAS_BASIC_TYPES_H_

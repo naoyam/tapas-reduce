@@ -5,6 +5,12 @@
 
 namespace tapas {
 
+/**
+ * @brief Tapas' internal type used to wrap user-defined body type
+ * @tparam BT Body type
+ * @tparam POS_OFFSET Byte offset of coordinate values
+ * Tapas assumes that n-dimensional coordinate values (x,y,z in 3-dim) are continuous.
+ */
 template <class BT, int POS_OFFSET>
 class BodyInfo {
   public:

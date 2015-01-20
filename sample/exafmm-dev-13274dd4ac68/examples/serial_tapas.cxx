@@ -178,7 +178,6 @@ int main(int argc, char ** argv) {
     logger::writeTime();
 #endif
 
-#ifdef DIRECT
     const int numTargets = 100;
     bodies3 = bodies;
     data.sampleBodies(bodies, numTargets);
@@ -195,7 +194,6 @@ int main(int argc, char ** argv) {
     logger::printTitle("FMM vs. direct");
     verify.print("Rel. L2 Error (pot)",std::sqrt(potDif/potNrm));
     verify.print("Rel. L2 Error (acc)",std::sqrt(accDif/accNrm));
-#endif
     buildTree.printTreeData(cells);
     traversal.printTraversalData();
     logger::printPAPI();

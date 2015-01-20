@@ -47,25 +47,20 @@ using std::unordered_map;
 
 template <int DIM>
 struct HelperNode {
-    KeyType key; // Morton key
-    Vec<DIM, int> anchor;
-    index_t p_index;
-    index_t np;
+    KeyType key;          //!< Morton key
+    Vec<DIM, int> anchor; //!< Morton-key like vector without depth information
+    index_t p_index;      //!< Index of the corresponding body
+    index_t np;           //!< Number of particles in a node
 };
 
-template<int Dim>
-int operator<(const HelperNode<Dim> &x, const HelperNode<Dim> &y) {
-    return x.key < y.key;
-}
-    
 template <class TSP>
 static HelperNode<TSP::Dim>*
 CreateInitialNodes(const typename TSP::BT::type *p, index_t np, 
                    const Region<TSP> &r);
 
-static KeyType MortonKeyAppendDepth(KeyType k, int depth);
+KeyType MortonKeyAppendDepth(KeyType k, int depth);
 
-static int MortonKeyGetDepth(KeyType k);
+int MortonKeyGetDepth(KeyType k);
 
 KeyType MortonKeyRemoveDepth(KeyType k);
     
@@ -121,11 +116,11 @@ index_t GetBodyNumber(const KeyType k, const HelperNode<DIM> *hn,
 
 
 template <class TSP>    
-class Partition;
+class Partitioner;
 
 template <class TSP> // TapasStaticParams
 class Cell: public tapas::BasicCell<TSP> { 
-    friend class Partition<TSP>;
+    friend class Partitioner<TSP>;
     friend class BodyIterator<Cell>;
   public:
     typedef unordered_map<KeyType, Cell*> HashTable;
@@ -133,7 +128,6 @@ class Cell: public tapas::BasicCell<TSP> {
     KeyType key_;
     HashTable *ht_;
   public:
-
     Cell(const Region<TSP> &region,
          index_t bid, index_t nb, KeyType key,
          HashTable *ht,
@@ -180,23 +174,10 @@ class Cell: public tapas::BasicCell<TSP> {
     virtual void make_pure_virtual() const {}
 }; // class Cell
 
-template <class TSP> // Tapas static params
-class Partition {
-  private:
-    const int max_nb_;
-  
-  public:
-    Partition(unsigned max_nb): max_nb_(max_nb) {}
-      
-    Cell<TSP> *operator()(typename TSP::BT::type *b, index_t nb,
-                          const Region<TSP> &r);
-  private:
-    void Refine(Cell<TSP> *c, const HelperNode<TSP::Dim> *hn,
-                const typename TSP::BT::type *b, int cur_depth,
-                KeyType cur_key) const;
-}; // class Partition
 
-
+/**
+ * @brief Set depth information in a Morton key.
+ */
 inline
 KeyType MortonKeyAppendDepth(KeyType k, int depth) {
     k = (k << DEPTH_BIT_WIDTH) | depth;
@@ -238,6 +219,10 @@ bool MortonKeyIsDescendant(KeyType asc, KeyType dsc) {
 }
 
 
+/**
+ * @brief Calculate a morton key of the given anchor.
+ * Anchor is a Dim-dimensional index of a finest-level cell of which a Cell or HelperCell belongs.
+ */
 template <int DIM>
 KeyType CalcFinestMortonKey(const tapas::Vec<DIM, int> &anchor) {
     KeyType k = 0;
@@ -251,6 +236,14 @@ KeyType CalcFinestMortonKey(const tapas::Vec<DIM, int> &anchor) {
     return MortonKeyAppendDepth(k, MAX_DEPTH);
 }
 
+/**
+ * @brief Create an array of HelperNode from bodies
+ * In the first stage of tree construction, one HelperNode is create for each body.
+ * @return Array of HelperNode
+ * @param p A pointer to an array of bodies
+ * @param np Number of bodies
+ * @param r Region object
+ */
 template <class TSP>
 HelperNode<TSP::Dim> *CreateInitialNodes(const typename TSP::BT::type *p,
                                          index_t np,
@@ -260,22 +253,29 @@ HelperNode<TSP::Dim> *CreateInitialNodes(const typename TSP::BT::type *p,
     typedef typename TSP::BT BT;
     
     HelperNode<Dim> *nodes = new HelperNode<TSP::Dim>[np];
-    FP num_cell = 1 << MAX_DEPTH;
-    Vec<Dim, FP> pitch;
+    FP num_cell = 1 << MAX_DEPTH; // maximum number of cells in one dimension
+    Vec<Dim, FP> pitch;           // possible minimum cell width
     for (int d = 0; d < Dim; ++d) {
         pitch[d] = (r.max()[d] - r.min()[d]) / num_cell;
     }
+
     for (index_t i = 0; i < np; ++i) {
+        // First, create 1 helper cell per particle
         HelperNode<Dim> &node = nodes[i];
         node.p_index = i;
         node.np = 1;
+
+        // Particle pos offset is the offset of each coordinate value (x,y,z) in body structure
         Vec<Dim, FP> off = ParticlePosOffset<Dim, FP, BT::pos_offset>::vec((const void*)&(p[i]));
         off -= r.min();
         off /= pitch;
+
+        // Now 'off' is a Dim-dimensional index of a finest-level cell to which the particle belong.
+        // 
         for (int d = 0; d < Dim; ++d) {
             node.anchor[d] = (int)(off[d]);
             // assume maximum boundary is inclusive, i.e., a particle can be
-            // right at the maximum boundary. anchor 
+            // right at the maximum boundary.
             if (node.anchor[d] == (1 << MAX_DEPTH)) {
                 TAPAS_LOG_DEBUG() << "Particle located at max boundary." << std::endl;
                 node.anchor[d]--;
@@ -283,7 +283,7 @@ HelperNode<TSP::Dim> *CreateInitialNodes(const typename TSP::BT::type *p,
         }
 #ifdef TAPAS_DEBUG
         assert(node.anchor >= 0);
-#if 1   
+# if 1   
         if (!(node.anchor < (1 << MAX_DEPTH))) {
             TAPAS_LOG_ERROR() << "Anchor, " << node.anchor
                               << ", exceeds the maximum depth." << std::endl
@@ -292,9 +292,9 @@ HelperNode<TSP::Dim> *CreateInitialNodes(const typename TSP::BT::type *p,
                               << std::endl;
             TAPAS_DIE();
         }
-#else
+# else
         assert(node.anchor < (1 << MAX_DEPTH));
-#endif
+# endif
 #endif // TAPAS_DEBUG
     
         node.key = CalcFinestMortonKey<Dim>(node.anchor);
@@ -440,13 +440,14 @@ tapas::index_t FindFirst(const KeyType k,
     return cur;
 }
 
-// Returns the range of bodies that are included in the cell specified
-// by the given key. 
+/**
+ * @brief Returns the range of bodies that are included in the cell specified by the given key. 
+ */
 template <int DIM>
 KeyPair GetBodyRange(const KeyType k,
-                            const HelperNode<DIM> *hn,
-                            index_t offset,
-                            index_t len) {
+                     const HelperNode<DIM> *hn,
+                     index_t offset,
+                     index_t len) {
     TAPAS_ASSERT(len > 0);
     index_t body_begin = FindFirst(k, hn, offset, len);
     TAPAS_ASSERT(body_begin >= offset);
@@ -550,34 +551,77 @@ BodyIterator<Cell<TSP>> Cell<TSP>::bodies() const {
     return BodyIterator<Cell<TSP> >(*this);
 }
 
-template <class TSP> // Tapas Static Params
+template <class TSP> // Tapas static params
+class Partitioner {
+  private:
+    const int max_nb_;
+  
+  public:
+    Partitioner(unsigned max_nb): max_nb_(max_nb) {}
+      
+    Cell<TSP> *Partition(typename TSP::BT::type *b, index_t nb,
+                         const Region<TSP> &r);
+    Cell<TSP> *Partition(std::vector<typename TSP::BT::type> &b,
+                         const Region<TSP> &r);
+  private:
+    void Refine(Cell<TSP> *c, const HelperNode<TSP::Dim> *hn,
+                const typename TSP::BT::type *b, int cur_depth,
+                KeyType cur_key) const;
+}; // class Partitioner
+
+/**
+ * @brief Overloaded version of Partitioner::Partition
+ */
+template <class TSP>
 Cell<TSP>*
-Partition<TSP>::operator() (typename TSP::BT::type *b,
+Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b, const Region<TSP> &r) {
+    return Partitioner<TSP>::Partition(b.data(), b.size(), r);
+}
+
+/**
+ * @brief Partition the simulation space and build Morton-key based octree
+ * @tparam TSP Tapas static params
+ * @param b Array of particles
+ * @param nb Length of nb
+ * @param r Geometry of the target space
+ * @return The root cell of the constructed tree
+ */
+template <class TSP> // TSP : Tapas Static Params
+Cell<TSP>*
+Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                             index_t nb,
                             const Region<TSP> &r) {
     const int Dim = TSP::Dim;
     typedef typename TSP::FP FP;
     typedef typename TSP::BT BT;
-    typedef typename TSP::BT_ATTR BT_ATTR;
-    typedef typename BT::type Btype;
-    typedef Cell<TSP> CellT;
+    typedef typename TSP::BT_ATTR BodyAttrType;
+    typedef typename BT::type BodyType;
+    typedef Cell<TSP> CellType;
     
-    Btype *b_work = new Btype[nb];
+    BodyType *b_work = new BodyType[nb];
     HelperNode<Dim> *hn = CreateInitialNodes<TSP>(b, nb, r);
 
-    std::sort(hn, hn + nb);
+    // Sort the helper nodes using morton keys
+    auto key_comp = [](const HelperNode<Dim> &lhs, const HelperNode<Dim> &rhs) {
+        return lhs.key < rhs.key;
+    };
+    std::sort(hn, hn + nb, key_comp);
+
+    // Sort particles to the same order of hn
     SortBodies<Dim, BT>(b, b_work, hn, nb);
-    std::memcpy(b, b_work, sizeof(Btype) * nb);
-    //BT_ATTR *attrs = new BT_ATTR[nb];
-    BT_ATTR *attrs = (BT_ATTR*)calloc(nb, sizeof(BT_ATTR));
+
+    std::memcpy(b, b_work, sizeof(BodyType) * nb);
+    //BodyAttrType *attrs = new BodyAttrType[nb];
+    BodyAttrType *attrs = (BodyAttrType*)calloc(nb, sizeof(BodyAttrType));
 
     KeyType root_key = 0;
     KeyPair kp = GetBodyRange(root_key, hn, 0, nb);
+    assert(kp.first == 0 && kp.second == nb);
     TAPAS_LOG_DEBUG() << "Root range: offset: " << kp.first << ", "
                       << "length: " << kp.second << "\n";
 
-    auto *ht = new typename CellT::HashTable();
-    auto *root = new CellT(r, 0, nb, root_key, ht, b, attrs);
+    auto *ht = new typename CellType::HashTable();
+    auto *root = new CellType(r, 0, nb, root_key, ht, b, attrs);
     ht->insert(std::make_pair(root_key, root));
     Refine(root, hn, b, 0, 0);
     
@@ -585,7 +629,7 @@ Partition<TSP>::operator() (typename TSP::BT::type *b,
 }
 
 template <class TSP>
-void Partition<TSP>::Refine(Cell<TSP> *c,
+void Partitioner<TSP>::Refine(Cell<TSP> *c,
                             const HelperNode<TSP::Dim> *hn,
                             const typename TSP::BT::type *b,
                             int cur_depth,
@@ -666,8 +710,12 @@ ProductIterator<CellIterator<single_node_morton_hot::Cell<TSP>>,
 /** 
  * @brief A dummy class to achieve template specialization.
  */
-struct SingleNodeMortonHOT {};
+struct SingleNodeMortonHOT {
+};
 
+/** 
+ * @brief Advance decleration of a dummy class to achieve template specialization.
+ */
 template <int DIM, class FP, class BT,
           class BT_ATTR, class CELL_ATTR,
           class PartitionAlgorithm>
@@ -685,11 +733,16 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, SingleNodeMortonHOT> {
     typedef single_node_morton_hot::Cell<TSP> Cell;
     //typedef tapas::BodyIterator<DIM, BT, BT_ATTR, Cell> BodyIterator;
     typedef tapas::BodyIterator<Cell> BodyIterator;  
+
+    /**
+     * @brief Partition and build an octree of the target space.
+     * @param b Array of body of BT::type.
+     */
     static Cell *Partition(typename BT::type *b,
                            index_t nb, const Region &r,
                            int max_nb) {
-        single_node_morton_hot::Partition<TSP> part(max_nb);
-        return part(b, nb, r);
+        single_node_morton_hot::Partitioner<TSP> part(max_nb);
+        return part.Partition(b, nb, r);
     }
 };
 
