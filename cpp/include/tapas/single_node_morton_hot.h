@@ -54,7 +54,7 @@ struct HelperNode {
 };
 
 template <class TSP>
-static HelperNode<TSP::Dim>*
+std::vector<HelperNode<TSP::Dim>>
 CreateInitialNodes(const typename TSP::BT::type *p, index_t np, 
                    const Region<TSP> &r);
 
@@ -107,7 +107,7 @@ index_t FindFirst(const KeyType k, const HelperNode<DIM> *hn,
                   const index_t offset, const index_t len);
 
 template <int DIM>
-KeyPair GetBodyRange(const KeyType k, const HelperNode<DIM> *hn, index_t len);
+KeyPair GetBodyRange(const KeyType k, const std::vector<HelperNode<DIM>> &hn);
 
 template <int DIM>
 index_t GetBodyNumber(const KeyType k, const HelperNode<DIM> *hn,
@@ -244,14 +244,14 @@ KeyType CalcFinestMortonKey(const tapas::Vec<DIM, int> &anchor) {
  * @param r Region object
  */
 template <class TSP>
-HelperNode<TSP::Dim> *CreateInitialNodes(const typename TSP::BT::type *p,
-                                         index_t np,
-                                         const Region<TSP> &r) {
+std::vector<HelperNode<TSP::Dim>> CreateInitialNodes(const typename TSP::BT::type *p,
+                                                     index_t np,
+                                                     const Region<TSP> &r) {
     const int Dim = TSP::Dim;
     typedef typename TSP::FP FP;
     typedef typename TSP::BT BT;
     
-    HelperNode<Dim> *nodes = new HelperNode<TSP::Dim>[np];
+    std::vector<HelperNode<Dim>> nodes(np);
     FP num_cell = 1 << MAX_DEPTH; // maximum number of cells in one dimension
     Vec<Dim, FP> pitch;           // possible minimum cell width
     for (int d = 0; d < Dim; ++d) {
@@ -443,11 +443,8 @@ tapas::index_t FindFirst(const KeyType k,
  * @brief Returns the range of bodies that are included in the cell specified by the given key. 
  */
 template <int DIM>
-KeyPair GetBodyRange(const KeyType k,
-                     const HelperNode<DIM> *hn,
-                     index_t len) {
-    assert(len > 0);
-    auto beg = hn, end = hn + len;
+KeyPair GetBodyRange(const KeyType k, const std::vector<HelperNode<DIM>>& hn) {
+    auto beg = std::begin(hn), end = std::end(hn);
 
     auto less_than = [](const HelperNode<DIM> &hn, KeyType k) {
         return hn.key < k;
@@ -602,23 +599,23 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     typedef Cell<TSP> CellType;
     
     BodyType *b_work = new BodyType[nb];
-    HelperNode<Dim> *hn = CreateInitialNodes<TSP>(b, nb, r);
+    std::vector<HelperNode<Dim>> hn = CreateInitialNodes<TSP>(b, nb, r);
 
     // Sort the helper nodes using morton keys
     auto key_comp = [](const HelperNode<Dim> &lhs, const HelperNode<Dim> &rhs) {
         return lhs.key < rhs.key;
     };
-    std::sort(hn, hn + nb, key_comp);
+    std::sort(hn.begin(), hn.end(), key_comp);
 
     // Sort particles to the same order of hn
-    SortBodies<Dim, BT>(b, b_work, hn, nb);
+    SortBodies<Dim, BT>(b, b_work, hn.data(), hn.size());
 
     std::memcpy(b, b_work, sizeof(BodyType) * nb);
     //BodyAttrType *attrs = new BodyAttrType[nb];
     BodyAttrType *attrs = (BodyAttrType*)calloc(nb, sizeof(BodyAttrType));
 
     KeyType root_key = 0;
-    KeyPair kp = GetBodyRange(root_key, hn, nb);
+    KeyPair kp = GetBodyRange(root_key, hn);
     assert(kp.first == 0 && kp.second == nb);
     TAPAS_LOG_DEBUG() << "Root range: offset: " << kp.first << ", "
                       << "length: " << kp.second << "\n";
@@ -626,8 +623,8 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     auto *ht = new typename CellType::HashTable();
     auto *root = new CellType(r, 0, nb, root_key, ht, b, attrs);
     ht->insert(std::make_pair(root_key, root));
-    Refine(root, hn, b, 0, 0);
-    
+    Refine(root, hn.data(), b, 0, 0);
+
     return root;
 }
 
