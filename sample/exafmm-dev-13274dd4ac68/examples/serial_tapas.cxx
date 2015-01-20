@@ -59,18 +59,12 @@ int main(int argc, char ** argv) {
 
   num_threads(args.threads);
 
-  const real_t cycle = 2 * M_PI;
-  logger::verbose = args.verbose && (args.mpi_rank == 0);
-  if (args.mpi_rank == 0) {
-      logger::printTitle("FMM Parameters");
-      args.print(logger::stringLength, P);
-  }
-
 #ifdef EXAFMM_TAPAS_MPI
   for (int i = 0; i < args.mpi_size; i++) {
       if (args.mpi_rank == i) {
           bodies = data.initBodies(args.numBodies, args.distribution, args.mpi_rank, args.mpi_size);
       }
+      MPI_Barrier(MPI_COMM_WORLD);
   }
 #else
   bodies = data.initBodies(args.numBodies, args.distribution, args.mpi_rank, args.mpi_size);
@@ -92,6 +86,13 @@ int main(int argc, char ** argv) {
       data.DumpToFile(bodies, "init_bodies.dat");
   }
 #endif
+
+  const real_t cycle = 2 * M_PI;
+  logger::verbose = args.verbose && (args.mpi_rank == 0);
+  if (args.mpi_rank == 0) {
+      logger::printTitle("FMM Parameters");
+      args.print(logger::stringLength, P);
+  }
 
   for (int t=0; t<args.repeat; t++) {
     logger::printTitle("FMM Profiling");

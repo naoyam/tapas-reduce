@@ -22,30 +22,44 @@ private:
     begin += iSplit * increment + std::min(iSplit,remainder);   // Increment the begin counter
     end = begin + increment;                                    // Increment the end counter
     if (remainder > iSplit) end++;                              // Adjust the end counter for remainder
+
+    std::cout << "splitRange [" << iSplit << "] "
+              << "size = " << size << "\t"
+              << "inc = " << increment << "\t"
+              << "rem = " << remainder << "\t"
+              << "beg = " << begin << "\t"
+              << "end = " << end << std::endl;
   }
 
   //! Uniform distribution on [-1,1]^3 lattice
-  Bodies lattice(int &numBodies, int mpirank, int mpisize) {
-    int nx = int(std::pow(numBodies*mpisize, 1./3));            // Number of points in x direction
-    int ny = nx;                                                // Number of points in y direction
-    int nz = nx;                                                // Number of points in z direction
-    int begin = 0;                                              // Begin index in z direction
-    int end = nz;                                               // End index in z direction
-    numBodies = nx * ny * nz;                                   // Actual number of generated points
-    splitRange(begin, end, mpirank, mpisize);                   // Split range in z direction
-    int numLattice = nx * ny * (end - begin);                   // Total number of lattice points
-    Bodies bodies(numLattice);                                  // Initialize bodies
-    B_iter B = bodies.begin();                                  // Initialize body iterator
-    for (int ix=0; ix<nx; ix++) {                               // Loop over x direction
-      for (int iy=0; iy<ny; iy++) {                             //  Loop over y direction
-        for (int iz=begin; iz<end; iz++, B++) {                 //   Loop over z direction
-          B->X[0] = (ix / real_t(nx-1)) * 2 - 1;                //    x coordinate
-          B->X[1] = (iy / real_t(ny-1)) * 2 - 1;                //    y coordinate
-          B->X[2] = (iz / real_t(nz-1)) * 2 - 1;                //    z coordinate
-        }                                                       //   End loop over z direction
-      }                                                         //  End loop over y direction
-    }                                                           // End loop over x direction
-    return bodies;                                              // Return bodies
+  Bodies lattice(int &numBodies, int proc_rank, int proc_size) {
+      long nx = std::lround(std::pow(numBodies, 1./3));
+      long ny = nx;
+      long nz = nx;
+
+      // Overwrite numBodies because the actual number of bodies.size() is not numBodies
+      // in many cases.
+      numBodies = nx * ny * nz;
+
+      Bodies bodies;
+      bodies.reserve(numBodies / proc_size); // reserve vector memory space using rough estimation
+
+      for (int ix = 0; ix < nx; ix++) {
+      for (int iy = 0; iy < ny; iy++) {
+      for (int iz = 0; iz < nz; iz++) {
+          long idx = ix + iy * nx + iz * (nx*ny);
+          if (idx % proc_size == proc_rank) {
+              real_t x = (ix / real_t(nx-1)) * 2 - 1;         //    x coordinate
+              real_t y = (iy / real_t(ny-1)) * 2 - 1;         //    y coordinate
+              real_t z = (iz / real_t(nz-1)) * 2 - 1;         //    z coordinate
+              Body B;                                       
+              B.X[0] = x;
+              B.X[1] = y;
+              B.X[2] = z;
+              bodies.push_back(B);
+          }
+      }}}
+      return bodies;                                              // Return bodies
   }
 
   //! Random distribution in [-1,1]^3 cube
@@ -120,39 +134,42 @@ public:
   //! Constructor
   Dataset() : filePosition(0) {}                                // Initialize variables
 
-  //! Initialize source values
-  void initSource(Bodies & bodies, int seed, int numSplit) {
-    for (int i=0; i<numSplit; i++, seed++) {                    // Loop over partitions (if there are any)
-      int begin = 0;                                            //  Begin index of bodies
-      int end = bodies.size();                                  //  End index of bodies
-      splitRange(begin, end, i, numSplit);                      //  Split range of bodies
-      srand48(seed);                                            //  Set seed for random number generator
-#if MASS
-      for (B_iter B=bodies.begin()+begin; B!=bodies.begin()+end; B++) {// Loop over bodies
-	B->SRC = 1. / bodies.size();                            //   Initialize mass
-      }                                                         //  End loop over bodies
-#else
-      real_t average = 0;                                       //  Initialize average charge
-      for (B_iter B=bodies.begin()+begin; B!=bodies.begin()+end; B++) {// Loop over bodies
-	B->SRC = drand48() - .5;                                //   Initialize charge
-	average += B->SRC;                                      //   Accumulate average
-      }                                                         //  End loop over bodies
-      average /= (end - begin);                                 //  Normalize average
-      for (B_iter B=bodies.begin()+begin; B!=bodies.begin()+end; B++) {// Loop over bodies
-	B->SRC -= average;                                      //   Subtract average charge
-      }                                                         //  End loop over bodies
-#endif
-    }                                                           // End loop over partitions
-  }
+    /**
+     * @brief Initialize source values
+     * @param numBodies Total number of bodies (over all processes)
+     * @param bodies Local bodies
+     */
+    void initSource(Bodies & bodies, int seed, int numSplit) {
+        srand48(0);                                      //  Set seed for random number generator
 
-  //! Initialize target values
-  void initTarget(Bodies & bodies) {
-    for (B_iter B=bodies.begin(); B!=bodies.end(); B++) {       // Loop over bodies
-      B->TRG = 0;                                               //  Clear target values
-      B->IBODY = B-bodies.begin();                              //  Initial body numbering
-      B->WEIGHT = 1;                                            //  Initial weight
-    }                                                           // End loop over bodies
-  }
+        real_t average = 0;
+        
+#if MASS
+        for (auto &b : bodies) {
+            b.SRC = 1. / numBodies;                                 // Set source values (maybe mass)
+        }
+#else
+        for (auto &b : bodies) {
+            b.SRC = drand48() - .5;
+            average += b.SRC;
+        }
+
+        average /= bodies.size();
+        
+        for (auto &b : bodies) {
+            b.SRC -= average;
+        }
+#endif
+    }
+
+    //! Initialize target values
+    void initTarget(Bodies & bodies) {
+        for (auto b = bodies.begin(); b != bodies.end(); b++) {
+            b->TRG = 0;                                              //  Clear target values
+            b->IBODY = b - bodies.begin();                           //  Initial body numbering
+            b->WEIGHT = 1;                                           //  Initial weight
+        }                                                            // End loop over bodies
+    }
 
     /**
      * @brief  Initialize dsitribution, source & target value of bodies
@@ -161,25 +178,25 @@ public:
      * distribution due to the restriction of body placement.
      */
     Bodies initBodies(int &numBodies, const char * distribution,
-                      int mpirank=0, int mpisize=1, int numSplit=1) {
+                      int mpirank=0, int mpisize=1) {
         Bodies bodies;                                              // Initialize bodies
         switch (distribution[0]) {                                  // Switch between data distribution type
             case 'l':                                                   // Case for lattice
                 bodies = lattice(numBodies,mpirank,mpisize);              //  Uniform distribution on [-1,1]^3 lattice
                 break;                                                    // End case for lattice
             case 'c':                                                   // Case for cube
-                bodies = cube(numBodies,mpirank,numSplit);                //  Random distribution in [-1,1]^3 cube
+                bodies = cube(numBodies,mpirank,mpisize);                //  Random distribution in [-1,1]^3 cube
                 break;                                                    // End case for cube
             case 's':                                                   // Case for sphere
-                bodies = sphere(numBodies,mpirank,numSplit);              //  Random distribution on surface of r = 1 sphere
+                bodies = sphere(numBodies,mpirank,mpisize);              //  Random distribution on surface of r = 1 sphere
                 break;                                                    // End case for sphere
             case 'p':                                                   // Case plummer
-                bodies = plummer(numBodies,mpirank,numSplit);             //  Plummer distribution in a r = M_PI/2 sphere
+                bodies = plummer(numBodies,mpirank,mpisize);             //  Plummer distribution in a r = M_PI/2 sphere
                 break;                                                    // End case for plummer
             default:                                                    // If none of the above
                 fprintf(stderr, "Unknown data distribution %s\n", distribution);// Print error message
         }                                                           // End switch between data distribution type
-        initSource(bodies,mpirank,numSplit);                        // Initialize source values
+        initSource(bodies,mpirank,mpisize);                        // Initialize source values
         initTarget(bodies);                                         // Initialize target values
         return bodies;                                              // Return bodies
     }
