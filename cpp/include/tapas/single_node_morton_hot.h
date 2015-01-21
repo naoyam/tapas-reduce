@@ -22,9 +22,7 @@
 #include "tapas/logging.h"
 #include "tapas/debug_util.h"
 #include "tapas/iterator.h"
-
-#define DEPTH_BIT_WIDTH (3)
-#define MAX_DEPTH ((1 << DEPTH_BIT_WIDTH) - 1)
+#include "tapas/morton_common.h"
 
 namespace tapas {
 
@@ -33,17 +31,7 @@ namespace tapas {
  */
 namespace single_node_morton_hot {
 
-/** 
- * @brief Morton key type.
- */
-typedef int KeyType;
-
-typedef std::list<KeyType> KeyList;
-typedef std::vector<KeyType> KeyVector;
-typedef std::unordered_set<KeyType> KeySet;
-typedef std::pair<KeyType, KeyType> KeyPair;
-
-using std::unordered_map;
+using namespace morton_common;
 
 template <int DIM>
 struct HelperNode {
@@ -58,22 +46,8 @@ std::vector<HelperNode<TSP::Dim>>
 CreateInitialNodes(const typename TSP::BT::type *p, index_t np, 
                    const Region<TSP> &r);
 
-KeyType MortonKeyAppendDepth(KeyType k, int depth);
-
-int MortonKeyGetDepth(KeyType k);
-
-KeyType MortonKeyRemoveDepth(KeyType k);
-    
-int MortonKeyIncrementDepth(KeyType k, int inc);
-
-template <int DIM>
-bool MortonKeyIsDescendant(KeyType asc, KeyType dsc);
-
 template <int DIM>
 KeyType CalcFinestMortonKey(const Vec<DIM, int> &anchor);
-                      
-template <int DIM>
-KeyType CalcMortonKeyNext(KeyType k);
 
 template <int DIM>
 KeyType MortonKeyClearDescendants(KeyType k);
@@ -105,19 +79,6 @@ void CompleteRegion(KeyType x, KeyType y, KeyVector &s);
 template <int DIM>
 index_t FindFirst(const KeyType k, const HelperNode<DIM> *hn,
                   const index_t offset, const index_t len);
-
-template <int DIM, class Iter>
-KeyPair GetBodyRange(const KeyType k, Iter beg, Iter end);
-
-template <int DIM>
-KeyPair GetBodyRange(const KeyType k, const std::vector<HelperNode<DIM>> &hn) {
-    return GetBodyRange<DIM>(k, hn.begin(), hn.end());
-}
-
-template <int DIM>
-index_t GetBodyNumber(const KeyType k, const HelperNode<DIM> *hn,
-                      index_t offset, index_t len);
-
 
 template <class TSP>    
 class Partitioner;
@@ -179,48 +140,6 @@ class Cell: public tapas::BasicCell<TSP> {
 }; // class Cell
 
 
-/**
- * @brief Set depth information in a Morton key.
- */
-inline
-KeyType MortonKeyAppendDepth(KeyType k, int depth) {
-    k = (k << DEPTH_BIT_WIDTH) | depth;
-    return k;
-}
-
-inline
-int MortonKeyGetDepth(KeyType k) {
-    return k & ((1 << DEPTH_BIT_WIDTH) - 1);
-}
-
-inline
-KeyType MortonKeyRemoveDepth(KeyType k) {
-    return k >> DEPTH_BIT_WIDTH;
-}
-
-inline
-int MortonKeyIncrementDepth(KeyType k, int inc) {
-    int depth = MortonKeyGetDepth(k);
-    depth += inc;
-#ifdef TAPAS_DEBUG
-    if (depth > MAX_DEPTH) {
-        TAPAS_LOG_ERROR() << "Exceeded the maximum allowable depth: " << MAX_DEPTH << std::endl;
-        TAPAS_DIE();
-    }
-#endif  
-    k = MortonKeyRemoveDepth(k);
-    return MortonKeyAppendDepth(k, depth);
-}
-
-template <int DIM>
-bool MortonKeyIsDescendant(KeyType asc, KeyType dsc) {
-    int depth = MortonKeyGetDepth(asc);
-    if (depth >= MortonKeyGetDepth(dsc)) return false;
-    int s = (MAX_DEPTH - depth) * DIM + DEPTH_BIT_WIDTH;
-    asc >>= s;
-    dsc >>= s;
-    return asc == dsc;
-}
 
 
 /**
@@ -347,16 +266,6 @@ void AppendChildren(KeyType x, T &s) {
     }
 }
 
-// Note this doesn't return a valid morton key when the incremented
-// key overflows the overall region, but should be fine for
-// FindBodyRange method.
-template <int DIM>
-KeyType CalcMortonKeyNext(KeyType k) {
-    int d = MortonKeyGetDepth(k);
-    KeyType inc = 1 << (DIM * (MAX_DEPTH - d) + DEPTH_BIT_WIDTH);
-    return k + inc;
-}
-
 template <int DIM>
 KeyType MortonKeyClearDescendants(KeyType k) {
     int d = MortonKeyGetDepth(k);
@@ -386,6 +295,7 @@ KeyType MortonKeyFirstChild(KeyType k) {
 template <int DIM>
 KeyType MortonKeyChild(KeyType k, int child_idx) {
     TAPAS_ASSERT(child_idx < (1 << DIM));
+    
     k = MortonKeyIncrementDepth(k, 1);
     int d = MortonKeyGetDepth(k);
     return k | (child_idx << ((MAX_DEPTH - d) * DIM + DEPTH_BIT_WIDTH));
@@ -444,27 +354,7 @@ tapas::index_t FindFirst(const KeyType k,
     return cur;
 }
 
-/**
- * @brief Returns the range of bodies that are included in the cell specified by the given key. 
- */
-template <int DIM, class Iter>
-KeyPair GetBodyRange(const KeyType k, Iter beg, Iter end) {
-    // When used in Refine(), a cells has sometimes no body.
-    // In this special case, just returns (0, 0)
-    if (beg == end) return std::make_pair(0, 0);
-
-    auto less_than = [](const HelperNode<DIM> &hn, KeyType k) {
-        return hn.key < k;
-    };
-
-    auto fst = std::lower_bound(beg, end, k, less_than); // first node 
-    auto lst = std::lower_bound(fst, end, CalcMortonKeyNext<DIM>(k), less_than); // last node
-
-    assert(lst <= end);
-    
-    return std::make_pair(fst - beg, lst - fst); // returns (pos, nb)
-}
-
+#if 0
 template <int DIM>
 tapas::index_t GetBodyNumber(const KeyType k,
                              const HelperNode<DIM> *hn,
@@ -477,6 +367,7 @@ tapas::index_t GetBodyNumber(const KeyType k,
     index_t body_end = FindFirst(next_key, hn, offset+1, len-1);
     return body_end - offset;
 }
+#endif
 
 template <class TSP>
 bool Cell<TSP>::operator==(const Cell &c) const {
@@ -623,7 +514,8 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     BodyAttrType *attrs = (BodyAttrType*)calloc(nb, sizeof(BodyAttrType));
 
     KeyType root_key = 0;
-    KeyPair kp = GetBodyRange<Dim>(root_key, hn);
+    KeyPair kp = GetBodyRange<Dim>(root_key, hn,
+                                   [](const HelperNode<Dim>& hn) { return hn.key; });
     assert(kp.first == 0 && kp.second == nb);
 
     auto *ht = new typename CellType::HashTable();
@@ -658,17 +550,11 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
     index_t cur_len = c->nb();
     for (int i = 0; i < (1 << Dim); ++i) {
         TAPAS_LOG_DEBUG() << "Child key: " << child_key << std::endl;
-        KeyPair kp = GetBodyRange<Dim>(child_key,
-                                       hn.begin() + cur_offset,
-                                       hn.begin() + cur_offset + cur_len);
-        index_t child_bn;
-        if (getenv("USE_OLD_GETBODYNUM")) {
-            std::cout << "Rel: original" << std::endl;
-            child_bn = GetBodyNumber(child_key, hn.data(), cur_offset, cur_len);
-        } else {
-            std::cout << "Rel: mine" << std::endl;
-            child_bn = kp.second;
-        }
+        KeyPair kp = GetBodyRange<Dim, HelperNode<Dim>>(child_key,
+                                                        hn.begin() + cur_offset,
+                                                        hn.begin() + cur_offset + cur_len,
+                                                        [](const HelperNode<Dim> &hn) { return hn.key; });
+        index_t child_bn = kp.second;
         
         TAPAS_LOG_DEBUG() << "Range: offset: " << cur_offset << ", length: "
                           << child_bn << "\n";
