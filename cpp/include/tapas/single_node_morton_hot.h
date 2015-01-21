@@ -47,9 +47,6 @@ CreateInitialNodes(const typename TSP::BT::type *p, index_t np,
                    const Region<TSP> &r);
 
 template <int DIM>
-KeyType CalcFinestMortonKey(const Vec<DIM, int> &anchor);
-
-template <int DIM>
 KeyType MortonKeyClearDescendants(KeyType k);
 
 template <int DIM>
@@ -75,10 +72,6 @@ KeyType FindFinestAncestor(KeyType x, KeyType y);
 
 template <int DIM>
 void CompleteRegion(KeyType x, KeyType y, KeyVector &s);
-
-template <int DIM>
-index_t FindFirst(const KeyType k, const HelperNode<DIM> *hn,
-                  const index_t offset, const index_t len);
 
 template <class TSP>    
 class Partitioner;
@@ -139,25 +132,6 @@ class Cell: public tapas::BasicCell<TSP> {
     virtual void make_pure_virtual() const {}
 }; // class Cell
 
-
-
-
-/**
- * @brief Calculate a morton key of the given anchor.
- * Anchor is a Dim-dimensional index of a finest-level cell of which a Cell or HelperCell belongs.
- */
-template <int DIM>
-KeyType CalcFinestMortonKey(const tapas::Vec<DIM, int> &anchor) {
-    KeyType k = 0;
-    int mask = 1 << (MAX_DEPTH - 1);
-    for (int i = 0; i < MAX_DEPTH; ++i) {
-        for (int d = DIM-1; d >= 0; --d) {
-            k = (k << 1) | ((anchor[d] & mask) >> (MAX_DEPTH - i - 1));
-        }
-        mask >>= 1;
-    }
-    return MortonKeyAppendDepth(k, MAX_DEPTH);
-}
 
 /**
  * @brief Create an array of HelperNode from bodies
@@ -324,50 +298,6 @@ void CompleteRegion(KeyType x, KeyType y,
     }
     std::sort(std::begin(s), std::end(s));
 }
-
-template <int DIM>
-tapas::index_t FindFirst(const KeyType k,
-                         const HelperNode<DIM> *hn,
-                         const index_t offset,
-                         const index_t len) {
-    // Assume hn is softed by key
-    // Searches the first element that is grether or equal to the key.
-    // Returns len if not found, i.e., all elements are less than the
-    // key.
-    TAPAS_ASSERT(len > 0);
-    index_t pivot = len / 2;
-    index_t i = offset + pivot;
-    index_t cur;
-    if (hn[i].key < k) {
-        cur = offset + len;
-        index_t rem_len = len - pivot - 1;
-        if (rem_len > 0) {
-            cur = std::min(cur, FindFirst(k, hn, i + 1, rem_len));
-        }
-    } else { // (hn[i].key >= k) {
-        cur = i;
-        index_t rem_len = pivot;
-        if (rem_len > 0) {
-            cur = std::min(cur, FindFirst(k, hn, offset, rem_len));
-        }
-    }
-    return cur;
-}
-
-#if 0
-template <int DIM>
-tapas::index_t GetBodyNumber(const KeyType k,
-                             const HelperNode<DIM> *hn,
-                             index_t offset,
-                             index_t len) {
-    //index_t body_begin = FindFirst(k, hn, offset, len);
-    if (len == 0) return 0;
-    if (len == 1) return 1;
-    KeyType next_key = CalcMortonKeyNext<DIM>(k);
-    index_t body_end = FindFirst(next_key, hn, offset+1, len-1);
-    return body_end - offset;
-}
-#endif
 
 template <class TSP>
 bool Cell<TSP>::operator==(const Cell &c) const {
@@ -570,7 +500,7 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
         Refine(child_cell, hn, b, cur_depth+1, child_key);
 
         // Go to the next child
-        child_key = single_node_morton_hot::CalcMortonKeyNext<Dim>(child_key);
+        child_key = CalcMortonKeyNext<Dim>(child_key);
         cur_offset = cur_offset + child_bn;
         cur_len = cur_len - child_bn;
     }

@@ -10,18 +10,24 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
+#include <numeric>
 #include <list>
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
 #include <utility>
 #include <iostream>
+#include <iomanip>
+
+#include <unistd.h>
+#include <mpi.h>
 
 #include "tapas/cell.h"
 #include "tapas/bitarith.h"
 #include "tapas/logging.h"
 #include "tapas/debug_util.h"
 #include "tapas/iterator.h"
+#include "tapas/morton_common.h"
 
 #define DEPTH_BIT_WIDTH (3)
 #define MAX_DEPTH ((1 << DEPTH_BIT_WIDTH) - 1)
@@ -33,18 +39,7 @@ namespace tapas {
  */
 namespace morton_hot {
 
-/** 
- * @brief Morton key type.
- * @todo Is `long` type long enough to store morton keys in a large simulation?
- */
-typedef long KeyType;
-
-typedef std::list<KeyType> KeyList;
-typedef std::vector<KeyType> KeyVector;
-typedef std::unordered_set<KeyType> KeySet;
-typedef std::pair<KeyType, KeyType> KeyPair;
-
-using std::unordered_map;
+using namespace morton_common;
 
 template <int DIM>
 struct HelperNode {
@@ -55,26 +50,15 @@ struct HelperNode {
 };
 
 template <class TSP>
-static HelperNode<TSP::Dim>*
+std::vector<HelperNode<TSP::Dim>>
 CreateInitialNodes(const typename TSP::BT::type *p, index_t np, 
                    const Region<TSP> &r);
 
 KeyType MortonKeyAppendDepth(KeyType k, int depth);
 
-int MortonKeyGetDepth(KeyType k);
-
 KeyType MortonKeyRemoveDepth(KeyType k);
     
 int MortonKeyIncrementDepth(KeyType k, int inc);
-
-template <int DIM>
-bool MortonKeyIsDescendant(KeyType asc, KeyType dsc);
-
-template <int DIM>
-KeyType CalcFinestMortonKey(const Vec<DIM, int> &anchor);
-                      
-template <int DIM>
-KeyType CalcMortonKeyNext(KeyType k);
 
 template <int DIM>
 KeyType MortonKeyClearDescendants(KeyType k);
@@ -102,14 +86,6 @@ KeyType FindFinestAncestor(KeyType x, KeyType y);
 
 template <int DIM>
 void CompleteRegion(KeyType x, KeyType y, KeyVector &s);
-
-template <int DIM>
-index_t FindFirst(const KeyType k, const HelperNode<DIM> *hn,
-                  const index_t offset, const index_t len);
-
-template <int DIM>
-KeyPair GetBodyRange(const KeyType k, const HelperNode<DIM> *hn,
-                     index_t offset, index_t len);
 
 template <int DIM>
 index_t GetBodyNumber(const KeyType k, const HelperNode<DIM> *hn,
@@ -186,11 +162,6 @@ KeyType MortonKeyAppendDepth(KeyType k, int depth) {
 }
 
 inline
-int MortonKeyGetDepth(KeyType k) {
-    return k & ((1 << DEPTH_BIT_WIDTH) - 1);
-}
-
-inline
 KeyType MortonKeyRemoveDepth(KeyType k) {
     return k >> DEPTH_BIT_WIDTH;
 }
@@ -209,34 +180,6 @@ int MortonKeyIncrementDepth(KeyType k, int inc) {
     return MortonKeyAppendDepth(k, depth);
 }
 
-template <int DIM>
-bool MortonKeyIsDescendant(KeyType asc, KeyType dsc) {
-    int depth = MortonKeyGetDepth(asc);
-    if (depth >= MortonKeyGetDepth(dsc)) return false;
-    int s = (MAX_DEPTH - depth) * DIM + DEPTH_BIT_WIDTH;
-    asc >>= s;
-    dsc >>= s;
-    return asc == dsc;
-}
-
-
-/**
- * @brief Calculate a morton key of the given anchor.
- * Anchor is a Dim-dimensional index of a finest-level cell of which a Cell or HelperCell belongs.
- */
-template <int DIM>
-KeyType CalcFinestMortonKey(const tapas::Vec<DIM, int> &anchor) {
-    KeyType k = 0;
-    int mask = 1 << (MAX_DEPTH - 1);
-    for (int i = 0; i < MAX_DEPTH; ++i) {
-        for (int d = DIM-1; d >= 0; --d) {
-            k = (k << 1) | ((anchor[d] & mask) >> (MAX_DEPTH - i - 1));
-        }
-        mask >>= 1;
-    }
-    return MortonKeyAppendDepth(k, MAX_DEPTH);
-}
-
 /**
  * @brief Create an array of HelperNode from bodies
  * In the first stage of tree construction, one HelperNode is create for each body.
@@ -246,14 +189,14 @@ KeyType CalcFinestMortonKey(const tapas::Vec<DIM, int> &anchor) {
  * @param r Region object
  */
 template <class TSP>
-HelperNode<TSP::Dim> *CreateInitialNodes(const typename TSP::BT::type *p,
-                                         index_t np,
-                                         const Region<TSP> &r) {
+std::vector<HelperNode<TSP::Dim>> CreateInitialNodes(const typename TSP::BT::type *p,
+                                                     index_t np,
+                                                     const Region<TSP> &r) {
     const int Dim = TSP::Dim;
     typedef typename TSP::FP FP;
     typedef typename TSP::BT BT;
     
-    HelperNode<Dim> *nodes = new HelperNode<TSP::Dim>[np];
+    std::vector<HelperNode<Dim>> nodes(np);
     FP num_cell = 1 << MAX_DEPTH; // maximum number of cells in one dimension
     Vec<Dim, FP> pitch;           // possible minimum cell width
     for (int d = 0; d < Dim; ++d) {
@@ -268,11 +211,10 @@ HelperNode<TSP::Dim> *CreateInitialNodes(const typename TSP::BT::type *p,
 
         // Particle pos offset is the offset of each coordinate value (x,y,z) in body structure
         Vec<Dim, FP> off = ParticlePosOffset<Dim, FP, BT::pos_offset>::vec((const void*)&(p[i]));
-        off -= r.min();
-        off /= pitch;
+        off -= r.min(); // set the base 0
+        off /= pitch;   // quantitize offsets
 
-        // Now 'off' is a Dim-dimensional index of a finest-level cell to which the particle belong.
-        // 
+        // Now 'off' is a Dim-dimensional index of the finest-level cell to which the particle belong.
         for (int d = 0; d < Dim; ++d) {
             node.anchor[d] = (int)(off[d]);
             // assume maximum boundary is inclusive, i.e., a particle can be
@@ -344,16 +286,6 @@ void AppendChildren(KeyType x, T &s) {
     }
 }
 
-// Note this doesn't return a valid morton key when the incremented
-// key overflows the overall region, but should be fine for
-// FindBodyRange method.
-template <int DIM>
-KeyType CalcMortonKeyNext(KeyType k) {
-    int d = MortonKeyGetDepth(k);
-    KeyType inc = 1 << (DIM * (MAX_DEPTH - d) + DEPTH_BIT_WIDTH);
-    return k + inc;
-}
-
 template <int DIM>
 KeyType MortonKeyClearDescendants(KeyType k) {
     int d = MortonKeyGetDepth(k);
@@ -410,65 +342,6 @@ void CompleteRegion(KeyType x, KeyType y,
         }
     }
     std::sort(std::begin(s), std::end(s));
-}
-
-template <int DIM>
-tapas::index_t FindFirst(const KeyType k,
-                         const HelperNode<DIM> *hn,
-                         const index_t offset,
-                         const index_t len) {
-    // Assume hn is softed by key
-    // Searches the first element that is grether or equal to the key.
-    // Returns len if not found, i.e., all elements are less than the
-    // key.
-    TAPAS_ASSERT(len > 0);
-    index_t pivot = len / 2;
-    index_t i = offset + pivot;
-    index_t cur;
-    if (hn[i].key < k) {
-        cur = offset + len;
-        index_t rem_len = len - pivot - 1;
-        if (rem_len > 0) {
-            cur = std::min(cur, FindFirst(k, hn, i + 1, rem_len));
-        }
-    } else { // (hn[i].key >= k) {
-        cur = i;
-        index_t rem_len = pivot;
-        if (rem_len > 0) {
-            cur = std::min(cur, FindFirst(k, hn, offset, rem_len));
-        }
-    }
-    return cur;
-}
-
-/**
- * @brief Returns the range of bodies that are included in the cell specified by the given key. 
- */
-template <int DIM>
-KeyPair GetBodyRange(const KeyType k,
-                     const HelperNode<DIM> *hn,
-                     index_t offset,
-                     index_t len) {
-    TAPAS_ASSERT(len > 0);
-    index_t body_begin = FindFirst(k, hn, offset, len);
-    TAPAS_ASSERT(body_begin >= offset);
-    TAPAS_ASSERT(body_begin < len);
-    index_t body_num = GetBodyNumber(k, hn, body_begin,
-                                     len-(body_begin-offset));
-    return std::make_pair(body_begin, body_num);
-}
-
-template <int DIM>
-tapas::index_t GetBodyNumber(const KeyType k,
-                             const HelperNode<DIM> *hn,
-                             index_t offset,
-                             index_t len) {
-    //index_t body_begin = FindFirst(k, hn, offset, len);
-    if (len == 0) return 0;
-    if (len == 1) return 1;
-    KeyType next_key = CalcMortonKeyNext<DIM>(k);
-    index_t body_end = FindFirst(next_key, hn, offset+1, len-1);
-    return body_end - offset;
 }
 
 template <class TSP>
@@ -565,8 +438,10 @@ class Partitioner {
     Cell<TSP> *Partition(std::vector<typename TSP::BT::type> &b,
                          const Region<TSP> &r);
   private:
-    void Refine(Cell<TSP> *c, const HelperNode<TSP::Dim> *hn,
-                const typename TSP::BT::type *b, int cur_depth,
+    void Refine(Cell<TSP> *c,
+                const std::vector<HelperNode<TSP::Dim>> &hn,
+                const typename TSP::BT::type *b,
+                int cur_depth,
                 KeyType cur_key) const;
 }; // class Partitioner
 
@@ -577,6 +452,21 @@ template <class TSP>
 Cell<TSP>*
 Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b, const Region<TSP> &r) {
     return Partitioner<TSP>::Partition(b.data(), b.size(), r);
+}
+
+template<class F>
+void BarrierExec(F func) {
+    int size, rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Barrier(MPI_COMM_WORLD);
+    for (int i = 0; i < size; i++) {
+        if (rank == i) {
+            func(rank, size);
+        }
+        usleep(10000);
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
 }
 
 /**
@@ -590,7 +480,7 @@ Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b, const Region
 template <class TSP> // TSP : Tapas Static Params
 Cell<TSP>*
 Partitioner<TSP>::Partition(typename TSP::BT::type *b,
-                            index_t nb,
+                            index_t num_bodies,
                             const Region<TSP> &r) {
     const int Dim = TSP::Dim;
     typedef typename TSP::FP FP;
@@ -598,31 +488,133 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     typedef typename TSP::BT_ATTR BodyAttrType;
     typedef typename BT::type BodyType;
     typedef Cell<TSP> CellType;
-    
-    BodyType *b_work = new BodyType[nb];
-    HelperNode<Dim> *hn = CreateInitialNodes<TSP>(b, nb, r);
+    typedef HelperNode<Dim> HN;
 
-    // Sort the helper nodes using morton keys
-    auto key_comp = [](const HelperNode<Dim> &lhs, const HelperNode<Dim> &rhs) {
-        return lhs.key < rhs.key;
-    };
-    std::sort(hn, hn + nb, key_comp);
+    // Sort local bodies using Morton keys
+    std::vector<HN> hn = CreateInitialNodes<TSP>(b, num_bodies, r);
+    std::sort(hn.begin(), hn.end(),
+              [](const HN &lhs, const HN &rhs) { return lhs.key < rhs.key; });
+    
+    std::vector<tapas::index_t> leaf_nb_local;  // Number of local bodies in leaf cell[i]
+    std::vector<tapas::index_t> leaf_nb_global; // Number of global bodies in leaf cell[i]
+    std::vector<KeyType>        leaf_keys;      // Morton keys of leaf cells
+
+    int rank, size;
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    // Start from a root cell and refine it recursively until all cells have at most
+    leaf_keys.push_back(0);
+
+    // Loop until all leaf cells have at most max_nb_ bodies.
+    while(1) {
+        leaf_nb_local.resize(leaf_keys.size(), 0);
+        leaf_nb_global.resize(leaf_keys.size(), 0);
+
+        for (size_t i = 0; i < leaf_keys.size(); i++) {
+            // Count process-local bodies belonging to the cell[i].
+            leaf_nb_local[i] = GetBodyRange<Dim>(leaf_keys[i], hn, [](const HN &hn) { return hn.key; }).second;
+        }
+            
+        // Count bodies belonging to the cell[i] globally using MPI_Allreduce(+)
+        int ret = MPI_Allreduce(static_cast<void*>(leaf_nb_local.data()),
+                                static_cast<void*>(leaf_nb_global.data()),
+                                leaf_keys.size(),
+                                MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+        //--------------------------------------------------------------
+        // debug print
+        const int w = 3;
+        if (rank == 0) {
+            std::cerr << std::fixed << std::setw(10) << "index";
+            for (int i = 0; i < leaf_keys.size(); i++) {
+                std::cerr << std::fixed << std::setw(w) << i << " ";
+            }
+            std::cerr << std::endl;
+            
+            std::cerr << std::fixed << std::setw(10) << "depths";
+            for (auto k : leaf_keys) {
+                std::cerr << std::fixed << std::setw(w) << MortonKeyGetDepth(k) << " ";
+            }
+            std::cerr << std::endl;
+
+            std::cerr << std::fixed << std::setw(10) << "keys";
+            for (auto k : leaf_keys) {
+                std::cerr << std::fixed << std::setw(w) << MortonKeyRemoveDepth(k) << " ";
+            }
+            std::cerr << std::endl;
+
+            std::cerr << std::fixed << std::setw(10) << "nb_global";
+            for (auto nb : leaf_nb_global) {
+                std::cerr << std::fixed << std::setw(w) << nb << " ";
+            }
+            std::cerr << std::endl;
+        }
+            
+        BarrierExec([&] (int rank, int size) {
+                std::cerr << "rank " << std::fixed << std::setw(3) << rank << " :";
+                for (auto nb : leaf_nb_local) {
+                    std::cerr << std::fixed << std::setw(w) << nb << " ";
+                }
+                std::cerr << std::endl;
+            });
+        if (rank == 0) {
+            std::cerr << "\n\n";
+        }
+
+        // debug print ends
+        //--------------------------------------------------------------
+
+        index_t max_nb = *std::max_element(leaf_nb_global.begin(), leaf_nb_global.end());
+        if (max_nb <= max_nb_) {
+            // Finished. all cells have at most max_nb_ bodies.
+            break;
+        } else {
+            std::vector<KeyType> buf; // new leaf_keys
+
+            for (int i = 0; i < leaf_keys.size(); i++) {
+                if (leaf_nb_global[i] <= max_nb_) {
+                    buf.push_back(leaf_keys[i]);
+                } else {
+                    if (rank == 0) {
+                        std::cerr << "Refining cell " << i << std::endl;
+                    }
+                    KeyType child_key = MortonKeyFirstChild<Dim>(leaf_keys[i]);
+                    for (int child_idx = 0; child_idx < (1<<Dim); child_idx++) {
+                        buf.push_back(child_key);
+                        child_key = CalcMortonKeyNext<Dim>(child_key);
+                    }
+                }
+            }
+
+            leaf_keys = buf;
+            if (rank == 0) {
+                std::cerr << "Now new leaf_keys has "<< leaf_keys.size() << " cells." << std::endl;
+            }
+        }
+    }
+    
+    MPI_Finalize();
+    exit(0);
+    
+    BodyType *b_work = new BodyType[num_bodies];
 
     // Sort particles to the same order of hn
-    SortBodies<Dim, BT>(b, b_work, hn, nb);
+    SortBodies<Dim, BT>(b, b_work, hn.data(), hn.size());
 
-    std::memcpy(b, b_work, sizeof(BodyType) * nb);
+    std::memcpy(b, b_work, sizeof(BodyType) * num_bodies);
     //BodyAttrType *attrs = new BodyAttrType[nb];
-    BodyAttrType *attrs = (BodyAttrType*)calloc(nb, sizeof(BodyAttrType));
+    BodyAttrType *attrs = (BodyAttrType*)calloc(num_bodies, sizeof(BodyAttrType));
 
     KeyType root_key = 0;
-    KeyPair kp = GetBodyRange(root_key, hn, 0, nb);
-    assert(kp.first == 0 && kp.second == nb);
+    KeyPair kp = GetBodyRange<Dim>(root_key, hn,
+                                   [](const HelperNode<Dim> &hn) { return hn.key; });
+    assert(kp.first == 0 && kp.second == num_bodies); // it is root cell, which owns all bodies.
     TAPAS_LOG_DEBUG() << "Root range: offset: " << kp.first << ", "
                       << "length: " << kp.second << "\n";
 
     auto *ht = new typename CellType::HashTable();
-    auto *root = new CellType(r, 0, nb, root_key, ht, b, attrs);
+    auto *root = new CellType(r, 0, num_bodies, root_key, ht, b, attrs);
     ht->insert(std::make_pair(root_key, root));
     Refine(root, hn, b, 0, 0);
     
@@ -631,10 +623,10 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
 template <class TSP>
 void Partitioner<TSP>::Refine(Cell<TSP> *c,
-                            const HelperNode<TSP::Dim> *hn,
-                            const typename TSP::BT::type *b,
-                            int cur_depth,
-                            KeyType cur_key) const {
+                              const std::vector<HelperNode<TSP::Dim>> &hn,
+                              const typename TSP::BT::type *b,
+                              int cur_depth,
+                              KeyType cur_key) const {
     const int Dim = TSP::Dim;
     typedef typename TSP::FP FP;
     typedef typename TSP::BT BT;
@@ -652,8 +644,12 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
     index_t cur_offset = c->bid();
     index_t cur_len = c->nb();
     for (int i = 0; i < (1 << Dim); ++i) {
-        TAPAS_LOG_DEBUG() << "Child key: " << child_key << std::endl; 
-        index_t child_bn = GetBodyNumber(child_key, hn, cur_offset, cur_len);
+        TAPAS_LOG_DEBUG() << "Child key: " << child_key << std::endl;
+        KeyPair kp = GetBodyRange<Dim, HelperNode<Dim>>(child_key,
+                                                        hn.begin() + cur_offset,
+                                                        hn.begin() + cur_offset + cur_len,
+                                                        [](const HelperNode<Dim> &hn) { return hn.key; });
+        index_t child_bn = kp.second;
         TAPAS_LOG_DEBUG() << "Range: offset: " << cur_offset << ", length: "
                           << child_bn << "\n";
         auto child_r = c->region().PartitionBSP(i);

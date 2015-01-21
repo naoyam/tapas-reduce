@@ -105,7 +105,7 @@ int main(int argc, char ** argv) {
 #endif
 
     Tapas::Cell *root = Tapas::Partition(
-        bodies.data(), args.numBodies, tr, args.ncrit);
+        bodies.data(), bodies.size(), tr, args.ncrit);
 #if 0
     {
       std::ofstream tapas_out("tapas_0.txt");

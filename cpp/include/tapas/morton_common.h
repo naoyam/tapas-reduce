@@ -58,6 +58,7 @@ T id(const T& t) {
  * @tparam T Body type.
  * @tparam Iter Iterator type of the body array.
  * @tparam Functor Functor type that retrieves morton key from a body type value.
+ * @return returns std::pair of (pos, len)
  */
 template <int DIM, class T, class Iter, class Functor>
 KeyPair GetBodyRange(const KeyType k, Iter beg, Iter end, Functor get_key = id<T>) {
@@ -123,6 +124,23 @@ bool MortonKeyIsDescendant(KeyType asc, KeyType dsc) {
     return asc == dsc;
 }
 
+/**
+ * @brief Calculate a morton key of MAX_DEPTH level from the given anchor.
+ * @tparam DIM Dimension.
+ * @param anchor A Dim-dimensional index.
+ */
+template <int DIM>
+KeyType CalcFinestMortonKey(const tapas::Vec<DIM, int> &anchor) {
+    KeyType k = 0;
+    int mask = 1 << (MAX_DEPTH - 1); // bitmask to clear depth information
+    for (int i = 0; i < MAX_DEPTH; ++i) {
+        for (int d = DIM-1; d >= 0; --d) {
+            k = (k << 1) | ((anchor[d] & mask) >> (MAX_DEPTH - i - 1));
+        }
+        mask >>= 1;
+    }
+    return MortonKeyAppendDepth(k, MAX_DEPTH);
+}
 
 } // namespace morton_common
 } // namespace tapas
