@@ -106,8 +106,13 @@ template <int DIM>
 index_t FindFirst(const KeyType k, const HelperNode<DIM> *hn,
                   const index_t offset, const index_t len);
 
+template <int DIM, class Iter>
+KeyPair GetBodyRange(const KeyType k, Iter beg, Iter end);
+
 template <int DIM>
-KeyPair GetBodyRange(const KeyType k, const std::vector<HelperNode<DIM>> &hn);
+KeyPair GetBodyRange(const KeyType k, const std::vector<HelperNode<DIM>> &hn) {
+    return GetBodyRange<DIM>(k, hn.begin(), hn.end());
+}
 
 template <int DIM>
 index_t GetBodyNumber(const KeyType k, const HelperNode<DIM> *hn,
@@ -442,19 +447,22 @@ tapas::index_t FindFirst(const KeyType k,
 /**
  * @brief Returns the range of bodies that are included in the cell specified by the given key. 
  */
-template <int DIM>
-KeyPair GetBodyRange(const KeyType k, const std::vector<HelperNode<DIM>>& hn) {
-    auto beg = std::begin(hn), end = std::end(hn);
+template <int DIM, class Iter>
+KeyPair GetBodyRange(const KeyType k, Iter beg, Iter end) {
+    // When used in Refine(), a cells has sometimes no body.
+    // In this special case, just returns (0, 0)
+    if (beg == end) return std::make_pair(0, 0);
 
     auto less_than = [](const HelperNode<DIM> &hn, KeyType k) {
         return hn.key < k;
     };
 
-    auto first = std::lower_bound(beg, end, k, less_than);
-    assert(beg <= first && first < end);
+    auto fst = std::lower_bound(beg, end, k, less_than); // first node 
+    auto lst = std::lower_bound(fst, end, CalcMortonKeyNext<DIM>(k), less_than); // last node
+
+    assert(lst <= end);
     
-    auto last = std::lower_bound(first, end, CalcMortonKeyNext<DIM>(k), less_than);
-    return std::make_pair(first - beg, last - first);
+    return std::make_pair(fst - beg, lst - fst); // returns (pos, nb)
 }
 
 template <int DIM>
@@ -564,7 +572,7 @@ class Partitioner {
     Cell<TSP> *Partition(std::vector<typename TSP::BT::type> &b,
                          const Region<TSP> &r);
   private:
-    void Refine(Cell<TSP> *c, const HelperNode<TSP::Dim> *hn,
+    void Refine(Cell<TSP> *c, const std::vector<HelperNode<TSP::Dim>> &hn,
                 const typename TSP::BT::type *b, int cur_depth,
                 KeyType cur_key) const;
 }; // class Partitioner
@@ -615,25 +623,23 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     BodyAttrType *attrs = (BodyAttrType*)calloc(nb, sizeof(BodyAttrType));
 
     KeyType root_key = 0;
-    KeyPair kp = GetBodyRange(root_key, hn);
+    KeyPair kp = GetBodyRange<Dim>(root_key, hn);
     assert(kp.first == 0 && kp.second == nb);
-    TAPAS_LOG_DEBUG() << "Root range: offset: " << kp.first << ", "
-                      << "length: " << kp.second << "\n";
 
     auto *ht = new typename CellType::HashTable();
     auto *root = new CellType(r, 0, nb, root_key, ht, b, attrs);
     ht->insert(std::make_pair(root_key, root));
-    Refine(root, hn.data(), b, 0, 0);
+    Refine(root, hn, b, 0, 0);
 
     return root;
 }
 
 template <class TSP>
 void Partitioner<TSP>::Refine(Cell<TSP> *c,
-                            const HelperNode<TSP::Dim> *hn,
-                            const typename TSP::BT::type *b,
-                            int cur_depth,
-                            KeyType cur_key) const {
+                              const std::vector<HelperNode<TSP::Dim>> &hn,
+                              const typename TSP::BT::type *b,
+                              int cur_depth,
+                              KeyType cur_key) const {
     const int Dim = TSP::Dim;
     typedef typename TSP::FP FP;
     typedef typename TSP::BT BT;
@@ -651,8 +657,19 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
     index_t cur_offset = c->bid();
     index_t cur_len = c->nb();
     for (int i = 0; i < (1 << Dim); ++i) {
-        TAPAS_LOG_DEBUG() << "Child key: " << child_key << std::endl; 
-        index_t child_bn = GetBodyNumber(child_key, hn, cur_offset, cur_len);
+        TAPAS_LOG_DEBUG() << "Child key: " << child_key << std::endl;
+        KeyPair kp = GetBodyRange<Dim>(child_key,
+                                       hn.begin() + cur_offset,
+                                       hn.begin() + cur_offset + cur_len);
+        index_t child_bn;
+        if (getenv("USE_OLD_GETBODYNUM")) {
+            std::cout << "Rel: original" << std::endl;
+            child_bn = GetBodyNumber(child_key, hn.data(), cur_offset, cur_len);
+        } else {
+            std::cout << "Rel: mine" << std::endl;
+            child_bn = kp.second;
+        }
+        
         TAPAS_LOG_DEBUG() << "Range: offset: " << cur_offset << ", length: "
                           << child_bn << "\n";
         auto child_r = c->region().PartitionBSP(i);
@@ -665,6 +682,8 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
         tapas::debug::PrintBodies<Dim, FP, BT>(b+cur_offset, child_bn, std::cerr);
 #endif    
         Refine(child_cell, hn, b, cur_depth+1, child_key);
+
+        // Go to the next child
         child_key = single_node_morton_hot::CalcMortonKeyNext<Dim>(child_key);
         cur_offset = cur_offset + child_bn;
         cur_len = cur_len - child_bn;
