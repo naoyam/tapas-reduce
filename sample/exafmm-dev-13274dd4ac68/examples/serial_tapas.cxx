@@ -90,8 +90,10 @@ int main(int argc, char ** argv) {
 
   const real_t cycle = 2 * M_PI;
   logger::verbose = args.verbose && (args.mpi_rank == 0);
-  logger::printTitle("FMM Parameters");
-  args.print(logger::stringLength, P);
+  if (args.mpi_rank == 0) {
+      logger::printTitle("FMM Parameters");
+      args.print(logger::stringLength, P);
+  }
   
   for (int t=0; t<args.repeat; t++) {
     logger::printTitle("FMM Profiling");
