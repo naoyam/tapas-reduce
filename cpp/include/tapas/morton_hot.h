@@ -49,6 +49,21 @@ struct HelperNode {
     index_t np;           //!< Number of particles in a node
 };
 
+template<class F>
+void BarrierExec(F func) {
+  int size, rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  MPI_Barrier(MPI_COMM_WORLD);
+  for (int i = 0; i < size; i++) {
+    if (rank == i) {
+      func(rank, size);
+    }
+    usleep(10000);
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+}
+
 template <class TSP>
 std::vector<HelperNode<TSP::Dim>>
 CreateInitialNodes(const typename TSP::BT::type *p, index_t np, 
@@ -180,37 +195,68 @@ int MortonKeyIncrementDepth(KeyType k, int inc) {
     return MortonKeyAppendDepth(k, depth);
 }
 
+template<class T> struct MPI_DatatypeTraits {};
+template<> struct MPI_DatatypeTraits<float>  { static MPI_Datatype type() { return MPI_FLOAT; } };
+template<> struct MPI_DatatypeTraits<double> { static MPI_Datatype type() { return MPI_DOUBLE; } };
+
+/**
+ * @brief Return a new Region object that covers all Regions across multiple MPI processes
+ */
+template<class TSP>
+Region<TSP> ExchangeRegion(const Region<TSP> &r) {
+  const int Dim = TSP::Dim;
+  typedef typename TSP::FP FP;
+
+  Vec<Dim, FP> new_max, new_min;
+    
+  // Exchange max
+  MPI_Allreduce(&r.max()[0], &new_max[0], Dim, MPI_DatatypeTraits<FP>::type(), MPI_MAX, MPI_COMM_WORLD);
+
+  // Exchange min
+  MPI_Allreduce(&r.min()[0], &new_min[0], Dim, MPI_DatatypeTraits<FP>::type(), MPI_MIN, MPI_COMM_WORLD);
+
+  return Region<TSP>(new_min, new_max);
+}
+
 /**
  * @brief Create an array of HelperNode from bodies
  * In the first stage of tree construction, one HelperNode is create for each body.
  * @return Array of HelperNode
- * @param p A pointer to an array of bodies
- * @param np Number of bodies
+ * @param bodies Pointer to an array of bodies
+ * @param nb Number of bodies (length of bodies)
  * @param r Region object
  */
 template <class TSP>
-std::vector<HelperNode<TSP::Dim>> CreateInitialNodes(const typename TSP::BT::type *p,
-                                                     index_t np,
-                                                     const Region<TSP> &r) {
+std::vector<HelperNode<TSP::Dim>> CreateInitialNodes(const typename TSP::BT::type *bodies,
+                                                     index_t nb,
+                                                     const Region<TSP> &reg) {
     const int Dim = TSP::Dim;
     typedef typename TSP::FP FP;
     typedef typename TSP::BT BT;
-    
-    std::vector<HelperNode<Dim>> nodes(np);
+
+    auto r = ExchangeRegion(reg);
+
+    std::vector<HelperNode<Dim>> nodes(nb);
     FP num_cell = 1 << MAX_DEPTH; // maximum number of cells in one dimension
     Vec<Dim, FP> pitch;           // possible minimum cell width
     for (int d = 0; d < Dim; ++d) {
         pitch[d] = (r.max()[d] - r.min()[d]) / num_cell;
     }
 
-    for (index_t i = 0; i < np; ++i) {
+    BarrierExec([&](int rank, int size) {
+        std::cerr << "CreateInitialNodes: rank " << rank << " pitch = " << pitch << std::endl;
+        std::cerr << "CreateInitialNodes: rank " << rank << " r.max = " << r.max() << std::endl;
+        std::cerr << "CreateInitialNodes: rank " << rank << " r.min = " << r.min() << std::endl;
+      });
+
+    for (index_t i = 0; i < nb; ++i) {
         // First, create 1 helper cell per particle
         HelperNode<Dim> &node = nodes[i];
         node.p_index = i;
         node.np = 1;
 
         // Particle pos offset is the offset of each coordinate value (x,y,z) in body structure
-        Vec<Dim, FP> off = ParticlePosOffset<Dim, FP, BT::pos_offset>::vec((const void*)&(p[i]));
+        Vec<Dim, FP> off = ParticlePosOffset<Dim, FP, BT::pos_offset>::vec((const void*)&(bodies[i]));
         off -= r.min(); // set the base 0
         off /= pitch;   // quantitize offsets
 
@@ -231,7 +277,7 @@ std::vector<HelperNode<TSP::Dim>> CreateInitialNodes(const typename TSP::BT::typ
             TAPAS_LOG_ERROR() << "Anchor, " << node.anchor
                               << ", exceeds the maximum depth." << std::endl
                               << "Particle at "
-                              << ParticlePosOffset<Dim, FP, BT::pos_offset>::vec((const void*)&(p[i]))
+                              << ParticlePosOffset<Dim, FP, BT::pos_offset>::vec((const void*)&(bodies[i]))
                               << std::endl;
             TAPAS_DIE();
         }
@@ -454,21 +500,6 @@ Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b, const Region
     return Partitioner<TSP>::Partition(b.data(), b.size(), r);
 }
 
-template<class F>
-void BarrierExec(F func) {
-    int size, rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-    MPI_Barrier(MPI_COMM_WORLD);
-    for (int i = 0; i < size; i++) {
-        if (rank == i) {
-            func(rank, size);
-        }
-        usleep(10000);
-        MPI_Barrier(MPI_COMM_WORLD);
-    }
-}
-
 /**
  * @brief Partition the simulation space and build Morton-key based octree
  * @tparam TSP Tapas static params
@@ -495,9 +526,9 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     std::sort(hn.begin(), hn.end(),
               [](const HN &lhs, const HN &rhs) { return lhs.key < rhs.key; });
     
-    std::vector<tapas::index_t> leaf_nb_local;  // Number of local bodies in leaf cell[i]
-    std::vector<tapas::index_t> leaf_nb_global; // Number of global bodies in leaf cell[i]
-    std::vector<KeyType>        leaf_keys;      // Morton keys of leaf cells
+    std::vector<index_t> leaf_nb_local;  // Number of local bodies in leaf cell[i]
+    std::vector<index_t> leaf_nb_global; // Number of global bodies in leaf cell[i]
+    std::vector<KeyType> leaf_keys;      // Morton keys of leaf cells
 
     int rank, size;
     MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -515,57 +546,62 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
             // Count process-local bodies belonging to the cell[i].
             leaf_nb_local[i] = GetBodyRange<Dim>(leaf_keys[i], hn, [](const HN &hn) { return hn.key; }).second;
         }
-            
+
         // Count bodies belonging to the cell[i] globally using MPI_Allreduce(+)
         int ret = MPI_Allreduce(static_cast<void*>(leaf_nb_local.data()),
                                 static_cast<void*>(leaf_nb_global.data()),
                                 leaf_keys.size(),
                                 MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-
+        
         //--------------------------------------------------------------
         // debug print
+        MPI_Barrier(MPI_COMM_WORLD);
+        std::cout.flush(); std::cerr.flush();
+        usleep(10000);
+
         const int w = 3;
         if (rank == 0) {
-            std::cerr << std::fixed << std::setw(10) << "index";
+            std::cerr << "-------------------------------------------" << std::endl;
+            std::cerr << "MPI size = " << size << std::endl;
+            std::cerr << std::left << std::fixed << std::setw(10) << "index";
             for (int i = 0; i < leaf_keys.size(); i++) {
                 std::cerr << std::fixed << std::setw(w) << i << " ";
             }
             std::cerr << std::endl;
             
-            std::cerr << std::fixed << std::setw(10) << "depths";
+            std::cerr << std::left << std::fixed << std::setw(10) << "depths";
             for (auto k : leaf_keys) {
                 std::cerr << std::fixed << std::setw(w) << MortonKeyGetDepth(k) << " ";
             }
             std::cerr << std::endl;
 
-            std::cerr << std::fixed << std::setw(10) << "keys";
+            std::cerr << std::left << std::fixed << std::setw(10) << "keys";
             for (auto k : leaf_keys) {
                 std::cerr << std::fixed << std::setw(w) << MortonKeyRemoveDepth(k) << " ";
             }
             std::cerr << std::endl;
 
-            std::cerr << std::fixed << std::setw(10) << "nb_global";
+            std::cerr << std::left << std::fixed << std::setw(10) << "nb_gl";
             for (auto nb : leaf_nb_global) {
                 std::cerr << std::fixed << std::setw(w) << nb << " ";
             }
             std::cerr << std::endl;
         }
-            
+
         BarrierExec([&] (int rank, int size) {
-                std::cerr << "rank " << std::fixed << std::setw(3) << rank << " :";
-                for (auto nb : leaf_nb_local) {
-                    std::cerr << std::fixed << std::setw(w) << nb << " ";
-                }
-                std::cerr << std::endl;
-            });
-        if (rank == 0) {
-            std::cerr << "\n\n";
-        }
+            std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
+            for (auto nb : leaf_nb_local) {
+              std::cerr << std::fixed << std::setw(w) << nb << " ";
+            }
+            std::cerr << std::endl;
+          });
 
         // debug print ends
         //--------------------------------------------------------------
 
         index_t max_nb = *std::max_element(leaf_nb_global.begin(), leaf_nb_global.end());
+        if (rank == 0) std::cerr << "max_nb = " << max_nb << std::endl;
+        if (rank == 0) std::cerr << "total = " << std::accumulate(leaf_nb_global.begin(), leaf_nb_global.end(), 0) << std::endl;
         if (max_nb <= max_nb_) {
             // Finished. all cells have at most max_nb_ bodies.
             break;
