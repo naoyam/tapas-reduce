@@ -17,6 +17,7 @@
 #include <unordered_map>
 #include <utility>
 #include <iostream>
+#include <fstream>
 #include <iomanip>
 
 #include <unistd.h>
@@ -59,6 +60,28 @@ void BarrierExec(F func) {
     usleep(10000);
     MPI_Barrier(MPI_COMM_WORLD);
   }
+}
+
+template<class T>
+static void Dump(const T &bodies, std::ostream & strm) {
+  for(auto b : bodies) {
+    strm << std::scientific << std::showpos << b.X[0] << " "
+         << std::scientific << std::showpos << b.X[1] << " "
+         << std::scientific << std::showpos << b.X[2] << " "
+         << std::endl;
+  }
+}
+
+template<class T>
+static void DumpToFile(const T &bodies, const std::string &fname, bool append=false) {
+  std::ios_base::openmode mode = std::ios_base::out;
+  if (append) mode |= std::ios_base::app;
+  std::ofstream ofs;
+  ofs.open(fname.c_str(), mode);
+        
+  assert(ofs.good());
+  Dump(bodies, ofs);
+  ofs.close();
 }
 
 template <class TSP>
@@ -599,6 +622,11 @@ inline std::vector<int> SplitKeysSimple(const std::vector<long> &nb, int proc_si
   return ret;
 }
 
+template<class T>
+size_t sum(const T& c) {
+  return std::accumulate(c.begin(), c.end(), 0);
+}
+
 /**
  * @brief Partition the simulation space and build Morton-key based octree
  * @tparam TSP Tapas static params
@@ -625,9 +653,9 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   std::sort(hn.begin(), hn.end(),
             [](const HN &lhs, const HN &rhs) { return lhs.key < rhs.key; });
     
+  std::vector<KeyType> leaf_keys;      // Morton keys of leaf cells
   std::vector<long> leaf_nb_local;  // Number of local bodies in leaf cell[i]
   std::vector<long> leaf_nb_global; // Number of global bodies in leaf cell[i]
-  std::vector<KeyType> leaf_keys;      // Morton keys of leaf cells
 
   // MPI rank and size
   // TOOD: to be replaced by an appropriate abstraction of communication component.
@@ -744,7 +772,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       std::cerr << "max_nb = " << std::setw(w) << max_nb << " "
                 << "#cells = " << std::setw(w) << leaf_keys.size() << " "
                 << "maxdepth = " << std::setw(w) << max_depth << " "
-                << "total = " << std::accumulate(leaf_nb_global.begin(), leaf_nb_global.end(), 0)
+                << "total = " << sum(leaf_nb_local)
                 << std::endl;
     }
 
@@ -786,6 +814,134 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     }
   }
 
+  // Exchange bodies using MPI_Alltoallv
+  std::vector<int> send_counts(size, 0); // number of bodies that this process sends to others
+  std::vector<int> recv_counts(size, 0); // number of bodies that this process receives from others
+  
+  for (int ci = 0; ci < leaf_keys.size(); ci++) {
+    // count bodies to be sent to process 'proc' in cell ci
+    // note that send_count and recv_count are multiplied by sizeof(BodyType) so that
+    // BodyType objects will be sent as arrays of MPI_BYTE
+    int proc = leaf_owners[ci];
+    send_counts[proc] += leaf_nb_local[ci] * sizeof(BodyType);
+  }
+
+  MPI_Alltoall(send_counts.data(), 1, MPI_INT,
+               recv_counts.data(), 1, MPI_INT,
+               MPI_COMM_WORLD);
+
+  // Exchange particle using MPI_Alltoallv
+  // Since Tapas framework does not know the detail of BodyType, we send/recv BodyType data
+  // as arrays of MPI_BYTE.
+
+  // Copy bodies to send_buf.
+  // hn (array of HelperNode) is already sorted by their Morton keys,
+  // which also means they are sorted by their parent process.
+  std::vector<BodyType> send_buf(num_bodies);
+  for (int hi = 0; hi < hn.size(); hi++) {
+    int bi = hn[hi].p_index;
+    send_buf[hi] = b[bi];
+  }
+  
+  // Calculate send displacements, which is prefix sum of send_counts
+  std::vector<int> send_disp(size, 0);
+  for (int p = 0; p < size; p++) {
+    if (p == 0) {
+      send_disp[p] = 0;
+    } else {
+      // find cells that belong to process p.
+      const auto beg = leaf_owners.begin();
+      const auto end = leaf_owners.end();
+      int p_beg_idx = std::lower_bound(beg, end, p-1) - beg; // beg of process p's cells
+      int p_end_idx = std::upper_bound(beg, end, p-1) - beg; // end of process p's cells
+      
+      // calculate total number of bodies that are sent to process p
+      // and the displacement for process p.
+      int nbodies = std::accumulate(leaf_nb_local.begin() + p_beg_idx,
+                                    leaf_nb_local.begin() + p_end_idx,
+                                    0);
+      send_disp[p] = nbodies * sizeof(BodyType) + send_disp[p-1];
+    }
+  }
+
+  // Prepare recv_buf
+  int num_bodies_recv = sum(recv_counts) / sizeof(BodyType); // recv_count is in bytes.
+  std::vector<BodyType> recv_buf(num_bodies_recv);
+
+  // Calculate recv displacement, which is prefix sum of recv_counts
+  std::vector<int> recv_disp(size, 0);
+  for (int pi = 0; pi < recv_counts.size(); pi++) {
+    if (pi == 0) {
+      recv_disp[pi] = 0;
+    } else {
+      recv_disp[pi] = recv_disp[pi-1] + recv_counts[pi-1];
+    }
+  }
+  
+  // Debug message of BodyExchange phase
+  if (rank == 0) {
+    std::cerr << "---------------------------" << std::endl;
+    std::cerr << "(sizeof(BodyType) = " << sizeof(BodyType) << ")" << std::endl;
+  }
+
+  BarrierExec([&](int rank, int size) {
+      for (int p = 0; p < size; p++) {
+        std::cerr << "Rank "
+                  << std::fixed << std::setw(3) << rank
+                  << " sends "
+                  << std::fixed << std::setw(6) << send_counts[p] << " bytes "
+                  << "(" << (send_counts[p]/sizeof(BodyType)) << " bodies)"
+                  << " to " << p
+                  << std::endl;
+      }
+      
+      std::cerr << "Rank "
+                << std::fixed << std::setw(3) << rank << " " << "send_disp = ";
+      for (int i = 0; i < send_disp.size(); i++) {
+        std::cerr << std::fixed << std::setw(4) << send_disp[i]
+                  << "(" << send_disp[i] / sizeof(BodyType) << " bodies)"
+                  << " ";
+      }
+      std::cerr << std::endl;
+
+      for (int p = 0; p < size; p++) {
+        std::cerr << "Rank "
+                  << std::fixed << std::setw(3) << rank
+                  << " recvs "
+                  << std::fixed << std::setw(6) << recv_counts[p] << " bytes "
+                  << "(" << (recv_counts[p]/sizeof(BodyType)) << " bodies)"
+                  << " from " << p
+                  << std::endl;
+      }
+
+      std::cerr << "Rank "
+                << std::fixed << std::setw(3) << rank << " " << "recv_disp = ";
+      for (int i = 0; i < recv_disp.size(); i++) {
+        std::cerr << std::fixed << std::setw(4) << recv_disp[i]
+                  << "(" << recv_disp[i] / sizeof(BodyType) << " bodies)"
+                  << " ";
+      }
+      std::cerr << std::endl;
+      
+      std::cerr << "Rank "
+                << std::fixed << std::setw(3) << rank << " "
+                << std::accumulate(recv_counts.begin(), recv_counts.end(), 0)
+                << " bytes, "
+                << std::accumulate(recv_counts.begin(), recv_counts.end(), 0) / sizeof(BodyType)
+                << " bodies total"
+                << std::endl;
+    });
+
+  // Call MPI_Alltoallv()
+  MPI_Alltoallv(send_buf.data(), send_counts.data(), send_disp.data(), MPI_BYTE,
+                recv_buf.data(), recv_counts.data(), recv_disp.data(), MPI_BYTE,
+                MPI_COMM_WORLD);
+
+  BarrierExec([&](int rank, int size) {
+      bool append_mode = (rank > 0);
+      DumpToFile(recv_buf, "exch_bodies.dat", append_mode);
+    });
+  
   MPI_Finalize();
   exit(0);
 

@@ -337,25 +337,27 @@ public:
     buffer.resize(B2-buffer.begin());                           // Resize buffer
     return buffer;                                              // Return buffer
   }
-    
-    void Dump(const Bodies &bodies, std::ostream & strm) const {
-        for(auto b : bodies) {
-            strm << std::scientific << std::showpos << b.X[0] << " "
-                 << std::scientific << std::showpos << b.X[1] << " "
-                 << std::scientific << std::showpos << b.X[2] << " "
-                 << std::endl;
-        }
-    }
 
-    void DumpToFile(const Bodies &bodies, const std::string &fname, bool append=false) const {
-        std::ios_base::openmode mode = std::ios_base::out;
-        if (append) mode |= std::ios_base::app;
-        std::ofstream ofs;
-        ofs.open(fname.c_str(), mode);
-        
-        assert(ofs.good());
-        Dump(bodies, ofs);
-        ofs.close();
+  template<class T>
+  static void Dump(const T &bodies, std::ostream & strm) {
+    for(auto b : bodies) {
+      strm << std::scientific << std::showpos << b.X[0] << " "
+           << std::scientific << std::showpos << b.X[1] << " "
+           << std::scientific << std::showpos << b.X[2] << " "
+           << std::endl;
     }
+  }
+
+  template<class T>
+  static void DumpToFile(const T &bodies, const std::string &fname, bool append=false) {
+    std::ios_base::openmode mode = std::ios_base::out;
+    if (append) mode |= std::ios_base::app;
+    std::ofstream ofs;
+    ofs.open(fname.c_str(), mode);
+        
+    assert(ofs.good());
+    Dump(bodies, ofs);
+    ofs.close();
+  }
 };
 #endif

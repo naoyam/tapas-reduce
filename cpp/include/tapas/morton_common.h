@@ -37,6 +37,9 @@ using std::unordered_map;
 //   uint32_t    |          3 |         4
 //   uint32_t    |          4 |         8
 //   uint32_t    |          5 |         8
+//   uint32_t    |          6 |         8
+//   uint32_t    |          7 |         8
+//   uint32_t    |          8 |         7
 //
 //   uint64_t    |          3 |         4
 //   uint64_t    |          4 |         8
@@ -53,14 +56,19 @@ using std::unordered_map;
 //
 // (__uint128_t is GCC's extension)
 
-#ifndef TAPAS_DEPTH_BIT_WIDTH
-# define TAPAS_DEPTH_BIT_WIDTH 6
+template<class __KeyType>
+struct BestDepthBitWidth;
+
+template<> struct BestDepthBitWidth<uint32_t> { static constexpr int Bits = 4; };
+template<> struct BestDepthBitWidth<uint64_t> { static constexpr int Bits = 6; };
+#if defined(__SIZEOF_INT128__) 
+template<> struct BestDepthBitWidth<__uint128_t> { static constexpr int Bits = 7; };
 #endif
 
 /**
  * @brief Number of bits used to represent depth in a Morton key.
  */
-constexpr int DEPTH_BIT_WIDTH = TAPAS_DEPTH_BIT_WIDTH;
+const int DEPTH_BIT_WIDTH = BestDepthBitWidth<KeyType>::Bits;
 
 #define MIN(a,b) ((a) > (b) ? (b) : (a))
 const int DEPTH_MASK = (1 << DEPTH_BIT_WIDTH) - 1;
@@ -86,7 +94,7 @@ KeyType CalcMortonKeyNext(KeyType k) {
 }
 
 template <class T>
-T id(const T& t) {
+T __id(const T& t) {
     return t;
 }
 
@@ -99,7 +107,7 @@ T id(const T& t) {
  * @return returns std::pair of (pos, len)
  */
 template <int DIM, class T, class Iter, class Functor>
-KeyPair GetBodyRange(const KeyType k, Iter beg, Iter end, Functor get_key = id<T>) {
+KeyPair GetBodyRange(const KeyType k, Iter beg, Iter end, Functor get_key = __id<T>) {
     // When used in Refine(), a cells has sometimes no body.
     // In this special case, just returns (0, 0)
     if (beg == end) return std::make_pair(0, 0);
@@ -120,7 +128,7 @@ KeyPair GetBodyRange(const KeyType k, Iter beg, Iter end, Functor get_key = id<T
  * @brief std::vector version of GetBodyRange
  */
 template<int DIM, class T, class Functor>
-KeyPair GetBodyRange(const KeyType k, const std::vector<T> &hn, Functor get_key = id<T>) {
+KeyPair GetBodyRange(const KeyType k, const std::vector<T> &hn, Functor get_key = __id<T>) {
     return GetBodyRange<DIM, T, typename std::vector<T>::const_iterator>(k, hn.begin(), hn.end(), get_key);
 }
 
