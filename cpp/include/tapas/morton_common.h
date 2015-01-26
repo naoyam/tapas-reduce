@@ -1,6 +1,7 @@
 #ifndef TAPAS_MORTON_COMMON_
 #define TAPAS_MORTON_COMMON_
 
+#include <cstdint>
 #include <vector>
 #include <algorithm>
 #include <utility>
@@ -17,7 +18,7 @@ namespace morton_common {
 /** 
  * @brief Morton key type.
  */
-typedef int KeyType;
+typedef uint64_t KeyType;
 
 typedef std::list<KeyType> KeyList;
 typedef std::vector<KeyType> KeyVector;
@@ -26,9 +27,46 @@ typedef std::pair<KeyType, KeyType> KeyPair;
 
 using std::unordered_map;
 
-const int DEPTH_BIT_WIDTH = 3;
+
+// 
+// Maximum depth of octree:
+//   Maximum depth is determined by the type of KeyType and #bits of depth bits.
+//
+//   Type        | Depth bits | Max depth
+//
+//   uint32_t    |          3 |         4
+//   uint32_t    |          4 |         8
+//   uint32_t    |          5 |         8
+//
+//   uint64_t    |          3 |         4
+//   uint64_t    |          4 |         8
+//   uint64_t    |          5 |        16
+//   uint64_t    |          6 |        19
+//   uint64_t    |          7 |        18
+//
+//   __uint128_t |          4 |         8
+//   __uint128_t |          5 |        16
+//   __uint128_t |          6 |        32
+//   __uint128_t |          7 |        40
+//   __uint128_t |          8 |        39
+//   __uint128_t |          9 |        39
+//
+// (__uint128_t is GCC's extension)
+
+#ifndef TAPAS_DEPTH_BIT_WIDTH
+# define TAPAS_DEPTH_BIT_WIDTH 6
+#endif
+
+/**
+ * @brief Number of bits used to represent depth in a Morton key.
+ */
+constexpr int DEPTH_BIT_WIDTH = TAPAS_DEPTH_BIT_WIDTH;
+
+#define MIN(a,b) ((a) > (b) ? (b) : (a))
 const int DEPTH_MASK = (1 << DEPTH_BIT_WIDTH) - 1;
-const int MAX_DEPTH = ((1 << DEPTH_BIT_WIDTH) - 1);
+const int MAX_DEPTH_BY_DEPTH_BITS = ((1 << DEPTH_BIT_WIDTH) - 1);
+const int MAX_DEPTH_BY_KEY_BITS = (sizeof(KeyType) * 8 - 1 - DEPTH_BIT_WIDTH) / 3;
+const int MAX_DEPTH = MIN ( MAX_DEPTH_BY_DEPTH_BITS, MAX_DEPTH_BY_KEY_BITS );
 
 /**
  * @brief Returns depth of the given Morton key.
@@ -42,9 +80,9 @@ int MortonKeyGetDepth(KeyType k) {
 // key overflows the overall region, but should be fine for GetBodyRange function
 template <int DIM>
 KeyType CalcMortonKeyNext(KeyType k) {
-    int d = MortonKeyGetDepth(k);
-    KeyType inc = 1 << (DIM * (MAX_DEPTH - d) + DEPTH_BIT_WIDTH);
-    return k + inc;
+  int d = MortonKeyGetDepth(k);
+  KeyType inc = (KeyType)1 << (DIM * (MAX_DEPTH - d) + DEPTH_BIT_WIDTH);
+  return k + inc;
 }
 
 template <class T>
@@ -124,6 +162,37 @@ bool MortonKeyIsDescendant(KeyType asc, KeyType dsc) {
     return asc == dsc;
 }
 
+
+/**
+ * @brief Converts a Morton key to a human-readable string format
+ *
+ * The format looks like "[0]-000-000-000-<0>". The first [0] is a reserved 1 bit for overflow.
+ * "000-000-000" part is the key body. Each group corresponds to 1 tree level. The last "[0]" is the depth.
+ */
+template <int DIM>
+std::string MortonKeyDecode(KeyType k) {
+  std::stringstream ss;
+  // get the overflow bit
+  int overlow_bit = (k >> (DIM * MAX_DEPTH + DEPTH_BIT_WIDTH)) & 1;
+  ss << "[" << overlow_bit << "]" << "-";
+
+  // Get the key body
+  for (int depth = 0; depth < MAX_DEPTH; depth++) {
+    int mask = (1 << DIM) - 1;
+    int level_d_key = (MortonKeyRemoveDepth(k) >> ((MAX_DEPTH - depth) * DIM)) & mask;
+    for (int dim=DIM-1; dim >= 0; dim--) {
+      ss << ((level_d_key >> dim) & 1);
+    }
+    ss << "-";
+  }
+
+  // Get depth
+  ss << "<" << MortonKeyGetDepth(k) << ">";
+
+  return ss.str();
+}
+
+
 /**
  * @brief Calculate a morton key of MAX_DEPTH level from the given anchor.
  * @tparam DIM Dimension.
@@ -131,16 +200,35 @@ bool MortonKeyIsDescendant(KeyType asc, KeyType dsc) {
  */
 template <int DIM>
 KeyType CalcFinestMortonKey(const tapas::Vec<DIM, int> &anchor) {
-    KeyType k = 0;
-    int mask = 1 << (MAX_DEPTH - 1); // bitmask to clear depth information
-    for (int i = 0; i < MAX_DEPTH; ++i) {
-        for (int d = DIM-1; d >= 0; --d) {
-            k = (k << 1) | ((anchor[d] & mask) >> (MAX_DEPTH - i - 1));
-        }
-        mask >>= 1;
+  for (int d = DIM-1; d >= 0; --d) {
+    assert(anchor[d] <= pow(2, MAX_DEPTH));
+  }
+  
+  KeyType k = 0;
+  int mask = 1 << (MAX_DEPTH - 1);
+  for (int i = 0; i < MAX_DEPTH; ++i) {
+    for (int d = DIM-1; d >= 0; --d) {
+      k = (k << 1) | ((anchor[d] & mask) >> (MAX_DEPTH - i - 1));
     }
-    return MortonKeyAppendDepth(k, MAX_DEPTH);
+    mask >>= 1;
+  }
+  return MortonKeyAppendDepth(k, MAX_DEPTH);
 }
+
+#if 0
+template <int DIM>
+KeyType CalcFinestMortonKey(const tapas::Vec<DIM, int> &anchor) {
+  KeyType k = 0;
+  int mask = 1 << (MAX_DEPTH - 1);
+  for (int i = 0; i < MAX_DEPTH; ++i) {
+    for (int d = DIM-1; d >= 0; --d) {
+      k = (k << 1) | ((anchor[d] & mask) >> (MAX_DEPTH - i - 1));
+    }
+    mask >>= 1;
+  }
+  return MortonKeyAppendDepth(k, MAX_DEPTH);
+}
+#endif
 
 } // namespace morton_common
 } // namespace tapas

@@ -81,12 +81,16 @@ int main(int argc, char ** argv) {
 
   num_threads(args.threads);
 
+  logger::startTimer("Dataset generation");
   bodies = data.initBodies(args.numBodies, args.distribution, args.mpi_rank, args.mpi_size);
+  logger::stopTimer("Dataset generation");
 
+#if 0
   BarrierExec([&]() {
           bool append_mode = (args.mpi_rank > 0); // Previously existing file is truncated by rank 0
           data.DumpToFile(bodies, "init_bodies.dat", append_mode);
       });
+#endif
 
   const real_t cycle = 2 * M_PI;
   logger::verbose = args.verbose && (args.mpi_rank == 0);

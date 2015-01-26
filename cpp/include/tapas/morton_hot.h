@@ -29,9 +29,6 @@
 #include "tapas/iterator.h"
 #include "tapas/morton_common.h"
 
-#define DEPTH_BIT_WIDTH (3)
-#define MAX_DEPTH ((1 << DEPTH_BIT_WIDTH) - 1)
-
 namespace tapas {
 
 /**
@@ -73,7 +70,7 @@ KeyType MortonKeyAppendDepth(KeyType k, int depth);
 
 KeyType MortonKeyRemoveDepth(KeyType k);
     
-int MortonKeyIncrementDepth(KeyType k, int inc);
+KeyType MortonKeyIncrementDepth(KeyType k, int inc);
 
 template <int DIM>
 KeyType MortonKeyClearDescendants(KeyType k);
@@ -172,8 +169,7 @@ class Cell: public tapas::BasicCell<TSP> {
  */
 inline
 KeyType MortonKeyAppendDepth(KeyType k, int depth) {
-    k = (k << DEPTH_BIT_WIDTH) | depth;
-    return k;
+  return (k << DEPTH_BIT_WIDTH) | depth;
 }
 
 inline
@@ -182,7 +178,7 @@ KeyType MortonKeyRemoveDepth(KeyType k) {
 }
 
 inline
-int MortonKeyIncrementDepth(KeyType k, int inc) {
+KeyType MortonKeyIncrementDepth(KeyType k, int inc) {
     int depth = MortonKeyGetDepth(k);
     depth += inc;
 #ifdef TAPAS_DEBUG
@@ -195,9 +191,28 @@ int MortonKeyIncrementDepth(KeyType k, int inc) {
     return MortonKeyAppendDepth(k, depth);
 }
 
+
+// MPI-related utilities and wrappers
+// TODO: wrap them as a pluggable policy class 
 template<class T> struct MPI_DatatypeTraits {};
-template<> struct MPI_DatatypeTraits<float>  { static MPI_Datatype type() { return MPI_FLOAT; } };
-template<> struct MPI_DatatypeTraits<double> { static MPI_Datatype type() { return MPI_DOUBLE; } };
+
+#define DEF_MPI_DATATYPE(__ctype, __mpitype) \
+  template<> struct MPI_DatatypeTraits<__ctype>  { static MPI_Datatype type() { return __mpitype; } };
+
+DEF_MPI_DATATYPE(int,    MPI_INT);
+DEF_MPI_DATATYPE(long,   MPI_LONG);
+DEF_MPI_DATATYPE(float,  MPI_FLOAT);
+DEF_MPI_DATATYPE(double, MPI_DOUBLE);
+
+template<class T>
+int MPI_Allreduce(const std::vector<T> &send, std::vector<T> &recv, MPI_Op op, MPI_Comm comm) {
+  recv.resize(send.size());
+  return ::MPI_Allreduce(static_cast<const T*>(send.data()),
+                         static_cast<T*>(recv.data()),
+                         (int)send.size(),
+                         MPI_DatatypeTraits<T>::type(),
+                         op, comm);
+}
 
 /**
  * @brief Return a new Region object that covers all Regions across multiple MPI processes
@@ -243,11 +258,14 @@ std::vector<HelperNode<TSP::Dim>> CreateInitialNodes(const typename TSP::BT::typ
         pitch[d] = (r.max()[d] - r.min()[d]) / num_cell;
     }
 
+#if 0
+    // debug print (to be deleted)
     BarrierExec([&](int rank, int size) {
         std::cerr << "CreateInitialNodes: rank " << rank << " pitch = " << pitch << std::endl;
         std::cerr << "CreateInitialNodes: rank " << rank << " r.max = " << r.max() << std::endl;
         std::cerr << "CreateInitialNodes: rank " << rank << " r.min = " << r.min() << std::endl;
       });
+#endif
 
     for (index_t i = 0; i < nb; ++i) {
         // First, create 1 helper cell per particle
@@ -354,7 +372,8 @@ KeyType MortonKeyFirstChild(KeyType k) {
     KeyType t = MortonKeyRemoveDepth(k);
     t = t & ~(~((KeyType)0) << (DIM * (MAX_DEPTH - MortonKeyGetDepth(k))));
     assert(t == 0);
-#endif  
+#endif
+    assert(MortonKeyGetDepth(k) < MAX_DEPTH);
     return MortonKeyIncrementDepth(k, 1);
 }
 
@@ -501,10 +520,90 @@ Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b, const Region
 }
 
 /**
+ * @brief Returns a std::vector of parent's children
+ */
+template<int DIM>
+std::vector<KeyType> GetChildren(KeyType parent) {
+  std::vector<KeyType> ret;
+  
+  KeyType child_key = MortonKeyFirstChild<DIM>(parent);
+  for (int child_idx = 0; child_idx < (1<<DIM); child_idx++) {
+    ret.push_back(child_key);
+    child_key = CalcMortonKeyNext<DIM>(child_key);
+  }
+
+  return ret;
+}
+
+/**
+ * @brief Split cells that have more than nb_max bodies
+ *
+ * @param cell_keys Array of morton keys of cells
+ * @param nb Array of current numbers of bodies of the cells
+ * @param max_nb Criteria to split a cell
+ */
+template<int DIM>
+std::vector<KeyType> SplitLargeCellsOnce(const std::vector<KeyType> &cell_keys,
+                                         const std::vector<long> &nb,
+                                         int max_nb) {
+  std::vector<KeyType> ret; // new 
+
+  for (int i = 0; i < cell_keys.size(); i++) {
+    if (nb[i] <= max_nb) {
+      // This cell does not need to be split.
+      ret.push_back(cell_keys[i]);
+    } else {
+      // Create 2^DIM children (8 in 3-dim)
+      auto children = GetChildren<DIM>(cell_keys[i]);
+      for (auto ch : children) {
+        ret.push_back(ch);
+      }
+      
+#if 0
+      std::cerr << "Splitting " << std::endl;
+      std::cerr << std::setw(15) << std::right << cell_keys[i] << " (" << MortonKeyDecode<DIM>(cell_keys[i]) << ")" << std::endl;
+      std::cerr << "Children are:" << std::endl;
+      for (auto ch : children) {
+        std::cerr << std::setw(15) << std::right << ch << " (" << MortonKeyDecode<DIM>(ch) << ")" << std::endl;
+      }
+#endif
+      
+    }
+  }
+
+  return ret;
+}
+
+/**
+ * @brief Distribute cells over processes in a simple algorithm so that each process has roughly equal number of bodies
+ * @param nb Array of numbers of bodies in cells
+ * @param proc_size Number of processes (assumes process numbers are integer starting from 0)
+ * @return Array of process numbers 
+ */
+inline std::vector<int> SplitKeysSimple(const std::vector<long> &nb, int proc_size) {
+  index_t total_nb = std::accumulate(nb.begin(), nb.end(), 0); // total number of bodies
+  index_t guide = total_nb / proc_size;
+
+  std::vector<int> ret(nb.size()); // return value
+  int psum = 0; // partial sum
+  int cur_proc = 0;
+  
+  for (int i = 0; i < nb.size(); i++) {
+    psum += nb[i];
+    ret[i] = cur_proc;
+    if (psum > guide * (cur_proc+1)) {
+      cur_proc++;
+    }
+  }
+
+  return ret;
+}
+
+/**
  * @brief Partition the simulation space and build Morton-key based octree
  * @tparam TSP Tapas static params
  * @param b Array of particles
- * @param nb Length of nb
+ * @param numBodies Length of b (NOT the total number of bodies over all processes)
  * @param r Geometry of the target space
  * @return The root cell of the constructed tree
  */
@@ -513,148 +612,207 @@ Cell<TSP>*
 Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                             index_t num_bodies,
                             const Region<TSP> &r) {
-    const int Dim = TSP::Dim;
-    typedef typename TSP::FP FP;
-    typedef typename TSP::BT BT;
-    typedef typename TSP::BT_ATTR BodyAttrType;
-    typedef typename BT::type BodyType;
-    typedef Cell<TSP> CellType;
-    typedef HelperNode<Dim> HN;
+  const int Dim = TSP::Dim;
+  typedef typename TSP::FP FP;
+  typedef typename TSP::BT BT;
+  typedef typename TSP::BT_ATTR BodyAttrType;
+  typedef typename BT::type BodyType;
+  typedef Cell<TSP> CellType;
+  typedef HelperNode<Dim> HN;
 
-    // Sort local bodies using Morton keys
-    std::vector<HN> hn = CreateInitialNodes<TSP>(b, num_bodies, r);
-    std::sort(hn.begin(), hn.end(),
-              [](const HN &lhs, const HN &rhs) { return lhs.key < rhs.key; });
+  // Sort local bodies using Morton keys
+  std::vector<HN> hn = CreateInitialNodes<TSP>(b, num_bodies, r);
+  std::sort(hn.begin(), hn.end(),
+            [](const HN &lhs, const HN &rhs) { return lhs.key < rhs.key; });
     
-    std::vector<index_t> leaf_nb_local;  // Number of local bodies in leaf cell[i]
-    std::vector<index_t> leaf_nb_global; // Number of global bodies in leaf cell[i]
-    std::vector<KeyType> leaf_keys;      // Morton keys of leaf cells
+  std::vector<long> leaf_nb_local;  // Number of local bodies in leaf cell[i]
+  std::vector<long> leaf_nb_global; // Number of global bodies in leaf cell[i]
+  std::vector<KeyType> leaf_keys;      // Morton keys of leaf cells
 
-    int rank, size;
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  // MPI rank and size
+  // TOOD: to be replaced by an appropriate abstraction of communication component.
+  int rank, size;
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    // Start from a root cell and refine it recursively until all cells have at most
-    leaf_keys.push_back(0);
+  // Start from a root cell and refine it recursively until all cells have at most
+  leaf_keys.push_back(0);
 
-    // Loop until all leaf cells have at most max_nb_ bodies.
-    while(1) {
-        leaf_nb_local.resize(leaf_keys.size(), 0);
-        leaf_nb_global.resize(leaf_keys.size(), 0);
+  // Loop until all leaf cells have at most max_nb_ bodies.
+  while(1) {
+    leaf_nb_local.clear();
+    leaf_nb_global.clear();
+    leaf_nb_local.resize(leaf_keys.size(), 0);
+    leaf_nb_global.resize(leaf_keys.size(), 0);
 
-        for (size_t i = 0; i < leaf_keys.size(); i++) {
-            // Count process-local bodies belonging to the cell[i].
-            leaf_nb_local[i] = GetBodyRange<Dim>(leaf_keys[i], hn, [](const HN &hn) { return hn.key; }).second;
+    for (size_t i = 0; i < leaf_keys.size(); i++) {
+      // Count process-local bodies belonging to the cell[i].
+      leaf_nb_local[i] = GetBodyRange<Dim>(leaf_keys[i], hn, [](const HN &hn) { return hn.key; }).second;
+    }
+
+#if 0
+    BarrierExec([&] (int rank, int size) {
+        std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
+        std::cerr << "hn.size() = " << hn.size() << ", ";
+        for (auto n : hn) {
+          std::cerr << std::fixed << std::setw(6) << MortonKeyRemoveDepth(n.key) << " ";
         }
+        std::cerr << std::endl;
+          
+        std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
+        std::cerr << "leaf_nb_local.size() = " << leaf_nb_local.size() << ", ";
+        for (auto nb : leaf_nb_local) {
+          std::cerr << std::fixed << std::setw(3) << nb << " ";
+        }
+        std::cerr << std::endl;
+      });
+#endif
+      
+    // Count bodies belonging to the cell[i] globally using MPI_Allreduce(+)
+    MPI_Allreduce(leaf_nb_local, leaf_nb_global, MPI_SUM, MPI_COMM_WORLD);
 
-        // Count bodies belonging to the cell[i] globally using MPI_Allreduce(+)
-        int ret = MPI_Allreduce(static_cast<void*>(leaf_nb_local.data()),
-                                static_cast<void*>(leaf_nb_global.data()),
-                                leaf_keys.size(),
-                                MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    long max_nb = *std::max_element(leaf_nb_global.begin(), leaf_nb_global.end());
+
+#if 0
+    //--------------------------------------------------------------
+    // debug print (to be deleted)
+    MPI_Barrier(MPI_COMM_WORLD);
+    std::cout.flush(); std::cerr.flush();
+    usleep(10000);
+
+    const int w = 3;
+    if (rank == 0) {
+      std::cerr << "-------------------------------------------" << std::endl;
+      std::cerr << "Partition() MAX_DEPTH_BY_DEPTH_BITS = " << MAX_DEPTH_BY_DEPTH_BITS << std::endl;
+      std::cerr << "Partition() MAX_DEPTH_BY_KEY_BITS = " << MAX_DEPTH_BY_KEY_BITS << std::endl;
+      std::cerr << "Partition() MAX_DEPTH = " << MAX_DEPTH << std::endl;
+      std::cerr << "CalcMortonKeyNext(0) = " << CalcMortonKeyNext<Dim>(0) << std::endl;
         
-        //--------------------------------------------------------------
-        // debug print
-        MPI_Barrier(MPI_COMM_WORLD);
-        std::cout.flush(); std::cerr.flush();
-        usleep(10000);
-
-        const int w = 3;
-        if (rank == 0) {
-            std::cerr << "-------------------------------------------" << std::endl;
-            std::cerr << "MPI size = " << size << std::endl;
-            std::cerr << std::left << std::fixed << std::setw(10) << "index";
-            for (int i = 0; i < leaf_keys.size(); i++) {
-                std::cerr << std::fixed << std::setw(w) << i << " ";
-            }
-            std::cerr << std::endl;
+      KeyType test_key = 70368744177665UL;
+      KeyType first_child = MortonKeyFirstChild<Dim>(test_key);
+      std::cerr << "MortonKeyFirstChild test." << std::endl;
+      std::cerr << "Parent : " << std::endl;
+      std::cerr << std::setw(15) << std::right << test_key << " " << MortonKeyDecode<Dim>(test_key) << std::endl;
+      std::cerr << "First child : " << std::endl;
+      std::cerr << std::setw(15) << std::right << first_child << " " << MortonKeyDecode<Dim>(first_child) << std::endl;
+        
+      std::cerr << "MPI size = " << size << std::endl;
+      std::cerr << std::left << std::fixed << std::setw(10) << "index";
+      for (int i = 0; i < leaf_keys.size(); i++) {
+        std::cerr << std::fixed << std::setw(w) << i << " ";
+      }
+      std::cerr << std::endl;
             
-            std::cerr << std::left << std::fixed << std::setw(10) << "depths";
-            for (auto k : leaf_keys) {
-                std::cerr << std::fixed << std::setw(w) << MortonKeyGetDepth(k) << " ";
-            }
-            std::cerr << std::endl;
-
-            std::cerr << std::left << std::fixed << std::setw(10) << "keys";
-            for (auto k : leaf_keys) {
-                std::cerr << std::fixed << std::setw(w) << MortonKeyRemoveDepth(k) << " ";
-            }
-            std::cerr << std::endl;
-
-            std::cerr << std::left << std::fixed << std::setw(10) << "nb_gl";
-            for (auto nb : leaf_nb_global) {
-                std::cerr << std::fixed << std::setw(w) << nb << " ";
-            }
-            std::cerr << std::endl;
-        }
-
-        BarrierExec([&] (int rank, int size) {
-            std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
-            for (auto nb : leaf_nb_local) {
-              std::cerr << std::fixed << std::setw(w) << nb << " ";
-            }
-            std::cerr << std::endl;
-          });
-
-        // debug print ends
-        //--------------------------------------------------------------
-
-        index_t max_nb = *std::max_element(leaf_nb_global.begin(), leaf_nb_global.end());
-        if (rank == 0) std::cerr << "max_nb = " << max_nb << std::endl;
-        if (rank == 0) std::cerr << "total = " << std::accumulate(leaf_nb_global.begin(), leaf_nb_global.end(), 0) << std::endl;
-        if (max_nb <= max_nb_) {
-            // Finished. all cells have at most max_nb_ bodies.
-            break;
-        } else {
-            std::vector<KeyType> buf; // new leaf_keys
-
-            for (int i = 0; i < leaf_keys.size(); i++) {
-                if (leaf_nb_global[i] <= max_nb_) {
-                    buf.push_back(leaf_keys[i]);
-                } else {
-                    if (rank == 0) {
-                        std::cerr << "Refining cell " << i << std::endl;
-                    }
-                    KeyType child_key = MortonKeyFirstChild<Dim>(leaf_keys[i]);
-                    for (int child_idx = 0; child_idx < (1<<Dim); child_idx++) {
-                        buf.push_back(child_key);
-                        child_key = CalcMortonKeyNext<Dim>(child_key);
-                    }
-                }
-            }
-
-            leaf_keys = buf;
-            if (rank == 0) {
-                std::cerr << "Now new leaf_keys has "<< leaf_keys.size() << " cells." << std::endl;
-            }
-        }
+      std::cerr << std::left << std::fixed << std::setw(10) << "depths";
+      for (auto k : leaf_keys) {
+        std::cerr << std::fixed << std::setw(w) << MortonKeyGetDepth(k) << " ";
+      }
+      std::cerr << std::endl;
+      
+      std::cerr << std::left << std::fixed << std::setw(10) << "keys" << std::endl;;
+      for (auto k : leaf_keys) {
+        std::cerr << std::setw(15) << std::right << k << " (" << MortonKeyDecode<Dim>(k) << ")" << std::endl;
+      }
+      std::cerr << std::endl;
+      
+      std::cerr << std::left << std::fixed << std::setw(10) << "nb_gl";
+      for (auto nb : leaf_nb_global) {
+        std::cerr << std::fixed << std::setw(w) << nb << " ";
+      }
+      std::cerr << std::endl;
     }
     
-    MPI_Finalize();
-    exit(0);
+    BarrierExec([&] (int rank, int size) {
+        std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
+        for (auto nb : leaf_nb_local) {
+          std::cerr << std::fixed << std::setw(w) << nb << " ";
+        }
+        std::cerr << std::endl;
+      });
+    // debug print ends
+    //--------------------------------------------------------------
+#endif
+        
+    if (rank == 0) {
+      constexpr int w = 9;
+      auto max_depth_func = [](int d, KeyType k) {
+        return std::max(d, MortonKeyGetDepth(k));
+      };
+      const int max_depth = std::accumulate(leaf_keys.begin(),
+                                            leaf_keys.end(),
+                                            0, max_depth_func);
+      std::cerr << "max_nb = " << std::setw(w) << max_nb << " "
+                << "#cells = " << std::setw(w) << leaf_keys.size() << " "
+                << "maxdepth = " << std::setw(w) << max_depth << " "
+                << "total = " << std::accumulate(leaf_nb_global.begin(), leaf_nb_global.end(), 0)
+                << std::endl;
+    }
+
+    if (max_nb <= max_nb_) {    // Finished. all cells have at most max_nb_ bodies.
+      break;
+    } else {
+      // Find cells that have more than max_nb_ bodies and split them.
+      leaf_keys = SplitLargeCellsOnce<Dim>(leaf_keys, leaf_nb_global, max_nb_);
+    }
+  } // end of while(1) loop
+
+  // distribute the morton-ordered leaf cells over processes
+  // so that each process has roughly equal number of bodies.
+  // Split the morton-ordred curve and assign cells to processes
+  std::vector<int> leaf_owners = SplitKeysSimple(leaf_nb_global, size);
+
+  if (rank == 0) {
+#if 0
+    std::cerr << "Cells are: " << std::endl;
+    for (int i = 0; i < leaf_nb_global.size(); i++) {
+      std::cerr << std::fixed << std::setw(3) << i << " ";
+    }
+    std::cerr << std::endl;
+    for (int i = 0; i < leaf_nb_global.size(); i++) {
+      std::cerr << std::fixed << std::setw(3) << leaf_nb_global[i] << " ";
+    }
+    std::cerr << std::endl;
+    for (int i = 0; i < leaf_nb_global.size(); i++) {
+      std::cerr << std::fixed << std::setw(3) << leaf_owners[i] << " ";
+    }
+    std::cerr << std::endl;
+#endif
+
+    std::cerr << "Number of cells each process owns" << std::endl;
+    for (int pi = 0; pi < size; pi++) {
+      int ncells = std::count(leaf_owners.begin(), leaf_owners.end(), pi);
+      std::cerr << std::fixed << std::setw(3) << pi << " "
+                << std::fixed << std::setw(3) << ncells << std::endl;
+    }
+  }
+
+  MPI_Finalize();
+  exit(0);
+
+  //-------------
     
-    BodyType *b_work = new BodyType[num_bodies];
+  BodyType *b_work = new BodyType[num_bodies];
 
-    // Sort particles to the same order of hn
-    SortBodies<Dim, BT>(b, b_work, hn.data(), hn.size());
+  // Sort particles to the same order of hn
+  SortBodies<Dim, BT>(b, b_work, hn.data(), hn.size());
 
-    std::memcpy(b, b_work, sizeof(BodyType) * num_bodies);
-    //BodyAttrType *attrs = new BodyAttrType[nb];
-    BodyAttrType *attrs = (BodyAttrType*)calloc(num_bodies, sizeof(BodyAttrType));
+  std::memcpy(b, b_work, sizeof(BodyType) * num_bodies);
+  //BodyAttrType *attrs = new BodyAttrType[nb];
+  BodyAttrType *attrs = (BodyAttrType*)calloc(num_bodies, sizeof(BodyAttrType));
 
-    KeyType root_key = 0;
-    KeyPair kp = GetBodyRange<Dim>(root_key, hn,
-                                   [](const HelperNode<Dim> &hn) { return hn.key; });
-    assert(kp.first == 0 && kp.second == num_bodies); // it is root cell, which owns all bodies.
-    TAPAS_LOG_DEBUG() << "Root range: offset: " << kp.first << ", "
-                      << "length: " << kp.second << "\n";
+  KeyType root_key = 0;
+  KeyPair kp = GetBodyRange<Dim>(root_key, hn,
+                                 [](const HelperNode<Dim> &hn) { return hn.key; });
+  assert(kp.first == 0 && kp.second == num_bodies); // it is root cell, which owns all bodies.
+  TAPAS_LOG_DEBUG() << "Root range: offset: " << kp.first << ", "
+                    << "length: " << kp.second << "\n";
 
-    auto *ht = new typename CellType::HashTable();
-    auto *root = new CellType(r, 0, num_bodies, root_key, ht, b, attrs);
-    ht->insert(std::make_pair(root_key, root));
-    Refine(root, hn, b, 0, 0);
+  auto *ht = new typename CellType::HashTable();
+  auto *root = new CellType(r, 0, num_bodies, root_key, ht, b, attrs);
+  ht->insert(std::make_pair(root_key, root));
+  Refine(root, hn, b, 0, 0);
     
-    return root;
+  return root;
 }
 
 template <class TSP>
