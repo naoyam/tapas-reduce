@@ -85,11 +85,6 @@ int main(int argc, char ** argv) {
   bodies = data.initBodies(args.numBodies, args.distribution, args.mpi_rank, args.mpi_size);
   logger::stopTimer("Dataset generation");
 
-  BarrierExec([&]() {
-          bool append_mode = (args.mpi_rank > 0); // Previously existing file is truncated by rank 0
-          Dataset::DumpToFile(bodies, "init_bodies.dat", append_mode);
-      });
-
   const real_t cycle = 2 * M_PI;
   logger::verbose = args.verbose && (args.mpi_rank == 0);
   if (args.mpi_rank == 0) {
