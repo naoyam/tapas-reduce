@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
+#include <memory>
 #include <numeric>
 #include <list>
 #include <vector>
@@ -41,10 +42,10 @@ using namespace morton_common;
 
 template <int DIM>
 struct HelperNode {
-    KeyType key;          //!< Morton key
-    Vec<DIM, int> anchor; //!< Morton-key like vector without depth information
-    index_t p_index;      //!< Index of the corresponding body
-    index_t np;           //!< Number of particles in a node
+  KeyType key;          //!< Morton key
+  Vec<DIM, int> anchor; //!< Morton-key like vector without depth information
+  index_t p_index;      //!< Index of the corresponding body
+  index_t np;           //!< Number of particles in a node
 };
 
 template<class F>
@@ -62,25 +63,30 @@ void BarrierExec(F func) {
   }
 }
 
-template<class T>
-static void Dump(const T &bodies, std::ostream & strm) {
-  for(auto b : bodies) {
+template<class T1, class T2>
+static void Dump(const T1 &bodies, const T2 &keys, std::ostream & strm) {
+  for (int i = 0; i < bodies.size(); i++) {
+    auto &b = bodies[i];
     strm << std::scientific << std::showpos << b.X[0] << " "
          << std::scientific << std::showpos << b.X[1] << " "
          << std::scientific << std::showpos << b.X[2] << " "
+        << std::fixed << std::setw(10) << keys[i]
          << std::endl;
   }
 }
 
-template<class T>
-static void DumpToFile(const T &bodies, const std::string &fname, bool append=false) {
+template<class T1, class T2>
+static void DumpToFile(const T1 &bodies,
+                       const T2 &keys,
+                       const std::string &fname,
+                       bool append=false) {
   std::ios_base::openmode mode = std::ios_base::out;
   if (append) mode |= std::ios_base::app;
   std::ofstream ofs;
   ofs.open(fname.c_str(), mode);
         
   assert(ofs.good());
-  Dump(bodies, ofs);
+  Dump(bodies, keys, ofs);
   ofs.close();
 }
 
@@ -132,22 +138,33 @@ class Partitioner;
 
 template <class TSP> // TapasStaticParams
 class Cell: public tapas::BasicCell<TSP> { 
-    friend class Partitioner<TSP>;
-    friend class BodyIterator<Cell>;
-  public:
-    typedef unordered_map<KeyType, Cell*> HashTable;
-  protected:
-    KeyType key_;
-    HashTable *ht_;
-  public:
-    Cell(const Region<TSP> &region,
-         index_t bid, index_t nb, KeyType key,
-         HashTable *ht,
-         typename TSP::BT::type *bodies,
-         typename TSP::BT_ATTR *body_attrs) :
-            tapas::BasicCell<TSP>(region, bid, nb), key_(key),
-            ht_(ht), bodies_(bodies), body_attrs_(body_attrs),
-            is_leaf_(true) {}
+  friend class Partitioner<TSP>;
+  friend class BodyIterator<Cell>;
+ public:
+  typedef unordered_map<KeyType, Cell*> CellHashTable;
+  typedef unordered_map<KeyType, int>   OwnerHashTable;
+ protected:
+  KeyType key_;
+  std::shared_ptr<CellHashTable> ht_;
+ public:
+  /**
+   * @brief Constructor of a cell type
+   * @param region Region object
+   * @param bid Starting index of local bodies
+   * @param nb Number of bodies (0 if this is a non-leaf cell)
+   * @param key Morton key
+   * @param ht A pointer to HashTable object
+   * @param bodies A pointer the bodies
+   * @param body_attrs A pointer to bodies attrs
+   */
+  Cell(const Region<TSP> &region,
+       index_t bid, index_t nb, KeyType key,
+       std::shared_ptr<CellHashTable> ht,
+       std::shared_ptr<std::vector<typename TSP::BT::type>> bodies,
+       std::shared_ptr<std::vector<typename TSP::BT_ATTR>> body_attrs):
+      tapas::BasicCell<TSP>(region, bid, nb), key_(key),
+      ht_(ht), bodies_(bodies), body_attrs_(body_attrs),
+      is_leaf_(true) {}
     
     typedef typename TSP::ATTR attr_type;
     typedef typename TSP::BT_ATTR body_attr_type;
@@ -176,14 +193,14 @@ class Cell: public tapas::BasicCell<TSP> {
     typename TSP::BT_ATTR *body_attrs() const;
     SubCellIterator<Cell> subcells() const;
   
-  protected:
-    typename TSP::BT_ATTR &body_attr(index_t idx) const;
-    HashTable *ht() { return ht_; }
-    Cell *Lookup(KeyType k) const;
-    typename TSP::BT::type *bodies_;
-    typename TSP::BT_ATTR *body_attrs_;
-    bool is_leaf_;
-    virtual void make_pure_virtual() const {}
+ protected:
+  typename TSP::BT_ATTR &body_attr(index_t idx) const;
+  CellHashTable *ht() { return ht_; }
+  Cell *Lookup(KeyType k) const;
+  std::shared_ptr<std::vector<typename TSP::BT::type>> bodies_;
+  std::shared_ptr<std::vector<typename TSP::BT_ATTR>> body_attrs_;
+  bool is_leaf_;
+  virtual void make_pure_virtual() const {}
 }; // class Cell
 
 
@@ -489,17 +506,17 @@ Cell<TSP> &Cell<TSP>::parent() const {
 
 template <class TSP>
 typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
-    return bodies_[this->bid_+idx];
+  return (*bodies_)[this->bid_+idx];
 }
 
 template <class TSP>
 typename TSP::BT_ATTR *Cell<TSP>::body_attrs() const {
-    return body_attrs_;
+  return body_attrs_->data();
 }
 
 template <class TSP>
 typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) const {
-    return body_attrs_[this->bid_+idx];
+  return (*body_attrs_)[this->bid_+idx];
 }
 
 template <class TSP>
@@ -581,27 +598,21 @@ std::vector<KeyType> SplitLargeCellsOnce(const std::vector<KeyType> &cell_keys,
       for (auto ch : children) {
         ret.push_back(ch);
       }
-      
-#if 0
-      std::cerr << "Splitting " << std::endl;
-      std::cerr << std::setw(15) << std::right << cell_keys[i] << " (" << MortonKeyDecode<DIM>(cell_keys[i]) << ")" << std::endl;
-      std::cerr << "Children are:" << std::endl;
-      for (auto ch : children) {
-        std::cerr << std::setw(15) << std::right << ch << " (" << MortonKeyDecode<DIM>(ch) << ")" << std::endl;
-      }
-#endif
-      
     }
   }
 
   return ret;
 }
 
+
 /**
- * @brief Distribute cells over processes in a simple algorithm so that each process has roughly equal number of bodies
+ * @brief Distribute cells over processes in a simple algorithm so that each process has 
+ *        roughly equal number of bodies
+ * 
  * @param nb Array of numbers of bodies in cells
  * @param proc_size Number of processes (assumes process numbers are integer starting from 0)
  * @return Array of process numbers 
+ * @todo inline is required here to avoid multiple definitions 
  */
 inline std::vector<int> SplitKeysSimple(const std::vector<long> &nb, int proc_size) {
   index_t total_nb = std::accumulate(nb.begin(), nb.end(), 0); // total number of bodies
@@ -615,10 +626,11 @@ inline std::vector<int> SplitKeysSimple(const std::vector<long> &nb, int proc_si
     psum += nb[i];
     ret[i] = cur_proc;
     if (psum > guide * (cur_proc+1)) {
-      cur_proc++;
+      // remaining part belongs to last proc.
+      cur_proc = std::min(cur_proc + 1, proc_size - 1);
     }
   }
-
+  
   return ret;
 }
 
@@ -634,6 +646,9 @@ size_t sum(const T& c) {
  * @param numBodies Length of b (NOT the total number of bodies over all processes)
  * @param r Geometry of the target space
  * @return The root cell of the constructed tree
+ * @todo In this function keys are exchanged using alltoall communication, as well as bodies.
+ *       In extremely large scale systems, calculating keys locally again after communication
+ *       might be faster.
  */
 template <class TSP> // TSP : Tapas Static Params
 Cell<TSP>*
@@ -653,6 +668,18 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   std::sort(hn.begin(), hn.end(),
             [](const HN &lhs, const HN &rhs) { return lhs.key < rhs.key; });
     
+  BarrierExec([&](int rank, int size) {
+      std::vector<BodyType> bodies;
+      std::vector<KeyType> keys;
+
+      for(const auto& n : hn) {
+        keys.push_back(n.key);
+        bodies.push_back(b[n.p_index]);
+      }
+      bool append_mode = (rank > 0); // Previously existing file is truncated by rank 0
+      DumpToFile(bodies, keys, "init_bodies.dat", append_mode);
+    });
+
   std::vector<KeyType> leaf_keys;      // Morton keys of leaf cells
   std::vector<long> leaf_nb_local;  // Number of local bodies in leaf cell[i]
   std::vector<long> leaf_nb_global; // Number of global bodies in leaf cell[i]
@@ -772,7 +799,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       std::cerr << "max_nb = " << std::setw(w) << max_nb << " "
                 << "#cells = " << std::setw(w) << leaf_keys.size() << " "
                 << "maxdepth = " << std::setw(w) << max_depth << " "
-                << "total = " << sum(leaf_nb_local)
+                << "total = " << sum(leaf_nb_global)
                 << std::endl;
     }
 
@@ -783,7 +810,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       leaf_keys = SplitLargeCellsOnce<Dim>(leaf_keys, leaf_nb_global, max_nb_);
     }
   } // end of while(1) loop
-
+  
   // distribute the morton-ordered leaf cells over processes
   // so that each process has roughly equal number of bodies.
   // Split the morton-ordred curve and assign cells to processes
@@ -808,46 +835,75 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
     std::cerr << "Number of cells each process owns" << std::endl;
     for (int pi = 0; pi < size; pi++) {
+      auto beg = std::lower_bound(leaf_owners.begin(), leaf_owners.end(), pi);
+      auto end = std::upper_bound(leaf_owners.begin(), leaf_owners.end(), pi);
       int ncells = std::count(leaf_owners.begin(), leaf_owners.end(), pi);
       std::cerr << std::fixed << std::setw(3) << pi << " "
-                << std::fixed << std::setw(3) << ncells << std::endl;
+                << std::fixed << std::setw(3) << ncells
+                << "(from " << (beg - leaf_owners.begin()) << ", "
+                << (end - leaf_owners.begin()) << ")"
+                << std::endl;
     }
   }
 
   // Exchange bodies using MPI_Alltoallv
   std::vector<int> send_counts(size, 0); // number of bodies that this process sends to others
   std::vector<int> recv_counts(size, 0); // number of bodies that this process receives from others
+
+  BarrierExec([&](int rank, int size) {
+      std::cerr << "Rank " << rank << " "
+                << "leaf_keys.size() = " << leaf_keys.size() << " "
+                << "leaf_owners.size() = " << leaf_owners.size() << " "
+                << std::endl;
+    });
   
   for (int ci = 0; ci < leaf_keys.size(); ci++) {
     // count bodies to be sent to process 'proc' in cell ci
     // note that send_count and recv_count are multiplied by sizeof(BodyType) so that
     // BodyType objects will be sent as arrays of MPI_BYTE
     int proc = leaf_owners[ci];
-    send_counts[proc] += leaf_nb_local[ci] * sizeof(BodyType);
+    send_counts[proc] += leaf_nb_local[ci];
   }
 
   MPI_Alltoall(send_counts.data(), 1, MPI_INT,
                recv_counts.data(), 1, MPI_INT,
                MPI_COMM_WORLD);
 
+  std::vector<int> send_bytes_bodies(send_counts);
+  std::vector<int> send_bytes_keys(send_counts);
+  
+  std::vector<int> recv_bytes_bodies(recv_counts);
+  std::vector<int> recv_bytes_keys(recv_counts);
+  
+  for (auto &c : send_bytes_bodies) { c *= sizeof(BodyType); }
+  for (auto &c : recv_bytes_bodies) { c *= sizeof(BodyType); }
+  for (auto &c : send_bytes_keys) { c *= sizeof(KeyType); }
+  for (auto &c : recv_bytes_keys) { c *= sizeof(KeyType); }
+
   // Exchange particle using MPI_Alltoallv
   // Since Tapas framework does not know the detail of BodyType, we send/recv BodyType data
   // as arrays of MPI_BYTE.
 
-  // Copy bodies to send_buf.
+  // Copy bodies and keys to send_buf.
   // hn (array of HelperNode) is already sorted by their Morton keys,
   // which also means they are sorted by their parent process.
-  std::vector<BodyType> send_buf(num_bodies);
+  std::vector<BodyType> send_bodies(num_bodies);
+  std::vector<KeyType>  send_keys(num_bodies);
   for (int hi = 0; hi < hn.size(); hi++) {
     int bi = hn[hi].p_index;
-    send_buf[hi] = b[bi];
+    send_bodies[hi] = b[bi];
+    send_keys[hi] = hn[hi].key;
   }
   
-  // Calculate send displacements, which is prefix sum of send_counts
-  std::vector<int> send_disp(size, 0);
+  // Calculate send displacements, which is prefix sum of send_bytes_bodies
+  std::vector<int> send_disp_bodies(size, 0);
+  std::vector<int> send_disp_keys(size, 0);
+  
   for (int p = 0; p < size; p++) {
+    // p : process id (i.e. rank in MPI)
     if (p == 0) {
-      send_disp[p] = 0;
+      send_disp_bodies[p] = 0;
+      send_disp_keys[p] = 0;
     } else {
       // find cells that belong to process p.
       const auto beg = leaf_owners.begin();
@@ -860,24 +916,32 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       int nbodies = std::accumulate(leaf_nb_local.begin() + p_beg_idx,
                                     leaf_nb_local.begin() + p_end_idx,
                                     0);
-      send_disp[p] = nbodies * sizeof(BodyType) + send_disp[p-1];
+      send_disp_bodies[p] = nbodies * sizeof(BodyType) + send_disp_bodies[p-1];
+      send_disp_keys[p] = nbodies * sizeof(KeyType) + send_disp_keys[p-1];
     }
   }
 
-  // Prepare recv_buf
-  int num_bodies_recv = sum(recv_counts) / sizeof(BodyType); // recv_count is in bytes.
-  std::vector<BodyType> recv_buf(num_bodies_recv);
-
-  // Calculate recv displacement, which is prefix sum of recv_counts
-  std::vector<int> recv_disp(size, 0);
+  // Prepare recv_bodies (array of received body, which will be used in actual computation)
+  // and recv_keys (array of keys corresponding to recv_bodies)
+  // recv_bodies will be held by cells and continuously used after this function.
+  int num_bodies_recv = sum(recv_counts); // note: recv_count is in bytes.
+  auto recv_bodies = std::make_shared<std::vector<BodyType>>(num_bodies_recv);
+  std::vector<KeyType> recv_keys(num_bodies_recv);
+    
+  // Calculate recv displacement, which is prefix sum of recv_bytes_bodies and recv_bytes_keys
+  std::vector<int> recv_disp_bodies(size, 0);
+  std::vector<int> recv_disp_keys(size, 0);
   for (int pi = 0; pi < recv_counts.size(); pi++) {
     if (pi == 0) {
-      recv_disp[pi] = 0;
+      recv_disp_bodies[pi] = 0;
+      recv_disp_keys[pi] = 0;
     } else {
-      recv_disp[pi] = recv_disp[pi-1] + recv_counts[pi-1];
+      recv_disp_bodies[pi] = recv_disp_bodies[pi-1] + recv_bytes_bodies[pi-1];
+      recv_disp_keys[pi] = recv_disp_keys[pi-1] + recv_bytes_keys[pi-1];
     }
   }
   
+#if 0
   // Debug message of BodyExchange phase
   if (rank == 0) {
     std::cerr << "---------------------------" << std::endl;
@@ -889,17 +953,17 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
         std::cerr << "Rank "
                   << std::fixed << std::setw(3) << rank
                   << " sends "
-                  << std::fixed << std::setw(6) << send_counts[p] << " bytes "
-                  << "(" << (send_counts[p]/sizeof(BodyType)) << " bodies)"
+                  << std::fixed << std::setw(6) << send_bytes_bodies[p] << " bytes "
+                  << "(" << (send_counts[p]) << " bodies)"
                   << " to " << p
                   << std::endl;
       }
       
       std::cerr << "Rank "
-                << std::fixed << std::setw(3) << rank << " " << "send_disp = ";
-      for (int i = 0; i < send_disp.size(); i++) {
-        std::cerr << std::fixed << std::setw(4) << send_disp[i]
-                  << "(" << send_disp[i] / sizeof(BodyType) << " bodies)"
+                << std::fixed << std::setw(3) << rank << " " << "send_disp_bodies = ";
+      for (int i = 0; i < send_disp_bodies.size(); i++) {
+        std::cerr << std::fixed << std::setw(4) << send_disp_bodies[i]
+                  << "(" << send_disp_bodies[i] / sizeof(BodyType) << " bodies)"
                   << " ";
       }
       std::cerr << std::endl;
@@ -908,45 +972,103 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
         std::cerr << "Rank "
                   << std::fixed << std::setw(3) << rank
                   << " recvs "
-                  << std::fixed << std::setw(6) << recv_counts[p] << " bytes "
-                  << "(" << (recv_counts[p]/sizeof(BodyType)) << " bodies)"
+                  << std::fixed << std::setw(6) << recv_bytes_bodies[p] << " bytes "
+                  << "(" << recv_counts[p] << " bodies)"
                   << " from " << p
                   << std::endl;
       }
 
       std::cerr << "Rank "
-                << std::fixed << std::setw(3) << rank << " " << "recv_disp = ";
-      for (int i = 0; i < recv_disp.size(); i++) {
-        std::cerr << std::fixed << std::setw(4) << recv_disp[i]
-                  << "(" << recv_disp[i] / sizeof(BodyType) << " bodies)"
+                << std::fixed << std::setw(3) << rank << " " << "recv_disp_bodies = ";
+      for (int i = 0; i < recv_disp_bodies.size(); i++) {
+        std::cerr << std::fixed << std::setw(4) << recv_disp_bodies[i]
+                  << "(" << recv_disp_bodies[i] / sizeof(BodyType) << " bodies)"
                   << " ";
       }
       std::cerr << std::endl;
       
       std::cerr << "Rank "
                 << std::fixed << std::setw(3) << rank << " "
-                << std::accumulate(recv_counts.begin(), recv_counts.end(), 0)
+                << std::accumulate(recv_bytes_bodies.begin(), recv_bytes_bodies.end(), 0)
                 << " bytes, "
                 << std::accumulate(recv_counts.begin(), recv_counts.end(), 0) / sizeof(BodyType)
                 << " bodies total"
                 << std::endl;
     });
+#endif
 
-  // Call MPI_Alltoallv()
-  MPI_Alltoallv(send_buf.data(), send_counts.data(), send_disp.data(), MPI_BYTE,
-                recv_buf.data(), recv_counts.data(), recv_disp.data(), MPI_BYTE,
+  // Call MPI_Alltoallv() for bodies
+  MPI_Alltoallv(send_bodies.data(),  send_bytes_bodies.data(), send_disp_bodies.data(), MPI_BYTE,
+                recv_bodies->data(), recv_bytes_bodies.data(), recv_disp_bodies.data(), MPI_BYTE,
                 MPI_COMM_WORLD);
 
+  // Call MPI_Alltoallv() for body keys
+  MPI_Alltoallv(send_keys.data(), send_bytes_keys.data(), send_disp_keys.data(), MPI_BYTE,
+                recv_keys.data(), recv_bytes_keys.data(), recv_disp_keys.data(), MPI_BYTE,
+                MPI_COMM_WORLD);
+
+  // Dump local bodies into a file named exch_bodies.dat
+  // All processes dump bodies in the file in a coordinated way. init_bodies.dat and
+  // exch_bodies.dat must match (if sorted).
   BarrierExec([&](int rank, int size) {
       bool append_mode = (rank > 0);
-      DumpToFile(recv_buf, "exch_bodies.dat", append_mode);
-    });
+      DumpToFile(*(recv_bodies.get()), recv_keys, "exch_bodies.dat", append_mode);
+      });
+
   
-  MPI_Finalize();
-  exit(0);
+  // Build a local tree in a bottom-up manner.
+  
+  // allocate BodyAttrType data
+  auto body_attrs = std::make_shared<std::vector<BodyAttrType>>(num_bodies_recv);
+
+  // CellHashTable (which is std::unordered_map<KeyType, CellType*>
+  auto ht = std::make_shared<typename CellType::CellHashTable>();
+
+  // construct a local tree from cells which belong to this process.
+  auto leaf_beg = std::lower_bound(std::begin(leaf_owners), std::end(leaf_owners), rank) - std::begin(leaf_owners);
+  auto leaf_end = std::upper_bound(std::begin(leaf_owners), std::end(leaf_owners), rank) - std::begin(leaf_owners);
+
+  for (auto i = leaf_beg; i < leaf_end; i++) {
+    KeyType k = leaf_keys[i];
+
+    auto bbeg = std::lower_bound(std::begin(recv_keys), std::end(recv_keys), k) - std::begin(recv_keys);
+    auto bend = std::upper_bound(std::begin(recv_keys), std::end(recv_keys), k) - std::begin(recv_keys);
+    
+    CellType *c = new CellType(r,           // Region region
+                               bbeg,        // body index
+                               bend - bbeg, // #bodies
+                               k,           // key
+                               ht,          // CellHashTable
+                               recv_bodies, // bodies
+                               body_attrs); // body attrs
+    (*ht)[k] = c;
+
+    int dp = 0;
+    while(1) {
+      k = MortonKeyParent<Dim>(k);
+      dp = MortonKeyGetDepth(k);
+
+      if (ht->count(k) == 0) {
+        // Create interior cellls
+        // These sells never has bodies
+        c = new CellType(r, 0, 0, k, ht, recv_bodies, body_attrs);
+        (*ht)[k] = c;
+      } else {
+        break; // if c's parent is found: all of the ancestors have already been created.
+      }
+
+      if (dp == 0) break; // stop if k is the root cell;
+    }
+  }
+
+  MPI_Finalize(); exit(0);
+
+  // return the root cell (root key is always 0)
+  return (*ht)[0];
 
   //-------------
-    
+
+#if 0
   BodyType *b_work = new BodyType[num_bodies];
 
   // Sort particles to the same order of hn
@@ -963,12 +1085,13 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   TAPAS_LOG_DEBUG() << "Root range: offset: " << kp.first << ", "
                     << "length: " << kp.second << "\n";
 
-  auto *ht = new typename CellType::HashTable();
+  auto *ht = new typename CellType::CellHashTable();
   auto *root = new CellType(r, 0, num_bodies, root_key, ht, b, attrs);
   ht->insert(std::make_pair(root_key, root));
   Refine(root, hn, b, 0, 0);
     
   return root;
+#endif
 }
 
 template <class TSP>
