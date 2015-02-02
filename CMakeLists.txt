@@ -47,6 +47,7 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
 endif()
 
 add_subdirectory(sample)
+add_subdirectory(cpp)
 
 # --------------------------------------------------------------------------------
 # Generating documentation using Doxygen when available.
