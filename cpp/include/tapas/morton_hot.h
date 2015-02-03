@@ -20,6 +20,7 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <iterator> // for std::back_inserter
 
 #include <unistd.h>
 #include <mpi.h>
@@ -70,7 +71,7 @@ static void Dump(const T1 &bodies, const T2 &keys, std::ostream & strm) {
     strm << std::scientific << std::showpos << b.X[0] << " "
          << std::scientific << std::showpos << b.X[1] << " "
          << std::scientific << std::showpos << b.X[2] << " "
-        << std::fixed << std::setw(10) << keys[i]
+         << std::fixed << std::setw(10) << keys[i]
          << std::endl;
   }
 }
@@ -142,10 +143,11 @@ class Cell: public tapas::BasicCell<TSP> {
   friend class BodyIterator<Cell>;
  public:
   typedef unordered_map<KeyType, Cell*> CellHashTable;
-  typedef unordered_map<KeyType, int>   OwnerHashTable;
+  
  protected:
-  KeyType key_;
-  std::shared_ptr<CellHashTable> ht_;
+  KeyType key_; //!< Key of the cell
+  std::shared_ptr<CellHashTable> ht_; // Hash table of KeyType -> Cell* (only local cells)
+  
  public:
   /**
    * @brief Constructor of a cell type
@@ -177,7 +179,18 @@ class Cell: public tapas::BasicCell<TSP> {
     bool IsLeaf() const;
     int nsubcells() const;
     Cell &subcell(int idx) const;
+
+    /**
+     * @brief Returns the parent cell if it's local.
+     * 
+     * Returns a reference to the parent cell object of this cell. 
+     * Caller must check if the parent is local or not.
+     * If the parent is not local, this function dies.
+     */
     Cell &parent() const;
+
+    bool IsParentLocal() const;
+    
 #ifdef DEPRECATED
     typename TSP::BT::type &particle(index_t idx) const {
         return body(idx);
@@ -232,8 +245,10 @@ KeyType MortonKeyIncrementDepth(KeyType k, int inc) {
 }
 
 
+
+
 // MPI-related utilities and wrappers
-// TODO: wrap them as a pluggable policy class 
+// TODO: wrap them as a pluggable policy/traits class 
 template<class T> struct MPI_DatatypeTraits {};
 
 #define DEF_MPI_DATATYPE(__ctype, __mpitype) \
@@ -253,6 +268,38 @@ int MPI_Allreduce(const std::vector<T> &send, std::vector<T> &recv, MPI_Op op, M
                          MPI_DatatypeTraits<T>::type(),
                          op, comm);
 }
+
+// Utility functions on set-related operations on std::vector
+
+/**
+ * @brief Returns difference of two sets (a simple wrapper of std::set_difference)
+ * 
+ * Returns an instance of the container type C which contains elements that are
+ * in c1 but not c2. c1 and c2 must be sorted.
+ */
+template<class C>
+C SetDiff(const C& c1, const C& c2) {
+  C res;
+  std::set_difference(std::begin(c1), std::end(c1),
+                      std::begin(c2), std::end(c2),
+                      std::back_inserter(res));
+  return res;
+}
+
+/**
+ * @brief Returns union of two sets (a simple wrapper of std::set_union)
+ *
+ * c1 and c2 must be sorted.
+ */
+template<class C>
+C SetUnion(const C& c1, const C& c2) {
+  C res;
+  std::set_union(std::begin(c1), std::end(c1),
+                 std::begin(c2), std::end(c2),
+                 std::back_inserter(res));
+  return res;
+}
+
 
 /**
  * @brief Return a new Region object that covers all Regions across multiple MPI processes
@@ -505,6 +552,16 @@ Cell<TSP> &Cell<TSP>::parent() const {
 }
 
 template <class TSP>
+bool Cell<TSP>::IsParentLocal() const {
+  if (IsRoot()) {
+    TAPAS_LOG_ERROR() << "Trying to access parent of the root cell." << std::endl;
+    TAPAS_DIE();
+  }
+  KeyType parent_key = MortonKeyParent<TSP::Dim>(key_);
+  return Lookup(parent_key) != nullptr;
+}
+
+template <class TSP>
 typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
   return (*bodies_)[this->bid_+idx];
 }
@@ -523,7 +580,6 @@ template <class TSP>
 SubCellIterator<Cell<TSP>> Cell<TSP>::subcells() const {
     return SubCellIterator<Cell>(*this);
 }
-
 
 template <class TSP>
 BodyIterator<Cell<TSP>> Cell<TSP>::bodies() const {
