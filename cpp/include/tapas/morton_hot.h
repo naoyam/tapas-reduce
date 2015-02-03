@@ -164,8 +164,11 @@ class Cell: public tapas::BasicCell<TSP> {
        std::shared_ptr<std::vector<BodyAttrType>> body_attrs):
       tapas::BasicCell<TSP>(region, bid, nb), key_(key),
       ht_(ht), bodies_(bodies), body_attrs_(body_attrs),
-      is_leaf_(true), is_local_(false) {
+      is_local_(false),
+      is_leaf_(true)
+  {
   }
+  
 
 #if 0
   // to be written
