@@ -96,8 +96,6 @@ std::vector<HelperNode<TSP::Dim>>
 CreateInitialNodes(const typename TSP::BT::type *p, index_t np,
                    const Region<TSP> &r);
 
-KeyType MortonKeyAppendDepth(KeyType k, int depth);
-
 KeyType MortonKeyRemoveDepth(KeyType k);
 
 KeyType MortonKeyIncrementDepth(KeyType k, int inc);
@@ -245,14 +243,6 @@ class Cell: public tapas::BasicCell<TSP> {
   virtual void make_pure_virtual() const {}
 }; // class Cell
 
-
-/**
- * @brief Set depth information in a Morton key.
- */
-inline
-KeyType MortonKeyAppendDepth(KeyType k, int depth) {
-  return (k << DEPTH_BIT_WIDTH) | depth;
-}
 
 inline
 KeyType MortonKeyRemoveDepth(KeyType k) {
