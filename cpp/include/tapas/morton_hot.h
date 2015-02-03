@@ -144,10 +144,6 @@ class Cell: public tapas::BasicCell<TSP> {
  public:
   typedef unordered_map<KeyType, Cell*> CellHashTable;
   
- protected:
-  KeyType key_; //!< Key of the cell
-  std::shared_ptr<CellHashTable> ht_; // Hash table of KeyType -> Cell* (only local cells)
-  
  public:
   /**
    * @brief Constructor of a cell type
@@ -189,7 +185,10 @@ class Cell: public tapas::BasicCell<TSP> {
      */
     Cell &parent() const;
 
-    bool IsParentLocal() const;
+  /**
+   * @brief returns if the parent is a local cell
+   */
+  bool IsParentLocal() const;
     
 #ifdef DEPRECATED
     typename TSP::BT::type &particle(index_t idx) const {
@@ -207,12 +206,17 @@ class Cell: public tapas::BasicCell<TSP> {
     SubCellIterator<Cell> subcells() const;
   
  protected:
-  typename TSP::BT_ATTR &body_attr(index_t idx) const;
-  CellHashTable *ht() { return ht_; }
-  Cell *Lookup(KeyType k) const;
+  // member variables
+  KeyType key_; //!< Key of the cell
+  std::shared_ptr<CellHashTable> ht_; // Hash table of KeyType -> Cell* (only local cells)
   std::shared_ptr<std::vector<typename TSP::BT::type>> bodies_;
   std::shared_ptr<std::vector<typename TSP::BT_ATTR>> body_attrs_;
   bool is_leaf_;
+
+  // utility functions
+  Cell *Lookup(KeyType k) const;
+  CellHashTable *ht() { return ht_; }
+  typename TSP::BT_ATTR &body_attr(index_t idx) const;
   virtual void make_pure_virtual() const {}
 }; // class Cell
 
