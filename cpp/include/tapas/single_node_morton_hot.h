@@ -50,9 +50,6 @@ template <int DIM>
 KeyType MortonKeyClearDescendants(KeyType k);
 
 template <int DIM>
-KeyType MortonKeyParent(KeyType k);
-
-template <int DIM>
 KeyType MortonKeyFirstChild(KeyType k);
 
 template <int DIM>
@@ -234,27 +231,11 @@ void AppendChildren(KeyType x, T &s) {
     if (c_depth > MAX_DEPTH) return;
     x = MortonKeyIncrementDepth(x, 1);
     for (int i = 0; i < (1 << DIM); ++i) {
-        int child_key = (i << ((MAX_DEPTH - c_depth) * DIM + DEPTH_BIT_WIDTH));
+        KeyType child_key = ((KeyType)i << ((MAX_DEPTH - c_depth) * DIM + DEPTH_BIT_WIDTH));
         s.push_back(x | child_key);
         TAPAS_LOG_DEBUG() << "Adding child " << (x | child_key) << std::endl;
     }
 }
-
-template <int DIM>
-KeyType MortonKeyClearDescendants(KeyType k) {
-    int d = MortonKeyGetDepth(k);
-    KeyType m = ~(((1 << ((MAX_DEPTH - d) * DIM)) - 1) << DEPTH_BIT_WIDTH);
-    return k & m;
-}
-
-template <int DIM>
-KeyType MortonKeyParent(KeyType k) {
-    int d = MortonKeyGetDepth(k);  
-    if (d == 0) return k;
-    k = MortonKeyIncrementDepth(k, -1);
-    return MortonKeyClearDescendants<DIM>(k);
-}
-
 
 template <int DIM>
 KeyType MortonKeyFirstChild(KeyType k) {

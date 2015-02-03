@@ -96,13 +96,8 @@ std::vector<HelperNode<TSP::Dim>>
 CreateInitialNodes(const typename TSP::BT::type *p, index_t np,
                    const Region<TSP> &r);
 
-KeyType MortonKeyIncrementDepth(KeyType k, int inc);
-
 template <int DIM>
 KeyType MortonKeyClearDescendants(KeyType k);
-
-template <int DIM>
-KeyType MortonKeyParent(KeyType k);
 
 template <int DIM>
 KeyType MortonKeyFirstChild(KeyType k);
@@ -240,23 +235,6 @@ class Cell: public tapas::BasicCell<TSP> {
   typename TSP::BT_ATTR &body_attr(index_t idx) const;
   virtual void make_pure_virtual() const {}
 }; // class Cell
-
-
-inline
-KeyType MortonKeyIncrementDepth(KeyType k, int inc) {
-    int depth = MortonKeyGetDepth(k);
-    depth += inc;
-#ifdef TAPAS_DEBUG
-    if (depth > MAX_DEPTH) {
-        TAPAS_LOG_ERROR() << "Exceeded the maximum allowable depth: " << MAX_DEPTH << std::endl;
-        TAPAS_DIE();
-    }
-#endif
-    k = MortonKeyRemoveDepth(k);
-    return MortonKeyAppendDepth(k, depth);
-}
-
-
 
 
 // MPI-related utilities and wrappers
@@ -443,37 +421,21 @@ void AppendChildren(KeyType x, T &s) {
     if (c_depth > MAX_DEPTH) return;
     x = MortonKeyIncrementDepth(x, 1);
     for (int i = 0; i < (1 << DIM); ++i) {
-        int child_key = (i << ((MAX_DEPTH - c_depth) * DIM + DEPTH_BIT_WIDTH));
-        s.push_back(x | child_key);
-        TAPAS_LOG_DEBUG() << "Adding child " << (x | child_key) << std::endl;
+      KeyType child_key = ((KeyType)i << ((MAX_DEPTH - c_depth) * DIM + DEPTH_BIT_WIDTH));
+      s.push_back(x | child_key);
+      TAPAS_LOG_DEBUG() << "Adding child " << (x | child_key) << std::endl;
     }
 }
 
 template <int DIM>
-KeyType MortonKeyClearDescendants(KeyType k) {
-    int d = MortonKeyGetDepth(k);
-    KeyType m = ~(((1 << ((MAX_DEPTH - d) * DIM)) - 1) << DEPTH_BIT_WIDTH);
-    return k & m;
-}
-
-template <int DIM>
-KeyType MortonKeyParent(KeyType k) {
-    int d = MortonKeyGetDepth(k);
-    if (d == 0) return k;
-    k = MortonKeyIncrementDepth(k, -1);
-    return MortonKeyClearDescendants<DIM>(k);
-}
-
-
-template <int DIM>
 KeyType MortonKeyFirstChild(KeyType k) {
 #ifdef TAPAS_DEBUG
-    KeyType t = MortonKeyRemoveDepth(k);
-    t = t & ~(~((KeyType)0) << (DIM * (MAX_DEPTH - MortonKeyGetDepth(k))));
-    assert(t == 0);
+  KeyType t = MortonKeyRemoveDepth(k);
+  t = t & ~(~((KeyType)0) << (DIM * (MAX_DEPTH - MortonKeyGetDepth(k))));
+  assert(t == 0);
 #endif
-    assert(MortonKeyGetDepth(k) < MAX_DEPTH);
-    return MortonKeyIncrementDepth(k, 1);
+  assert(MortonKeyGetDepth(k) < MAX_DEPTH);
+  return MortonKeyIncrementDepth(k, 1);
 }
 
 template <int DIM>
@@ -791,7 +753,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
     long max_nb = *std::max_element(leaf_nb_global.begin(), leaf_nb_global.end());
 
-#if 0
+#if 1
     //--------------------------------------------------------------
     // debug print (to be deleted)
     MPI_Barrier(MPI_COMM_WORLD);
@@ -808,11 +770,14 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
       KeyType test_key = 70368744177665UL;
       KeyType first_child = MortonKeyFirstChild<Dim>(test_key);
+      KeyType inc_depth = morton_common::MortonKeyIncrementDepth(test_key, 1);
       std::cerr << "MortonKeyFirstChild test." << std::endl;
       std::cerr << "Parent : " << std::endl;
       std::cerr << std::setw(15) << std::right << test_key << " " << MortonKeyDecode<Dim>(test_key) << std::endl;
       std::cerr << "First child : " << std::endl;
       std::cerr << std::setw(15) << std::right << first_child << " " << MortonKeyDecode<Dim>(first_child) << std::endl;
+      std::cerr << "inc depth : " << std::endl;
+      std::cerr << std::setw(15) << std::right << inc_depth << " " << MortonKeyDecode<Dim>(inc_depth) << std::endl;
 
       std::cerr << "MPI size = " << size << std::endl;
       std::cerr << std::left << std::fixed << std::setw(10) << "index";

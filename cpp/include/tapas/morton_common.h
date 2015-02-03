@@ -71,7 +71,7 @@ template<> struct BestDepthBitWidth<__uint128_t> { static constexpr int Bits = 7
 const int DEPTH_BIT_WIDTH = BestDepthBitWidth<KeyType>::Bits;
 
 #define MIN(a,b) ((a) > (b) ? (b) : (a))
-const int DEPTH_MASK = (1 << DEPTH_BIT_WIDTH) - 1;
+const KeyType DEPTH_MASK = (1 << DEPTH_BIT_WIDTH) - 1;
 const int MAX_DEPTH_BY_DEPTH_BITS = ((1 << DEPTH_BIT_WIDTH) - 1);
 const int MAX_DEPTH_BY_KEY_BITS = (sizeof(KeyType) * 8 - 1 - DEPTH_BIT_WIDTH) / 3;
 const int MAX_DEPTH = MIN ( MAX_DEPTH_BY_DEPTH_BITS, MAX_DEPTH_BY_KEY_BITS );
@@ -147,7 +147,7 @@ KeyType MortonKeyRemoveDepth(KeyType k) {
 }
 
 inline
-int MortonKeyIncrementDepth(KeyType k, int inc) {
+KeyType MortonKeyIncrementDepth(KeyType k, int inc) {
     int depth = MortonKeyGetDepth(k);
     depth += inc;
 #ifdef TAPAS_DEBUG
@@ -168,6 +168,21 @@ bool MortonKeyIsDescendant(KeyType asc, KeyType dsc) {
     asc >>= s;
     dsc >>= s;
     return asc == dsc;
+}
+
+template <int DIM>
+KeyType MortonKeyClearDescendants(KeyType k) {
+    int d = MortonKeyGetDepth(k);
+    KeyType m = ~((((KeyType)1 << ((MAX_DEPTH - d) * DIM)) - 1) << DEPTH_BIT_WIDTH);
+    return k & m;
+}
+
+template <int DIM>
+KeyType MortonKeyParent(KeyType k) {
+    int d = MortonKeyGetDepth(k);
+    if (d == 0) return k;
+    k = MortonKeyIncrementDepth(k, -1);
+    return MortonKeyClearDescendants<DIM>(k);
 }
 
 
