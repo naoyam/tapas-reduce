@@ -185,6 +185,17 @@ KeyType MortonKeyParent(KeyType k) {
     return MortonKeyClearDescendants<DIM>(k);
 }
 
+template <int DIM>
+KeyType MortonKeyFirstChild(KeyType k) {
+#ifdef TAPAS_DEBUG
+  KeyType t = MortonKeyRemoveDepth(k);
+  t = t & ~(~((KeyType)0) << (DIM * (MAX_DEPTH - MortonKeyGetDepth(k))));
+  assert(t == 0);
+#endif
+  assert(MortonKeyGetDepth(k) < MAX_DEPTH);
+  return MortonKeyIncrementDepth(k, 1);
+}
+
 
 /**
  * @brief Converts a Morton key to a human-readable string format
