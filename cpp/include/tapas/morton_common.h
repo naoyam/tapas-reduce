@@ -196,6 +196,13 @@ KeyType MortonKeyFirstChild(KeyType k) {
   return MortonKeyIncrementDepth(k, 1);
 }
 
+template <int DIM>
+KeyType MortonKeyChild(KeyType k, int child_idx) {
+  TAPAS_ASSERT(child_idx < (1 << DIM));
+  k = MortonKeyIncrementDepth(k, 1);
+  int d = MortonKeyGetDepth(k);
+  return k | ((KeyType)child_idx << ((MAX_DEPTH - d) * DIM + DEPTH_BIT_WIDTH));
+}
 
 /**
  * @brief Converts a Morton key to a human-readable string format

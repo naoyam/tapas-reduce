@@ -96,10 +96,6 @@ std::vector<HelperNode<TSP::Dim>>
 CreateInitialNodes(const typename TSP::BT::type *p, index_t np,
                    const Region<TSP> &r);
 
-template <int DIM>
-KeyType MortonKeyChild(KeyType k, int child_idx);
-
-
 template <int DIM, class T>
 void AppendChildren(KeyType k, T &s);
 
@@ -419,14 +415,6 @@ void AppendChildren(KeyType x, T &s) {
       s.push_back(x | child_key);
       TAPAS_LOG_DEBUG() << "Adding child " << (x | child_key) << std::endl;
     }
-}
-
-template <int DIM>
-KeyType MortonKeyChild(KeyType k, int child_idx) {
-    TAPAS_ASSERT(child_idx < (1 << DIM));
-    k = MortonKeyIncrementDepth(k, 1);
-    int d = MortonKeyGetDepth(k);
-    return k | (child_idx << ((MAX_DEPTH - d) * DIM + DEPTH_BIT_WIDTH));
 }
 
 template <int DIM>
