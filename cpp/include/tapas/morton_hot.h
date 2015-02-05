@@ -715,6 +715,9 @@ size_t sum(const T& c) {
 }
 
 
+/**
+ * @brief Calculate which processes own the cell.
+ */
 template <class TSP>
 void Cell<TSP>::CalcOwnerProcesses() {
   // Find the range of leaf cells that are under the cell
