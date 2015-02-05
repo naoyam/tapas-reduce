@@ -204,6 +204,24 @@ KeyType MortonKeyChild(KeyType k, int child_idx) {
   return k | ((KeyType)child_idx << ((MAX_DEPTH - d) * DIM + DEPTH_BIT_WIDTH));
 }
 
+template <int DIM>
+KeyType FindFinestAncestor(KeyType x, KeyType y) {
+    int min_depth = std::min(MortonKeyGetDepth(x),
+                             MortonKeyGetDepth(y));
+    x = MortonKeyRemoveDepth(x);
+    y = MortonKeyRemoveDepth(y);
+    KeyType a = ~(x ^ y);
+    int common_depth = 0;
+    for (; common_depth < min_depth; ++common_depth) {
+        KeyType t = (a >> (MAX_DEPTH - common_depth -1) * DIM) & ((1 << DIM) - 1);
+        if (t != ((1 << DIM) -1)) break;
+    }
+    int common_bit_len = common_depth * DIM;
+    KeyType kOne = 1;
+    KeyType mask = ((kOne << common_bit_len) - 1) << (MAX_DEPTH * DIM - common_bit_len);
+    return MortonKeyAppendDepth(x & mask, common_depth);
+}
+
 /**
  * @brief Converts a Morton key to a human-readable string format
  *

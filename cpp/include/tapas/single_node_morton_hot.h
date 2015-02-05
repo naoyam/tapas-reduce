@@ -55,9 +55,6 @@ void SortBodies(const typename BT::type *b, typename BT::type *sorted,
                 tapas::index_t nb);
 
 template <int DIM>
-KeyType FindFinestAncestor(KeyType x, KeyType y);
-
-template <int DIM>
 void CompleteRegion(KeyType x, KeyType y, KeyVector &s);
 
 template <class TSP>    
@@ -194,24 +191,6 @@ void SortBodies(const typename BT::type *b, typename BT::type *sorted,
     for (index_t i = 0; i < nb; ++i) {
         sorted[i] = b[sorted_nodes[i].p_index];
     }
-}
-
-template <int DIM>
-KeyType FindFinestAncestor(KeyType x,
-                                  KeyType y) {
-    int min_depth = std::min(MortonKeyGetDepth(x),
-                             MortonKeyGetDepth(y));
-    x = MortonKeyRemoveDepth(x);
-    y = MortonKeyRemoveDepth(y);
-    KeyType a = ~(x ^ y);
-    int common_depth = 0;
-    for (; common_depth < min_depth; ++common_depth) {
-        KeyType t = (a >> (MAX_DEPTH - common_depth -1) * DIM) & ((1 << DIM) - 1);
-        if (t != ((1 << DIM) -1)) break;
-    }
-    int common_bit_len = common_depth * DIM;
-    KeyType mask = ((1 << common_bit_len) - 1) << (MAX_DEPTH * DIM - common_bit_len);
-    return MortonKeyAppendDepth(x & mask, common_depth);
 }
 
 template <int DIM, class T>
