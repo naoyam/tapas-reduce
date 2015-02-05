@@ -41,6 +41,59 @@ namespace morton_hot {
 
 using namespace morton_common;
 
+/**
+ * @brief Remove redundunt elements in a std::vector. The vector must be sorted.
+ * 
+ * This way is much faster than using std::set.
+ */
+template<class T, class Iterator>
+std::vector<T> uniq(Iterator beg, Iterator end) {
+  std::vector<T> v(beg, end);
+  v.erase(unique(std::begin(v), std::end(v)), std::end(v));
+  return v;
+}
+
+
+/**
+ * @brief Find a mapping F :: X -> Y and returns F(x).
+ *
+ * (1) If |X| <  |Y| and bidir is false, F is injective.
+ * (2) If |X| <  |Y| and bidir is true,  F is neither injective nor surjective
+ * (3) If |X| == |Y|, F is bijective.
+ * (4) If |X| >  |Y|, F is surjective.
+ */
+template <class T>
+std::vector<T> GetMapping(const std::vector<T> &X,
+                          const std::vector<T> &Y,
+                          bool bidir, // bidirectional
+                          const T& x) {
+  int i = std::find(std::begin(X), std::end(X), x) - std::begin(X);
+  assert(0 <= i && i < X.size());
+  
+  int a = X.size();
+  int b = Y.size();
+  
+  if (a == b) {
+    return std::vector<T>(1, Y[i]);
+  } else if (a > b) {
+    int q = a / b;
+    int m = a % b;
+    return std::vector<T>(1, Y[i / (q + m)]);
+  } else { // |X| < |Y|
+    if (bidir) {
+      int q = b / a;
+      int m = b % a;
+      int beg = q * i + std::min<int>(m, i);
+      int num = q + (i < m ? 1 : 0);
+      int end = beg + num;
+      return std::vector<T>(std::begin(Y) + beg,
+                            std::begin(Y) + end);
+    } else {
+      return std::vector<T>(1, Y[i]);
+    }
+  }
+}
+
 template <int DIM>
 struct HelperNode {
   KeyType key;          //!< Morton key
@@ -152,7 +205,6 @@ class Cell: public tapas::BasicCell<TSP> {
   template<class T>
   using VecPtr = std::shared_ptr<std::vector<T>>;
 
-  // to be written
   Cell(KeyType key,
        bool is_local, bool is_leaf,
        index_t body_beg, index_t body_num,
@@ -170,8 +222,10 @@ class Cell: public tapas::BasicCell<TSP> {
       leaf_owners_(leaf_owners),
       local_bodies_(local_bodies),
       local_body_keys_(local_body_keys),
-      local_body_attrs_(local_body_attrs)
+      local_body_attrs_(local_body_attrs),
+      owned_by_()
   {
+    CalcOwnerProcesses();
   }
 
   typedef typename TSP::ATTR attr_type;
@@ -240,13 +294,15 @@ class Cell: public tapas::BasicCell<TSP> {
   VecPtr<BodyType> local_bodies_;
   VecPtr<KeyType>  local_body_keys_;
   VecPtr<BodyAttrType> local_body_attrs_;
-  std::vector<int> shared_by_; //!< Processes that have this cell locally.
+  std::vector<int> owned_by_; //!< Processes that have this cell locally.
   
   // utility/accessor functions
   Cell *Lookup(KeyType k) const;
   CellHashTable *ht() { return ht_; }
   typename TSP::BT_ATTR &body_attr(index_t idx) const;
   virtual void make_pure_virtual() const {}
+
+  void CalcOwnerProcesses();
 }; // class Cell
 
 
@@ -595,7 +651,7 @@ std::vector<KeyType> GetChildren(KeyType parent) {
 }
 
 /**
- * @brief Split cells that have more than nb_max bodies
+ * @brief Split cells that have more than nb_max bodies (not recursive)
  *
  * @param cell_keys Array of morton keys of cells
  * @param nb Array of current numbers of bodies of the cells
@@ -657,6 +713,23 @@ template<class T>
 size_t sum(const T& c) {
   return std::accumulate(c.begin(), c.end(), 0);
 }
+
+
+template <class TSP>
+void Cell<TSP>::CalcOwnerProcesses() {
+  // Find the range of leaf cells that are under the cell
+  auto beg = std::begin(*leaf_keys_);
+  auto end = std::end(*leaf_keys_);
+  KeyType key_next = morton_common::CalcMortonKeyNext<TSP::Dim>(key_);
+  size_t owner_beg = std::lower_bound(beg, end, key_) - beg;
+  size_t owner_end = std::upper_bound(beg, end, key_next) - beg;
+
+  // Since each process builds a local tree in a bottom-up way,
+  // if a process P ownes any of leaf cells uncer the cell, P owns the cell.
+  owned_by_ = uniq<int>(std::begin(*leaf_owners_) + owner_beg,
+                        std::begin(*leaf_owners_) + owner_end);
+}
+
 
 /**
  * @brief Partition the simulation space and build Morton-key based octree

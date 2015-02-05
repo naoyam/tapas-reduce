@@ -13,64 +13,6 @@ namespace tapas {
 
 namespace {
 
-/**
- * @brief Remove redundunt elements in a std::vector. The vector must be sorted.
- * 
- * This way is much faster than using std::set.
- */
-template<class T>
-std::vector<T> uniq(const std::vector<T> &_v) {
-  std::vector<T> v(_v);
-  v.erase(unique(begin(v), end(v)), end(v));
-  return v;
-}
-
-/**
- * @brief Compute remote peer process IDs in distributed product_map function
- * @param lha a vector of process IDs (including the local process) that own cell A.
- * @param rha a vector of process IDs that own cell B.
- * @param rank ID of the local process
- * @todo Select pairs that are "physically" close to each other.
- * 
- * When F(cell A, cell B) is called in product_map(), and A or B is not local,
- * we need to get information of the remote cell using isend/irecv from a remote process.
- * In our distributed HOT algorithm, multiple processes may have the remote cell information.
- * This function determines which remote peers to communicate.
- *
- * For example, cell A is owned by processes {0, 1, 2, 3} and
- * cell B is owned by processes {10, 11, 12, 13, 14, 15, 16},
- * then the matchings are:
- *   0 - 10, 11
- *   1 - 12, 13
- *   2 - 14, 15
- *   3 - 16
- * Process 0 communicates send cell A to process 10, 11 and receives cell B from 10, 11
- * using isend/irecv.
- */
-std::vector<int> GetCellExchangePeer(const std::vector<int> &lhs,
-                                     const std::vector<int> &rhs, int rank) {
-  int i = std::find(std::begin(lhs), std::end(lhs), rank) - std::begin(lhs);
-  assert(0 <= i && i < lhs.size());
-  
-  int a = lhs.size();
-  int b = rhs.size();
-
-  if (a == b) {
-    return std::vector<int>(1, rhs[i]);
-  } else if (a > b) {
-    int q = a / b;
-    int m = a % b;
-    return std::vector<int>(1, rhs[i / (q + m)]);
-  } else { // a < b
-    int q = b / a;
-    int m = b % a;
-    int beg = q * i + std::min<int>(m, i);
-    int num = q + (i < m ? 1 : 0);
-    int end = beg + num;
-    return std::vector<int>(std::begin(rhs) + beg,
-                            std::begin(rhs) + end);
-  }
-}
 
 } // anon namespace
 

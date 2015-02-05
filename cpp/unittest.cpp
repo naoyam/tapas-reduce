@@ -1,15 +1,23 @@
+#include <ostream>
+
 #include <gtest/gtest.h>
 
 #include <tapas/map.h>
 #include <tapas/morton_hot.h>
 
-using tapas::GetCellExchangePeer;
+using tapas::morton_hot::GetMapping;
 
-int add(int x, int y) {
-    return x + y;
+template <>
+inline void GTestStreamToHelper<std::vector<int>>(std::ostream* os, const std::vector<int>& v) {
+  *os << "[";
+  for (size_t i = 0; i < v.size(); i++) {
+    *os << v[i];
+    *os << (i == v.size() - 1 ? "" : ",");
+  }
+  *os << "]";
 }
 
-TEST(TestMap, TestGetCellExchangePeer1) {
+TEST(TestMap, TestGetMapping1) {
   typedef std::vector<int> vec;
   vec a {1,2};
   vec b {3,4};
@@ -17,29 +25,33 @@ TEST(TestMap, TestGetCellExchangePeer1) {
   vec ans1 {3};
   vec ans2 {4};
 
-  vec res1 = GetCellExchangePeer(a, b, 1);
-  vec res2 = GetCellExchangePeer(a, b, 2);
+  vec res1 = GetMapping(a, b, true, 1);
+  vec res2 = GetMapping(a, b, true, 2);
     
   ASSERT_TRUE(ans1 == res1);
   ASSERT_TRUE(ans2 == res2);
 }
 
-TEST(TestMap, TestGetCellExchangePeer2) {
+TEST(TestMap, TestGetMapping2) {
   typedef std::vector<int> vec;
-  vec a {1,2};
-  vec b {3,4,5,6,7};
+  vec X {1,2};
+  vec Y {3,4,5,6,7};
 
   vec ans1 {3,4,5};
   vec ans2 {6,7};
 
-  vec res1 = GetCellExchangePeer(a, b, 1);
-  vec res2 = GetCellExchangePeer(a, b, 2);
-    
-  ASSERT_TRUE(ans1 == res1);
-  ASSERT_TRUE(ans2 == res2);
+  ASSERT_TRUE(ans1 == GetMapping(X, Y, true, 1));
+  ASSERT_TRUE(ans2 == GetMapping(X, Y, true, 2));
+
+  // When |X| < |Y| and NOT bidirectional
+  vec ans3 {3};
+  vec ans4 {4};
+  
+  ASSERT_EQ(ans3, GetMapping(X, Y, false, 1));
+  ASSERT_TRUE(ans4 == GetMapping(X, Y, false, 2));
 }
 
-TEST(TestMap, TestGetCellExchangePeer3) {
+TEST(TestMap, TestGetMapping3) {
   typedef std::vector<int> vec;
   vec a {1,2,3,4,5};
   vec b {6,    7};
@@ -50,11 +62,11 @@ TEST(TestMap, TestGetCellExchangePeer3) {
   vec ans4 {7};
   vec ans5 {7};
 
-  vec res1 = GetCellExchangePeer(a, b, 1);
-  vec res2 = GetCellExchangePeer(a, b, 2);
-  vec res3 = GetCellExchangePeer(a, b, 3);
-  vec res4 = GetCellExchangePeer(a, b, 4);
-  vec res5 = GetCellExchangePeer(a, b, 5);
+  vec res1 = GetMapping(a, b, true, 1);
+  vec res2 = GetMapping(a, b, true, 2);
+  vec res3 = GetMapping(a, b, true, 3);
+  vec res4 = GetMapping(a, b, true, 4);
+  vec res5 = GetMapping(a, b, true, 5);
     
   ASSERT_TRUE(ans1 == res1);
   ASSERT_TRUE(ans2 == res2);
