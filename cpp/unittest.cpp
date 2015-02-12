@@ -5,16 +5,32 @@
 #include <tapas/map.h>
 #include <tapas/morton_hot.h>
 
+template<class T> using V = std::vector<T>;
+
 using tapas::morton_hot::GetMapping;
 
-template <>
-inline void GTestStreamToHelper<std::vector<int>>(std::ostream* os, const std::vector<int>& v) {
-  *os << "[";
-  for (size_t i = 0; i < v.size(); i++) {
-    *os << v[i];
-    *os << (i == v.size() - 1 ? "" : ",");
+#define DEF_STREAM_HELPER(TYPE)                                         \
+  template <>                                                           \
+  inline void GTestStreamToHelper<std::vector<TYPE>>(std::ostream* os, const std::vector<TYPE>& v) { \
+    *os << "[";                                                         \
+    for (size_t i = 0; i < v.size(); i++) {                             \
+      *os << v[i];                                                      \
+      *os << (i == v.size() - 1 ? "" : ",");                            \
+    }                                                                   \
+    *os << "]";                                                         \
   }
-  *os << "]";
+
+DEF_STREAM_HELPER(int)
+DEF_STREAM_HELPER(char)
+
+
+TEST(TestSort, TestSortByPermutations) {
+  V<char> vals  {'2', '3', '0', '4', '5', '1'};
+  V<char> ans   {'0', '1', '2', '3', '4', '5'};
+  V<int>  perms { 2,   3,   0,   4,   5,   1};
+
+  tapas::morton_common::SortByPermutations(perms, vals);
+  ASSERT_EQ(ans, vals);
 }
 
 TEST(TestMap, TestGetMapping1) {

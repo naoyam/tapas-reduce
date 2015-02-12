@@ -142,12 +142,17 @@ void evalLocal(real_t rho, real_t alpha, real_t beta, complex_t * Ynm) {
 }
 void tapas_kernel::P2M(Tapas::Cell &C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
+  
+  Stderr e("P2M");
+  
   for (tapas::index_t i = 0; i < C.nb(); ++i) {
     const Body &B = C.body(i);
     vec3 dX = B.X - tovec(C.center());
     real_t rho, alpha, beta;
     cart2sph(rho, alpha, beta, dX);
     evalMultipole(rho, alpha, beta, Ynm, YnmTheta);
+    e.out() << std::setw(10) << tapas::morton_common::SimplifyKey(C.key())
+            << " B[" << i << "].SRC=" << B.SRC << std::endl;
     for (int n=0; n<P; n++) {
       for (int m=0; m<=n; m++) {
         int nm  = n * n + n - m;
@@ -156,14 +161,9 @@ void tapas_kernel::P2M(Tapas::Cell &C) {
       }
     }
   }
-  {
-    Stderr e("P2M");
-    e.out() << std::setw(20) << C.key() << ", "
-        //<< "nsubcells=" << C.nsubcells() << ", "
-            << "nb=" << C.nb() << ", "
-        //<< "M=" << C.attr().M
-            << std::endl;
-  }
+  e.out() << std::setw(10) << tapas::morton_common::SimplifyKey(C.key())
+          << "M=" << C.attr().M
+          << std::endl;
 }
 
 void tapas_kernel::M2M(Tapas::Cell & C) {
@@ -202,6 +202,7 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
   {
     Stderr e("M2M");
     e.out() << std::setw(20) << C.key() << ", "
+            << C.depth() << ", "
             << "nsubcells=" << C.nsubcells() << ", "
             << "M=" << C.attr().M
             << std::endl;

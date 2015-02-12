@@ -8,6 +8,48 @@
 #include <sstream>
 #include "types.h"
 
+
+
+// for debug
+#include <unistd.h>
+#include <sys/syscall.h> // for gettid()
+#include <sys/types.h>   // for gettid()
+namespace _local {
+class Stderr {
+  std::ostream *fs_;
+
+ public:
+  Stderr(const char *label) : fs_(nullptr) {
+#ifdef EXAFMM_TAPAS_MPI
+    pid_t tid = syscall(SYS_gettid);
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+#else
+    const char *rank="s";
+    int tid=0;
+#endif
+    std::stringstream ss;
+    ss << "stderr"
+       << "." << rank
+       << "." << tid
+       << "." << label
+       << ".txt";
+    fs_ = new std::ofstream(ss.str().c_str(), std::ios_base::app);
+  }
+  
+  ~Stderr() {
+    assert(fs_ != nullptr);
+    delete fs_;
+    fs_ = nullptr;
+  }
+
+  std::ostream &out() {
+    assert(fs_ != nullptr);
+    return *fs_;
+  }
+};
+}
+
 class Dataset {                                                 // Contains all the different datasets
 private:
     long filePosition;                                            // Position of file stream
@@ -46,24 +88,31 @@ private:
         // in many cases.
         numBodies = nx * ny * nz;
 
-        Bodies bodies;
-        bodies.reserve(numBodies / proc_size); // reserve vector memory space using rough estimation
-        
+        long rem = numBodies % proc_size;
+        long nb_local = numBodies / proc_size + (proc_rank + 1 == proc_size ? rem : 0); // num bodies local
+        long beg = (numBodies / proc_size) * proc_rank;
+        long end = beg + nb_local;
+        Bodies bodies(nb_local);
+        size_t gi = 0, li = 0;
+
         for (int ix = 0; ix < nx; ix++) {
-            for (int iy = 0; iy < ny; iy++) {
-                for (int iz = 0; iz < nz; iz++) {
-                    long idx = ix + iy * nx + iz * (nx*ny);
-                    if (idx % proc_size == proc_rank) {
-                        real_t x = (ix / real_t(nx-1)) * 2 - 1;         //    x coordinate
-                        real_t y = (iy / real_t(ny-1)) * 2 - 1;         //    y coordinate
-                        real_t z = (iz / real_t(nz-1)) * 2 - 1;         //    z coordinate
-                        Body B;                                       
-                        B.X[0] = x;
-                        B.X[1] = y;
-                        B.X[2] = z;
-                        bodies.push_back(B);
-                    }
-                }}}
+          for (int iy = 0; iy < ny; iy++) {
+            for (int iz = 0; iz < nz; iz++) {
+              if (beg <= gi  && gi < end) {
+                real_t x = (ix / real_t(nx-1)) * 2 - 1;         //    x coordinate
+                real_t y = (iy / real_t(ny-1)) * 2 - 1;         //    y coordinate
+                real_t z = (iz / real_t(nz-1)) * 2 - 1;         //    z coordinate
+                Body &B = bodies[li++];                                       
+                B.X[0] = x;
+                B.X[1] = y;
+                B.X[2] = z;
+              }
+              gi++;
+            }
+          }
+        }
+        assert(li == nb_local);
+        assert(nb_local == bodies.size());
         return bodies;                                              // Return bodies
     }
 
@@ -133,7 +182,7 @@ private:
         long nb_local = numBodies / proc_size + (proc_rank + 1 == proc_size ? rem : 0); // num bodies local
         long beg = (numBodies / proc_size) * proc_rank;
         long end = beg + nb_local;
-        Bodies bodies;
+        Bodies bodies(nb_local);
         //bodies.reserve(nb_local);
         
         srand48(master_seed_);                                      //  Set seed for random number generator
@@ -172,7 +221,7 @@ public:
 
   /**
    * @brief Initialize source values
-   * @param numBodies Total number of bodies (over all processes)
+   * @param numBodies Total number of bodies (over ALL processes)
    * @param bodies Local bodies
    */
   void initSource(Bodies & bodies, int numBodies, int proc_rank, int proc_size) {
@@ -213,7 +262,7 @@ public:
       b.SRC -= average;
     }
 #endif
-#endif
+#endif // if MASS
   }
     
     //! Initialize target values

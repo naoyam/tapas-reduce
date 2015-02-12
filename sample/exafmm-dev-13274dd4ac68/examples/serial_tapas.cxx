@@ -154,11 +154,18 @@ int main(int argc, char ** argv) {
   bodies = data.initBodies(args.numBodies, args.distribution, args.mpi_rank, args.mpi_size);
   logger::stopTimer("Dataset generation");
 
+  {
+    Stderr err("bodies");
+    for (auto &b : bodies) {
+      err.out() << b.X << " " << b.SRC << std::endl;
+    }
+  }
+  
   const real_t cycle = 2 * M_PI;
   logger::verbose = args.verbose && (args.mpi_rank == 0);
   if (args.mpi_rank == 0) {
-      logger::printTitle("FMM Parameters");
-      args.print(logger::stringLength, P);
+    logger::printTitle("FMM Parameters");
+    args.print(logger::stringLength, P);
   }
   
   for (int t=0; t<args.repeat; t++) {

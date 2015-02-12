@@ -404,20 +404,36 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
     // Dump all (local) cells to a file
     {
-      std::stringstream ss;
-      ss << "Cells.serial.dat";
-      std::ofstream ofs(ss.str().c_str());
+      std::vector<KeyType> recv_keys;
+      for (auto &i : hn) {
+        recv_keys.push_back(i.key);
+      }
+      
+      Stderr e("cells");
+    
       for (auto&& iter : (*ht)) {
         KeyType k = iter.first;
         Cell<TSP> *c = iter.second;
-        ofs << std::setw(20) << std::right << k << " "
-            << MortonKeyGetDepth(k) << " "
-            << "[" << c->center() << "]"
-            << std::endl;
+        if (c->key() != 0) {
+          e.out() << SimplifyKey(k) << " "
+                  << MortonKeyGetDepth(k) << " "
+                  << "nb=" << c->nb() << " "
+                  << "center=[" << c->center() << "] "
+                  << "next_key=" << SimplifyKey(CalcMortonKeyNext<Dim>(k))
+                  << std::endl;
+          // Print bodies which belong to Cell c
+          int body_beg, body_end;
+          FindRangeByKey<TSP>(recv_keys, k, body_beg, body_end);
+          for (int i = body_beg; i < body_end; i++) {
+            e.out() << "\t\t\t| "
+                    << SimplifyKey(recv_keys[i]) << ": "
+                    << b[i].X
+                    << std::endl;
+          }
+        }
       }
-      ofs.close();
     }
-  
+    
     return root;
 }
 

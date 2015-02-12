@@ -274,6 +274,58 @@ KeyType CalcFinestMortonKey(const tapas::Vec<DIM, int> &anchor) {
   return MortonKeyAppendDepth(k, MAX_DEPTH);
 }
 
+template<class KeyType>
+std::string SimplifyKey(KeyType k) {
+  constexpr int W=4;
+  std::stringstream ss;
+  ss << std::setw(20) << std::setfill('0') << k;
+  std::string s = ss.str();
+  s.replace(s.begin()+W, s.end()-W, "...");
+  return s;
+}
+
+template<class TSP, class T>
+inline void FindRangeByKey(const T& v, KeyType k, int &range_beg, int &range_end) {
+  constexpr int Dim = TSP::Dim;
+  auto beg = std::begin(v);
+  auto end = std::end(v);
+  range_beg = std::lower_bound(beg, end, k) - beg;
+  range_end = std::lower_bound(beg, end, CalcMortonKeyNext<Dim>(k)) - beg;
+}
+
+/**
+ * @brief Sort values using permutations (assuming T1 is an integral type). 
+ *        Both of keys and vals are sorted.
+ *
+ * @param perms Permutations, where vals[i] should be at perms[i]-th in the resulting vector.
+ * @param vals Values to be sorted.
+ */
+template<class T1, class T2>
+void SortByPermutations(std::vector<T1> &keys, std::vector<T2> &vals) {
+  assert(keys.size() == vals.size());
+
+  auto len = keys.size();
+
+  std::vector<size_t> perm(len);
+
+  for (int i = 0; i < len; i++) {
+    perm[i] = i;
+  }
+
+  std::sort(std::begin(perm), std::end(perm),
+            [&keys](size_t a, size_t b) { return keys[a] < keys[b]; });
+
+  std::vector<T1> keys2(len); // sorted keys
+  std::vector<T2> vals2(len); // sorted vals
+  for (size_t i = 0; i < len; i++) {
+    size_t idx = perm[i];
+    vals2[i] = vals[idx];
+    keys2[i] = keys[idx];
+  }
+  vals = vals2;
+  keys = keys2;
+}
+
 #if 0
 template <int DIM>
 KeyType CalcFinestMortonKey(const tapas::Vec<DIM, int> &anchor) {
