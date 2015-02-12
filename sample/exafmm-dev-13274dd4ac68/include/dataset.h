@@ -168,33 +168,54 @@ private:
 
 public:
   //! Constructor
-    Dataset(unsigned seed=0) : filePosition(0), master_seed_(seed) {}                                // Initialize variables
+  Dataset(unsigned seed=0) : filePosition(0), master_seed_(seed) {}                                // Initialize variables
 
-    /**
-     * @brief Initialize source values
-     * @param numBodies Total number of bodies (over all processes)
-     * @param bodies Local bodies
-     */
-    void initSource(Bodies & bodies, int seed, int numSplit) {
-        srand48(0);                                      //  Set seed for random number generator
+  /**
+   * @brief Initialize source values
+   * @param numBodies Total number of bodies (over all processes)
+   * @param bodies Local bodies
+   */
+  void initSource(Bodies & bodies, int numBodies, int proc_rank, int proc_size) {
+    srand48(master_seed_);                                      //  Set seed for random number generator
+    
+    long rem = numBodies % proc_size;
+    long nb_local = numBodies / proc_size + (proc_rank + 1 == proc_size ? rem : 0); // num bodies local
+    long beg = (numBodies / proc_size) * proc_rank;
+    long end = beg + nb_local;
 
-        real_t average = 0;
+    assert(nb_local == bodies.size());
+    
 #if MASS
-        for (auto &b : bodies) {
-            b.SRC = 1. / numBodies;                                 // Set source values (maybe mass)
-        }
+    for (auto &b : bodies) {
+      b.SRC = 1. / numBodies;                                 // Set source values (maybe mass)
+    }
 #else
-        for (auto &b : bodies) {
-            b.SRC = drand48() - .5;
-            average += b.SRC;
-        }
-        average /= bodies.size();
-        for (auto &b : bodies) {
-            b.SRC -= average;
-        }
-#endif
+    
+#if 1
+    int idx = 0;
+    for (int i = 0; i < numBodies; i++) {
+      real_t src = drand48();
+      
+      if (beg <= i && i < end) {
+        Body &b = bodies[idx++];
+        b.SRC = src - .5;
+      }
+    }
+#else
+    real_t average = 0;
+    for (auto &b : bodies) {
+      b.SRC = drand48() - .5;
+      average += b.SRC;
     }
 
+    average /= bodies.size();
+    for (auto &b : bodies) {
+      b.SRC -= average;
+    }
+#endif
+#endif
+  }
+    
     //! Initialize target values
     void initTarget(Bodies & bodies) {
         for (auto b = bodies.begin(); b != bodies.end(); b++) {
@@ -229,7 +250,7 @@ public:
             default:                                                    // If none of the above
                 fprintf(stderr, "Unknown data distribution %s\n", distribution);// Print error message
         }                                                           // End switch between data distribution type
-        initSource(bodies,mpirank,mpisize);                        // Initialize source values
+        initSource(bodies, numBodies, mpirank, mpisize);            // Initialize source values
         initTarget(bodies);                                         // Initialize target values
         return bodies;                                              // Return bodies
     }

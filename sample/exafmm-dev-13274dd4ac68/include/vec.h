@@ -153,7 +153,7 @@ public:
   operator       T* ()       {return data;}                     // Type-casting (lvalue)
   operator const T* () const {return data;}                     // Type-casting (rvalue)
   friend std::ostream &operator<<(std::ostream & s, const vec & v) {// Component-wise output stream
-    for (int i=0; i<N; i++) s << v[i] << ' ';
+    for (int i=0; i<N; i++) s << std::scientific << v[i] << ' ';
     return s;
   }
   friend T sum(const vec & v) {                                 // Sum vector
@@ -186,12 +186,12 @@ public:
     int iw = 0;
     for (int i=0; i<N; i++) {
       if(v[i] < -w / 2) {
-	v[i] += w;
-	iw |= 1 << i;
+				v[i] += w;
+				iw |= 1 << i;
       }
       if(v[i] >  w / 2) {
-	v[i] -= w;
-	iw |= 1 << i;
+				v[i] -= w;
+				iw |= 1 << i;
       }
     }
     return iw;
@@ -469,12 +469,12 @@ public:
     int iw = 0;
     for (int i=0; i<N; i++) {
       if(v[i] < -w / 2) {
-	v[i] += w;
-	iw |= 1 << i;
+				v[i] += w;
+				iw |= 1 << i;
       }
       if(v[i] >  w / 2) {
-	v[i] -= w;
-	iw |= 1 << i;
+				v[i] -= w;
+				iw |= 1 << i;
       }
     }
     return iw;

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <vector>
 #include <algorithm>
+#include <functional>
 
 #include "tapas/thread.h"
 #include "tapas/cell.h"
@@ -127,18 +128,22 @@ void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
 #endif
 }
 
-template <class Funct, class T, class... Args>
-void Map(Funct f, SubCellIterator<T> iter, Args...args) {
-    TAPAS_LOG_DEBUG() << "map non-product subcell iterator size: "
-                      << iter.size() << std::endl;
-    mk_task_group;
-    for (int i = 0; i < iter.size(); i++) {
-        create_task0(f(*iter, args...));
-        iter++;
-    }
-    wait_tasks;
-}
+template <class Funct, class CellType, class... Args>
+void Map(Funct f, SubCellIterator<CellType> iter, Args...args) {
+  TAPAS_LOG_DEBUG() << "map non-product subcell iterator size: "
+                    << iter.size() << std::endl;
+
+  // pack args... into a lambda closure
+  std::function<void(CellType&)> lambda = [=](CellType &cell) { f(cell, args...); };
   
+  mk_task_group;
+  for (int i = 0; i < iter.size(); i++) {
+    create_task0(CellType::Map(*iter, lambda));
+    iter++;
+  }
+  wait_tasks;
+}
+
 template <class Funct, class T, class... Args>
 void Map(Funct f, BodyIterator<T> iter, Args...args) {
   TAPAS_LOG_DEBUG() << "map non-product body iterator size: "
@@ -152,7 +157,8 @@ void Map(Funct f, BodyIterator<T> iter, Args...args) {
 template <class Funct, class T, class... Args>
 void Map(Funct f, T &x, Args...args) {
   TAPAS_LOG_DEBUG() << "map non-iterator" << std::endl;
-  f(x, args...);
+  std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
+  T::Map(x, lambda);
 }
 
 } // namespace tapas

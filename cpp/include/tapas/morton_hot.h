@@ -21,6 +21,8 @@
 #include <fstream>
 #include <iomanip>
 #include <iterator> // for std::back_inserter
+#include <functional>
+#include <limits>
 
 #include <unistd.h>
 #include <mpi.h>
@@ -31,6 +33,8 @@
 #include "tapas/debug_util.h"
 #include "tapas/iterator.h"
 #include "tapas/morton_common.h"
+
+#define DEBUG_SENDRECV
 
 namespace tapas {
 
@@ -53,7 +57,6 @@ std::vector<T> uniq(Iterator beg, Iterator end) {
   return v;
 }
 
-
 /**
  * @brief Find a mapping F :: X -> Y and returns F(x).
  *
@@ -67,9 +70,13 @@ std::vector<T> GetMapping(const std::vector<T> &X,
                           const std::vector<T> &Y,
                           bool bidir, // bidirectional
                           const T& x) {
+  if (X.size() == 0 || Y.size() == 0) {
+    return std::vector<T>();
+  }
+  
   int i = std::find(std::begin(X), std::end(X), x) - std::begin(X);
   assert(0 <= i && i < X.size());
-  
+
   int a = X.size();
   int b = Y.size();
   
@@ -157,6 +164,9 @@ void SortBodies(const typename BT::type *b, typename BT::type *sorted,
                 const HelperNode<DIM> *nodes,
                 tapas::index_t nb);
 
+template <int DIM, class BodyType>
+void SortBodies2(std::vector<BodyType> &bodies, const std::vector<HelperNode<DIM>> &hn);
+
 template <int DIM>
 void CompleteRegion(KeyType x, KeyType y, KeyVector &s);
 
@@ -172,39 +182,34 @@ template <class TSP> // TapasStaticParams
 class Cell: public tapas::BasicCell<TSP> {
   friend class Partitioner<TSP>;
   friend class BodyIterator<Cell>;
+  
  public:
   typedef unordered_map<KeyType, Cell*> CellHashTable;
   typedef typename TSP::BT::type BodyType;
   typedef typename TSP::BT_ATTR BodyAttrType;
 
  public:
-#if 0
-  /**
-   * @brief Constructor of a cell type
-   * @param region Region object
-   * @param bid Starting index of local bodies
-   * @param nb Number of bodies (0 if this is a non-leaf cell)
-   * @param key Morton key
-   * @param ht A pointer to HashTable object
-   * @param bodies A pointer the bodies
-   * @param body_attrs A pointer to bodies attrs
-   */
-  Cell(const Region<TSP> &region,
-       index_t bid, index_t nb, KeyType key,
-       std::shared_ptr<CellHashTable> ht,
-       std::shared_ptr<std::vector<BodyType>> bodies,
-       std::shared_ptr<std::vector<BodyAttrType>> body_attrs):
-      tapas::BasicCell<TSP>(region, bid, nb), key_(key),
-      ht_(ht), bodies_(bodies), body_attrs_(body_attrs),
-      is_local_(false),
-      is_leaf_(true)
-  {
-  }
-#endif
   
   template<class T>
   using VecPtr = std::shared_ptr<std::vector<T>>;
 
+  /**
+   * @brief Constructor of Cell class
+   * @param key Key of the cell
+   * @param is_local Whether the cell is a local cell
+   * @param is_leaf  Whether the cell is a leaf cell
+   * @param body_beg If is_leaf is true, starting index of the range of 
+   *                 local_bodies and local_body_keys that the cell owns. 
+   *                 Otherwise, 0
+   * @param body_num If is_leaf is true, the number of bodies the cell owns.
+   * @param ht Hashtable.
+   * @param region A Region object.
+   * @param leaf_keys array of space filling keys of leaf cells
+   * @param leaf_owners Process ID (i.e. rank if in MPI) that cells belong to
+   * @param local_bodies Array of bodies that the local process owns.
+   * @param local_body_keys Keys of local bodies
+   * @param local_body_attrs Array of BodyAttrType corresponding to local_body_keys
+   */
   Cell(KeyType key,
        bool is_local, bool is_leaf,
        index_t body_beg, index_t body_num,
@@ -216,15 +221,25 @@ class Cell: public tapas::BasicCell<TSP> {
        VecPtr<KeyType>  local_body_keys, // Keys of local_bodies
        VecPtr<BodyAttrType> local_body_attrs
        ) :
-      tapas::BasicCell<TSP>(region, body_beg, body_num),
+      tapas::BasicCell<TSP>(CalcRegion(key, region), body_beg, body_num),
       key_(key), is_local_(is_local), is_leaf_(is_leaf),
+      ht_(ht),
       leaf_keys_(leaf_keys),
       leaf_owners_(leaf_owners),
       local_bodies_(local_bodies),
       local_body_keys_(local_body_keys),
       local_body_attrs_(local_body_attrs),
-      owned_by_()
+      owners_()
   {
+#if 0
+
+    // to be deleted
+    std::cerr << "Cell(): key=" << key     << ", "
+              << "is_leaf = " << is_leaf   << ", "
+              << "nb = " << body_num       << ", "
+              << "is_local = " << is_local << ", "
+              << std::endl;
+#endif
     CalcOwnerProcesses();
   }
 
@@ -236,6 +251,8 @@ class Cell: public tapas::BasicCell<TSP> {
   template <class T>
   bool operator==(const T &) const { return false; }
   bool IsRoot() const;
+
+  static void Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f);
 
   /**
    * @brief Returns if the cell is a leaf cell
@@ -266,6 +283,12 @@ class Cell: public tapas::BasicCell<TSP> {
    */
   Cell &parent() const;
 
+  const std::vector<int> &owners() const { return owners_; }
+
+  int depth() const {
+    return MortonKeyGetDepth(key_);
+  }
+
 #ifdef DEPRECATED
     typename TSP::BT::type &particle(index_t idx) const {
         return body(idx);
@@ -294,7 +317,7 @@ class Cell: public tapas::BasicCell<TSP> {
   VecPtr<BodyType> local_bodies_;
   VecPtr<KeyType>  local_body_keys_;
   VecPtr<BodyAttrType> local_body_attrs_;
-  std::vector<int> owned_by_; //!< Processes that have this cell locally.
+  std::vector<int> owners_; //!< Processes that have this cell locally.
   
   // utility/accessor functions
   Cell *Lookup(KeyType k) const;
@@ -302,8 +325,22 @@ class Cell: public tapas::BasicCell<TSP> {
   typename TSP::BT_ATTR &body_attr(index_t idx) const;
   virtual void make_pure_virtual() const {}
 
+  static std::vector<int> CalcOwnerProcsOfCell(KeyType key,
+                                               const std::vector<KeyType> &leaf_keys,
+                                               const std::vector<int> &leaf_owners);
   void CalcOwnerProcesses();
+  static Region<TSP> CalcRegion(KeyType, const Region<TSP>& r);
+
+  // Map-related stuff
+  void RecvCell(int pid);
+  void SendCell(const std::vector<int> &pids);
+
+  int GetMpiTag() const {
+    return key_ % std::numeric_limits<int>::max();
+  }
 }; // class Cell
+
+
 
 
 // MPI-related utilities and wrappers
@@ -390,18 +427,16 @@ Region<TSP> ExchangeRegion(const Region<TSP> &r) {
 template <class TSP>
 std::vector<HelperNode<TSP::Dim>> CreateInitialNodes(const typename TSP::BT::type *bodies,
                                                      index_t nb,
-                                                     const Region<TSP> &reg) {
+                                                     const Region<TSP> &r) {
     const int Dim = TSP::Dim;
     typedef typename TSP::FP FP;
     typedef typename TSP::BT BT;
-
-    auto r = ExchangeRegion(reg);
 
     std::vector<HelperNode<Dim>> nodes(nb);
     FP num_cell = 1 << MAX_DEPTH; // maximum number of cells in one dimension
     Vec<Dim, FP> pitch;           // possible minimum cell width
     for (int d = 0; d < Dim; ++d) {
-        pitch[d] = (r.max()[d] - r.min()[d]) / num_cell;
+      pitch[d] = (r.max()[d] - r.min()[d]) / num_cell;
     }
 
 #if 0
@@ -465,6 +500,26 @@ void SortBodies(const typename BT::type *b, typename BT::type *sorted,
     }
 }
 
+/**
+ * \brief Sort bodies according to already-sorted HelperNodes.
+ * 
+ * let p = hn[i].p_index. p indicates that p-th body in bodies should be at i-th after sorting.
+ * hn is already sorted according to their space filling keys.
+ */
+template <int DIM, class BodyType>
+void SortBodies2(std::vector<BodyType> &bodies, const std::vector<HelperNode<DIM>> &hn) {
+  assert(bodies.size() == hn.size());
+  index_t nb = bodies.size();
+  for (index_t i = 0; i < nb; i++) {
+    index_t bi = hn[i].p_index;
+    if (bi > i) {
+      std::swap(bodies[i], bodies[bi]);
+    }
+  }
+}
+
+
+
 template <int DIM, class T>
 void AppendChildren(KeyType x, T &s) {
     int x_depth = MortonKeyGetDepth(x);
@@ -502,6 +557,150 @@ void CompleteRegion(KeyType x, KeyType y,
     std::sort(std::begin(s), std::end(s));
 }
 
+/**
+ * @brief 1-parameter Map function for 
+ */
+template <class TSP>
+void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
+  int rank = -1;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  
+  if (cell.is_local_) {
+    f(cell);
+
+    // Processes that needs the cell information can be identified by calculating the difference of sets
+    //   {parent's owners} - {it's owners}
+    
+    if (cell.key() != 0) { // if not root
+      // Owner processes of the remote cell can be obtained by
+      // by {parent's owners} - {the cell's owners}
+      std::vector<int> senders = cell.owners(); // Owner of the cells
+      std::vector<int> recvers = SetDiff(cell.parent().owners(), senders); // Requesters
+      std::vector<int> peers = GetMapping(senders, recvers, false, rank);
+      cell.SendCell(peers);
+    }
+  } else {
+    // root cell is never 'remote' because it is shared by all processes
+    assert(cell.key() != 0);
+    
+    // The cells is remote, which means the process must obtain cell information
+    // from a process(sender) that owns the cell.
+    
+    // Senders = Owner processes
+    std::vector<int> senders = cell.owners(); // Owner of the cells
+
+    // Receivers = {pcell's owners} - {the cell's owners}
+    // This process is a receiver of the current cell
+    std::vector<int> recvers = SetDiff(cell.parent().owners(), senders);
+    
+    int peer = GetMapping(recvers, senders, false, rank)[0];
+    cell.RecvCell(peer); // the sender finishes applying f first, then send the cell info to this process.
+  }
+}
+
+// A special-purpose struct to exchange cell information
+template <class TSP>
+struct CellInfoBinder {
+  typename TSP::ATTR cell_attr;
+  index_t num_bodies;
+};
+
+template <class TSP>
+void Cell<TSP>::RecvCell(int pid) {
+  // Send a recv request Cell/BodyAttr info to the process<pid>.
+  //   Cell attributes
+  //   Bodies (if the cell is a leaf)
+  //   Body Attributes (if the cell is a leaf)
+
+  int tag = this->GetMpiTag();
+
+  // First, request CellAttr data. On sender side (in SendCell)
+  CellInfoBinder<TSP> binder;
+
+#ifdef DEBUG_SENDRECV
+  {
+    Stderr stderr("recv");
+    stderr.out() << "RecvCell: cell=" << key_ << " "
+                 << "src=" << pid << " "
+                 << "tag=" << tag
+                 << std::endl;
+  }
+#endif
+  
+  // note that this MPI_recv() call is handled by MPI_Isend in SendCell() in proc pid.
+  MPI_Status stat;
+#if 1
+  MPI_Recv(&binder, sizeof(binder), MPI_BYTE, pid, tag, MPI_COMM_WORLD, &stat);
+#else
+  MPI_Request req;
+  int flag = 0;
+  MPI_Irecv(&binder, sizeof(binder), MPI_BYTE, pid, tag, MPI_COMM_WORLD, &req);
+  while(!flag) {
+    MPI_Test(&req, &flag, &stat);
+    usleep(1000);
+  }
+#endif
+  
+  //assert(stat.MPI_ERROR == MPI_SUCCESS);
+  this->attr() = binder.cell_attr;
+  this->nb_ = binder.num_bodies;
+  
+#ifdef DEBUG_SENDRECV
+  {
+    Stderr stderr("recv");
+    stderr.out() << "RecvCell: cell=" << key_ << " "
+                 << "src=" << pid << " "
+                 << "tag=" << tag << " "
+                 << "done" << std::endl;
+  }
+#endif
+}
+
+template <class TSP>
+void Cell<TSP>::SendCell(const std::vector<int> &pids) {
+  if (pids.size() == 0) {
+    return;
+  }
+
+  int tag = this->GetMpiTag();
+
+  CellInfoBinder<TSP> binder {this->attr(), this->nb()};
+  MPI_Status *stats = new MPI_Status[pids.size()];
+  MPI_Request *reqs = new MPI_Request[pids.size()];
+
+  for (int i = 0; i < pids.size(); i++) {
+#ifdef DEBUG_SENDRECV
+    {
+      Stderr stderr("send");
+      stderr.out() << "SendCell: cell=" << key_ << " "
+                   << "dst=" << pids[i] << " "
+                   << "tag=" << tag
+                   << std::endl;
+    }
+#endif
+    MPI_Isend(&binder, sizeof(binder), MPI_BYTE, pids[i], tag, MPI_COMM_WORLD, &reqs[i]);
+  }
+
+  int flag = 0;
+  while(!flag) {
+    MPI_Testall(pids.size(), reqs, &flag, stats);
+    usleep(100);
+  }
+
+  delete[] stats;
+  delete[] reqs;
+  
+#ifdef DEBUG_SENDRECV
+  for (int i = 0; i < pids.size(); i++) {
+    Stderr stderr("send");
+    stderr.out() << "SendCell: cell=" << key_ << " "
+                 << "dst=" << pids[i] << " "
+                 << "tag=" << tag << " "
+                 << "done" << std::endl;
+  }
+#endif
+}
+
 template <class TSP>
 bool Cell<TSP>::operator==(const Cell &c) const {
     return key_ == c.key_;
@@ -536,14 +735,13 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) const {
   }
 
   KeyType k = MortonKeyChild<TSP::Dim>(key_, idx);
-
   Cell *c = Lookup(k);
 
   if (c == NULL) {
     // This means c is a remote cell (owned by other processes)
     // and this is the first access to the remote cell.
-    bool is_c_leaf = find(leaf_keys_->begin(), leaf_keys_->end(), k) == leaf_keys_->end();
-    c = new Cell(k, false, is_c_leaf, 0, 0, ht_, this->region(),
+    bool is_leaf = find(leaf_keys_->begin(), leaf_keys_->end(), k) == leaf_keys_->end();
+    c = new Cell(k, false, is_leaf, 0, 0, ht_, this->region(),
                  leaf_keys_, leaf_owners_, local_bodies_, local_body_keys_, local_body_attrs_);
     (*ht_)[k] = c;
   }
@@ -720,17 +918,51 @@ size_t sum(const T& c) {
  */
 template <class TSP>
 void Cell<TSP>::CalcOwnerProcesses() {
-  // Find the range of leaf cells that are under the cell
-  auto beg = std::begin(*leaf_keys_);
-  auto end = std::end(*leaf_keys_);
-  KeyType key_next = morton_common::CalcMortonKeyNext<TSP::Dim>(key_);
-  size_t owner_beg = std::lower_bound(beg, end, key_) - beg;
-  size_t owner_end = std::upper_bound(beg, end, key_next) - beg;
+  this->owners_ = CalcOwnerProcsOfCell(key_, *leaf_keys_, *leaf_owners_);
+}
 
+template <class TSP>
+Region<TSP> Cell<TSP>::CalcRegion(KeyType key, const Region<TSP> &region) {
+  const int kDim = TSP::Dim;
+  const int kMask = (1 << TSP::Dim) - 1;
+
+  Stderr err("center");
+
+  auto r = region;
+  int depth = MortonKeyGetDepth(key);
+  KeyType key_body = MortonKeyRemoveDepth(key);
+  
+  err.out() << std::setw(20) << key << " "
+            << depth << " "
+            << r << " ";
+
+  for (int d = 0; d < depth; d++) {
+    int direction = (key_body >> (kDim * (MAX_DEPTH - d - 1))) & kMask;
+    r = r.PartitionBSP(direction);
+    key >>= TSP::Dim;
+    err.out() << d << ":" << direction << " " << r << " ";
+  }
+  
+  err.out() << std::endl;
+  
+  return r;
+}
+
+template <class TSP>
+std::vector<int> Cell<TSP>::CalcOwnerProcsOfCell(KeyType key,
+                                                 const std::vector<KeyType> &leaf_keys,
+                                                 const std::vector<int> &leaf_owners) {
+  // Find the range of leaf cells that are under the cell
+  auto beg = std::begin(leaf_keys);
+  auto end = std::end(leaf_keys);
+  KeyType key_next = morton_common::CalcMortonKeyNext<TSP::Dim>(key);
+  size_t owner_beg = std::lower_bound(beg, end, key) - beg;
+  size_t owner_end = std::lower_bound(beg, end, key_next) - beg;
+  
   // Since each process builds a local tree in a bottom-up way,
   // if a process P ownes any of leaf cells uncer the cell, P owns the cell.
-  owned_by_ = uniq<int>(std::begin(*leaf_owners_) + owner_beg,
-                        std::begin(*leaf_owners_) + owner_end);
+  return uniq<int>(std::begin(leaf_owners) + owner_beg,
+                   std::begin(leaf_owners) + owner_end);
 }
 
 
@@ -749,7 +981,7 @@ template <class TSP> // TSP : Tapas Static Params
 Cell<TSP>*
 Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                             index_t num_bodies,
-                            const Region<TSP> &r) {
+                            const Region<TSP> &reg) {
   const int Dim = TSP::Dim;
   typedef typename TSP::FP FP;
   typedef typename TSP::BT BT;
@@ -757,6 +989,12 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   typedef typename BT::type BodyType;
   typedef Cell<TSP> CellType;
   typedef HelperNode<Dim> HN;
+  
+  auto r = ExchangeRegion(reg);
+
+  BarrierExec([&r](int rank, int size) {
+      std::cerr << "Region: rank " << rank << ": " << r << std::endl;
+    });
 
   // Sort local bodies using Morton keys
   std::vector<HN> hn = CreateInitialNodes<TSP>(b, num_bodies, r);
@@ -930,7 +1168,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     }
     std::cerr << std::endl;
 #endif
-
+    
     std::cerr << "Number of cells each process owns" << std::endl;
     for (int pi = 0; pi < size; pi++) {
       auto beg = std::lower_bound(leaf_owners.begin(), leaf_owners.end(), pi);
@@ -1109,8 +1347,10 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   // All processes dump bodies in the file in a coordinated way. init_bodies.dat and
   // exch_bodies.dat must match (if sorted).
   BarrierExec([&](int rank, int size) {
+      std::stringstream ss;
+      ss << "exch_bodies." << size << ".dat";
       bool append_mode = (rank > 0);
-      DumpToFile(*(recv_bodies.get()), recv_keys, "exch_bodies.dat", append_mode);
+      DumpToFile(*(recv_bodies.get()), recv_keys, ss.str().c_str(), append_mode);
     });
 
   // CellHashTable (which is std::unordered_map<KeyType, CellType*>
@@ -1126,13 +1366,17 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   auto local_body_keys  = std::make_shared<std::vector<KeyType>>(recv_keys);
   auto local_body_attrs = std::make_shared<std::vector<BodyAttrType>>(num_bodies_recv);
 
+  std::vector<Cell<TSP>*> interior_cells;
+
   // Build a local tree in a bottom-up manner.
   for (auto i = leaf_beg; i < leaf_end; i++) {
     KeyType k = leaf_keys[i];
+    KeyType kn = CalcMortonKeyNext<Dim>(k);
 
     // bodies that the Cell, of which key is k, owns.
-    auto bbeg = std::lower_bound(std::begin(recv_keys), std::end(recv_keys), k) - std::begin(recv_keys);
-    auto bend = std::upper_bound(std::begin(recv_keys), std::end(recv_keys), k) - std::begin(recv_keys);
+    auto bbeg = std::lower_bound(std::begin(recv_keys), std::end(recv_keys), k ) - std::begin(recv_keys);
+    auto bend = std::lower_bound(std::begin(recv_keys), std::end(recv_keys), kn) - std::begin(recv_keys);
+    //auto bend = std::upper_bound(std::begin(recv_keys), std::end(recv_keys), kn) - std::begin(recv_keys);
 
     // Create a leaf cell
     CellType *c = new CellType(k,               // key
@@ -1150,25 +1394,29 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     (*ht)[k] = c;
     assert(c->IsLocal() && c->IsLeaf());
 
+    // Create anscestors of the cell c
     while(1) {
       k = MortonKeyParent<Dim>(k);
+      kn = CalcMortonKeyNext<Dim>(k);
       int dp = MortonKeyGetDepth(k);
+      int bbeg = std::lower_bound(std::begin(recv_keys), std::end(recv_keys), k ) - std::begin(recv_keys);
+      int bend = std::lower_bound(std::begin(recv_keys), std::end(recv_keys), kn) - std::begin(recv_keys);
 
       if (ht->count(k) == 0) {
-        // Create interior cellls
-        // These sells never have bodies
-        CellType *c = new CellType(k,               // key
-                                   true,            // is_local
-                                   false,            // is_leaf
-                                   0, 0,            // non-leaf cell has no body
-                                   ht,              // CellHashTable
-                                   r,               // Region region
+        // Create interior cellls (anscestors)
+        CellType *c = new CellType(k,                 // key
+                                   true,              // is_local
+                                   false,             // is_leaf
+                                   bbeg, bend - bbeg,
+                                   ht,                // CellHashTable
+                                   r,                 // Region region
                                    leaf_keys2,
                                    leaf_owners2,
-                                   recv_bodies,     // local bodies
-                                   local_body_keys, // local body keys
-                                   local_body_attrs);     // body attrs
+                                   recv_bodies,       // local bodies
+                                   local_body_keys,   // local body keys
+                                   local_body_attrs); // body attrs
         (*ht)[k] = c;
+        interior_cells.push_back(c);
         assert(c->IsLocal() && !c->IsLeaf());
       } else {
         break; // if c's parent is found: all of the ancestors have already been created.
@@ -1177,8 +1425,35 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       if (dp == 0) break; // stop if k is the root cell;
     }
   }
+  // Created all local cells
 
-  MPI_Finalize(); exit(0);
+  // Create remote cells (proxy cells)
+  for (auto &&c : interior_cells) {
+    int nchld = c->nsubcells();
+    for (int i = 0; i < nchld; i++) {
+      c->subcell(i);
+    }
+  }
+  
+
+  // Dump all (local) cells to a file
+  {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    std::stringstream ss;
+    ss << "Cells." << rank << ".dat";
+    std::ofstream ofs(ss.str().c_str());
+    for (auto&& iter : (*ht)) {
+      KeyType k = iter.first;
+      Cell<TSP> *c = iter.second;
+      ofs << std::setw(20) << std::right << k << " "
+          << MortonKeyGetDepth(k) << " "
+          << "[" << c->center() << "]"
+          << std::endl;
+    }
+    ofs.close();
+  }
+  
 
   // return the root cell (root key is always 0)
   return (*ht)[0];

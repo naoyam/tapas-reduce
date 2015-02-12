@@ -1,16 +1,18 @@
-set(SIMD_FLAG "-DUSE_SIMD")
-# Find the appropriate compiler's SIMD flag
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-  set(SIMD_FLAG "${SIMD_FLAG} -mavx")
-  # using Clang
-elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-  set(SIMD_FLAG "${SIMD_FLAG} -mavx")
-  # using GCC
-elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
-  set(SIMD_FLAG "${SIMD_FLAG} -xHOST")
-  # using Intel C++
-elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-  # using Visual Studio C++
+if(EXAFMM_ENABLE_SIMD)
+  set(SIMD_FLAG "-DUSE_SIMD")
+  # Find the appropriate compiler's SIMD flag
+  if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    set(SIMD_FLAG "${SIMD_FLAG} -mavx")
+    # using Clang
+  elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    set(SIMD_FLAG "${SIMD_FLAG} -mavx")
+    # using GCC
+  elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
+    set(SIMD_FLAG "${SIMD_FLAG} -xHOST")
+    # using Intel C++
+  elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+    # using Visual Studio C++
+  endif()
 endif()
 
 #------------------------------------------------------------------
@@ -108,8 +110,7 @@ add_executable(serial_tapas
   ../kernels/${EXAFMM_EQUATION}P2P${EXAFMM_DEVICE}.cxx
   )
 
-set_target_properties(serial_tapas
-  PROPERTIES COMPILE_FLAGS "-DTO_SERIAL")
+set_target_properties(serial_tapas PROPERTIES COMPILE_FLAGS "-DTO_SERIAL ${SIMD_FLAG}")
 
 #------------------------------------------------------------------
 # Tapas implementation of ExaFMM with multithreading
@@ -159,7 +160,7 @@ if(EXAFMM_ENABLE_MPI AND EXAFMM_ENABLE_MT)
     ../kernels/${EXAFMM_EQUATION}${EXAFMM_BASIS}${EXAFMM_DEVICE}.cxx
     ../kernels/${EXAFMM_EQUATION}P2P${EXAFMM_DEVICE}.cxx
     )
-  set_property(TARGET parallel_tapas_mt APPEND_STRING PROPERTY COMPILE_FLAGS " ${MPI_CXX_COMPILE_FLAGS} -DTO_SERIAL ${SIMD_FLAG}")
+  set_property(TARGET parallel_tapas_mt APPEND_STRING PROPERTY COMPILE_FLAGS " ${MPI_CXX_COMPILE_FLAGS}")
   set_property(TARGET parallel_tapas_mt APPEND PROPERTY INCLUDE_DIRECTORIES "${MPI_CXX_INCLUDE_PATH}")
   set_property(TARGET parallel_tapas_mt APPEND PROPERTY LINK_FLAGS          "${MPI_CXX_LINK_FLAGS}")
   

@@ -15,6 +15,7 @@
 #include <sstream>
 #include <cassert>
 #include <iostream>
+#include <fstream>
 
 #ifdef TAPAS_DEBUG
 #if TAPAS_DEBUG == 0
@@ -25,6 +26,51 @@
 #else  // TAPAS_DEBUG
 #define TAPAS_DEBUG // default
 #endif // TAPAS_DEBUG
+
+// for debug
+#include <unistd.h>
+#include <sys/syscall.h> // for gettid()
+#include <sys/types.h>   // for gettid()
+
+#ifdef EXAFMM_TAPAS_MPI
+#include <mpi.h>
+#endif
+
+namespace {
+class Stderr {
+  std::ostream *fs_;
+
+ public:
+  Stderr(const char *label) : fs_(nullptr) {
+#ifdef EXAFMM_TAPAS_MPI
+    pid_t tid = syscall(SYS_gettid);
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+#else
+    const char *rank="s";
+    int tid=0;
+#endif
+    std::stringstream ss;
+    ss << "stderr"
+       << "." << rank
+       << "." << tid
+       << "." << label
+       << ".txt";
+    fs_ = new std::ofstream(ss.str().c_str(), std::ios_base::app);
+  }
+  
+  ~Stderr() {
+    assert(fs_ != nullptr);
+    delete fs_;
+    fs_ = nullptr;
+  }
+
+  std::ostream &out() {
+    assert(fs_ != nullptr);
+    return *fs_;
+  }
+};
+}
 
 /**
  * @brief Main namespae of Tapas

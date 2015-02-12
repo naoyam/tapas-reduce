@@ -1,3 +1,5 @@
+#include <thread>
+#include <mutex>
 #include <unistd.h> // usleep
 
 #ifdef EXAFMM_TAPAS_MPI
@@ -24,7 +26,63 @@
 #include "serial_tapas_helper.cxx"
 #endif
 
+
+// Dump the M vectors of all cells.
+void dumpM(Tapas::Cell &root) {
+  std::stringstream ss;
 #ifdef EXAFMM_TAPAS_MPI
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  ss << "M." << std::setw(4) << std::setfill('0') << rank << ".dat";
+#else
+  ss << "M.dat";
+#endif
+  std::mutex mtx;
+  std::ofstream ofs(ss.str().c_str());
+  std::function<void(Tapas::Cell&)> dump = [&](Tapas::Cell& cell) {
+    mtx.lock();
+    ofs << std::setw(20) << std::right << cell.key() << " ";
+    ofs << cell.attr().M << std::endl;
+    mtx.unlock();
+    tapas::Map(dump, cell.subcells());
+  };
+  tapas::Map(dump, root);
+  ofs.close();
+}
+
+void dumpLeaves(Tapas::Cell &root) {
+  std::stringstream ss;
+#ifdef EXAFMM_TAPAS_MPI
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  ss << "leaves." << std::setw(4) << std::setfill('0') << rank << ".dat";
+#else
+  ss << "leaves.dat";
+#endif
+  std::mutex mtx;
+  std::ofstream ofs(ss.str().c_str(), std::ios_base::app);
+  
+  std::function<void(Tapas::Cell&)> f = [&](Tapas::Cell& cell) {
+    if (cell.IsLeaf()) {
+      mtx.lock();
+      ofs << std::setw(20) << cell.key() << ", depth=" << cell.depth() << ", nb=" << cell.nb() << ", r=" << cell.region() << std::endl;
+      for (int i = 0; i < cell.nb(); i++) {
+        ofs << "    body[" << i << "]=(" << cell.body(i).X << ") " << std::endl;
+      }
+      mtx.unlock();
+    } else {
+      tapas::Map(f, cell.subcells());
+    }
+  };
+
+  tapas::Map(f, root);
+  
+  ofs.close();
+}
+
+
+#ifdef EXAFMM_TAPAS_MPI
+
 template<class F>
 void BarrierExec(F func) {
     int size, rank;
@@ -39,20 +97,31 @@ void BarrierExec(F func) {
         MPI_Barrier(MPI_COMM_WORLD);
     }
 }
+
 #else
+
 template<class F>
 void BarrierExec(F func) {
     func();
 }
+
 #endif
 
 int main(int argc, char ** argv) {
   Args args(argc, argv);
   
 #ifdef EXAFMM_TAPAS_MPI
-    MPI_Init(&argc, &argv);
-    MPI_Comm_rank(MPI_COMM_WORLD, &args.mpi_rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &args.mpi_size);
+  int required = MPI_THREAD_MULTIPLE;
+  int provided;
+  MPI_Init_thread(&argc, &argv, required, &provided);
+
+  if (provided < required) {
+    std::cerr << "Your MPI implementation's support level of multi threading is insufficient. "
+              << "We need  MPI_THREAD_MULTIPLE" << std::endl;
+    exit(-1);
+  }
+  MPI_Comm_rank(MPI_COMM_WORLD, &args.mpi_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &args.mpi_size);
 #endif
     
   Bodies bodies, bodies2, bodies3, jbodies;
@@ -113,11 +182,24 @@ int main(int argc, char ** argv) {
       }
     }
 #endif
-    
+
     logger::startTimer("Upward pass");
     tapas::Map(FMM_P2M, *root, args.theta);
     logger::stopTimer("Upward pass");
     TAPAS_LOG_DEBUG() << "P2M done\n";
+
+#ifdef EXAFMM_TAPAS_MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+    // Upward result check
+#endif
+    dumpLeaves(*root);
+    dumpM(*root);
+    
+#ifdef EXAFMM_TAPAS_MPI
+    MPI_Finalize();
+#endif
+    exit(0);
+
 #if 0
     {
       std::ofstream tapas_out("tapas_P2M.txt");

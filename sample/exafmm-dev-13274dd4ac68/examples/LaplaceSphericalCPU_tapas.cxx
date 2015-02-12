@@ -1,7 +1,21 @@
+#include <iostream>
+#include <iomanip>
+
 #include "tapas_exafmm.h"
 
 #define ODDEVEN(n) ((((n) & 1) == 1) ? -1 : 1)
 #define IPOW2N(n) ((n >= 0) ? 1 : ODDEVEN(n))
+
+// for debugging
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <fstream>
+#include <iomanip>
+
+#ifdef EXAFMM_TAPAS_MPI
+#include <mpi.h>
+#endif
 
 namespace {
 
@@ -142,15 +156,25 @@ void tapas_kernel::P2M(Tapas::Cell &C) {
       }
     }
   }
+  {
+    Stderr e("P2M");
+    e.out() << std::setw(20) << C.key() << ", "
+        //<< "nsubcells=" << C.nsubcells() << ", "
+            << "nb=" << C.nb() << ", "
+        //<< "M=" << C.attr().M
+            << std::endl;
+  }
 }
 
 void tapas_kernel::M2M(Tapas::Cell & C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
+
   for (int i = 0; i < C.nsubcells(); ++i) {
     Tapas::Cell &Cj=C.subcell(i);
     // Skip empty cell
     if (Cj.nb() == 0) continue;
     vec3 dX = tovec(C.center() - Cj.center());
+    
     real_t rho, alpha, beta;
     cart2sph(rho, alpha, beta, dX);
     evalMultipole(rho, alpha, beta, Ynm, YnmTheta);
@@ -174,6 +198,13 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
         C.attr().M[jks] += M;
       }
     }
+  }
+  {
+    Stderr e("M2M");
+    e.out() << std::setw(20) << C.key() << ", "
+            << "nsubcells=" << C.nsubcells() << ", "
+            << "M=" << C.attr().M
+            << std::endl;
   }
 }
 

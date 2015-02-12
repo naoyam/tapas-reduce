@@ -16,6 +16,11 @@
 #include <unordered_map>
 #include <utility>
 #include <iostream>
+#include <iomanip>
+#include <functional>
+
+// for debugging
+#include <fstream>
 
 #include "tapas/cell.h"
 #include "tapas/bitarith.h"
@@ -64,12 +69,12 @@ template <class TSP> // TapasStaticParams
 class Cell: public tapas::BasicCell<TSP> { 
     friend class Partitioner<TSP>;
     friend class BodyIterator<Cell>;
-  public:
+ public:
     typedef unordered_map<KeyType, Cell*> HashTable;
   protected:
     KeyType key_;
     HashTable *ht_;
-  public:
+ public:
     Cell(const Region<TSP> &region,
          index_t bid, index_t nb, KeyType key,
          HashTable *ht,
@@ -79,6 +84,8 @@ class Cell: public tapas::BasicCell<TSP> {
             ht_(ht), bodies_(bodies), body_attrs_(body_attrs),
             is_leaf_(true) {}
     
+  static void Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f);
+
     typedef typename TSP::ATTR attr_type;
     typedef typename TSP::BT_ATTR body_attr_type;
     KeyType key() const { return key_; }
@@ -105,6 +112,10 @@ class Cell: public tapas::BasicCell<TSP> {
 #endif
     typename TSP::BT_ATTR *body_attrs() const;
     SubCellIterator<Cell> subcells() const;
+
+  int depth() const {
+    return MortonKeyGetDepth(key_);
+  }
   
   protected:
     typename TSP::BT_ATTR &body_attr(index_t idx) const;
@@ -188,9 +199,9 @@ template <int DIM, class BT>
 void SortBodies(const typename BT::type *b, typename BT::type *sorted,
                 const HelperNode<DIM> *sorted_nodes,
                 tapas::index_t nb) {
-    for (index_t i = 0; i < nb; ++i) {
-        sorted[i] = b[sorted_nodes[i].p_index];
-    }
+  for (index_t i = 0; i < nb; ++i) {
+    sorted[i] = b[sorted_nodes[i].p_index];
+  }
 }
 
 template <int DIM, class T>
@@ -228,6 +239,11 @@ void CompleteRegion(KeyType x, KeyType y,
         }
     }
     std::sort(std::begin(s), std::end(s));
+}
+
+template <class TSP>
+void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
+  f(cell);
 }
 
 template <class TSP>
@@ -338,6 +354,8 @@ Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b, const Region
     return Partitioner<TSP>::Partition(b.data(), b.size(), r);
 }
 
+
+
 /**
  * @brief Partition the simulation space and build Morton-key based octree
  * @tparam TSP Tapas static params
@@ -384,6 +402,22 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     ht->insert(std::make_pair(root_key, root));
     Refine(root, hn, b, 0, 0);
 
+    // Dump all (local) cells to a file
+    {
+      std::stringstream ss;
+      ss << "Cells.serial.dat";
+      std::ofstream ofs(ss.str().c_str());
+      for (auto&& iter : (*ht)) {
+        KeyType k = iter.first;
+        Cell<TSP> *c = iter.second;
+        ofs << std::setw(20) << std::right << k << " "
+            << MortonKeyGetDepth(k) << " "
+            << "[" << c->center() << "]"
+            << std::endl;
+      }
+      ofs.close();
+    }
+  
     return root;
 }
 

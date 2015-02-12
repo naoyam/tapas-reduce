@@ -5,6 +5,7 @@ set(EXAFMM_FP64      True       CACHE BOOL   "Use double")
 set(EXAFMM_DEVICE    "CPU")
 set(EXAFMM_ENABLE_MT True       CACHE BOOL   "Enable multithreading with MassiveThreads")
 set(EXAFMM_ENABLE_MPI True      CACHE BOOL   "Enable parallel processing with MPI")
+set(EXAFMM_ENABLE_SIMD False    CACHE BOOL   "Enable SIMD acceleration")
 
 if (EXAFMM_FP64)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DFP64")
