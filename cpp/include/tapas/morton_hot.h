@@ -224,8 +224,8 @@ class Cell: public tapas::BasicCell<TSP> {
        VecPtr<BodyAttrType> local_body_attrs
        ) :
       tapas::BasicCell<TSP>(CalcRegion(key, region), body_beg, body_num),
-      key_(key), is_local_(is_local), is_leaf_(is_leaf),
-      ht_(ht),
+      key_(key), is_local_(is_local), is_leaf_(is_leaf), is_dummy_(false),
+    ht_(ht),
       leaf_keys_(leaf_keys),
       leaf_owners_(leaf_owners),
       local_bodies_(local_bodies),
@@ -245,6 +245,13 @@ class Cell: public tapas::BasicCell<TSP> {
     CalcOwnerProcesses();
   }
 
+  Cell(std::shared_ptr<CellHashTable> ht, const Region<TSP> &r) :
+      tapas::BasicCell<TSP>(r, 0, 0),
+      key_(0), is_local_(false), is_leaf_(false), is_dummy_(true), ht_(ht),
+      mpi_tag_(0)
+  {
+  }
+  
   typedef typename TSP::ATTR attr_type;
   typedef typename TSP::BT_ATTR body_attr_type;
   KeyType key() const { return key_; }
@@ -265,6 +272,8 @@ class Cell: public tapas::BasicCell<TSP> {
    * @brief Returns if the cell is local.
    */
   bool IsLocal() const;
+
+  bool IsDummy() const { return is_dummy_; }
 
   /**
    * @brief Returns the number of subcells. This is 0 or 2^DIM in HOT algorithm.
@@ -312,6 +321,7 @@ class Cell: public tapas::BasicCell<TSP> {
   KeyType key_; //!< Key of the cell
   bool is_local_;
   bool is_leaf_;
+  bool is_dummy_; //!< A dummy cell is returned from Partition if no leaf cell is assigned to the process.
   
   std::shared_ptr<CellHashTable> ht_; //!< Hash table of KeyType -> Cell* (only local cells)
 
@@ -340,7 +350,7 @@ class Cell: public tapas::BasicCell<TSP> {
   void SendCell(const std::vector<int> &pids);
 
   /**
-   * 
+   *
    */
   static int GetMpiTag(KeyType key) {
     // int max_tag = std::numeric_limits<int>::max();
@@ -582,6 +592,10 @@ void CompleteRegion(KeyType x, KeyType y,
  */
 template <class TSP>
 void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
+  if (cell.IsDummy()) {
+    return;
+  }
+
   int rank = -1;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -1377,10 +1391,12 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       }
     }
   }
+
+  if ((*ht)[0] == nullptr) {
+    (*ht)[0] = new CellType(ht, r);
+  }
   
   // return the root cell (root key is always 0)
-  assert((*ht)[0] != nullptr);
-
   return (*ht)[0];
 
   //-------------
