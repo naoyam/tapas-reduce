@@ -41,7 +41,9 @@ void dumpM(Tapas::Cell &root) {
   std::ofstream ofs(ss.str().c_str());
   std::function<void(Tapas::Cell&)> dump = [&](Tapas::Cell& cell) {
     mtx.lock();
-    ofs << std::setw(20) << std::right << cell.key() << " ";
+    ofs << std::setw(20) << std::right << tapas::morton_common::SimplifyKey(cell.key()) << " ";
+    ofs << std::setw(3) << cell.depth() << " ";
+    ofs << cell.IsLeaf() << " ";
     ofs << cell.attr().M << std::endl;
     mtx.unlock();
     tapas::Map(dump, cell.subcells());
@@ -154,8 +156,10 @@ int main(int argc, char ** argv) {
   bodies = data.initBodies(args.numBodies, args.distribution, args.mpi_rank, args.mpi_size);
   logger::stopTimer("Dataset generation");
 
+  // Dump all bodies data for debugging
   {
     Stderr err("bodies");
+    err.out() << "numBodies = " << args.numBodies << ", " << args.mpi_rank << ", " << args.mpi_size << std::endl;
     for (auto &b : bodies) {
       err.out() << b.X << " " << b.SRC << std::endl;
     }
@@ -190,14 +194,18 @@ int main(int argc, char ** argv) {
     }
 #endif
 
+#ifdef EXAFMM_TAPAS_MPI
+    int rank = 0;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+#endif
     logger::startTimer("Upward pass");
     tapas::Map(FMM_P2M, *root, args.theta);
     logger::stopTimer("Upward pass");
     TAPAS_LOG_DEBUG() << "P2M done\n";
 
 #ifdef EXAFMM_TAPAS_MPI
+    std::cerr << "rank " << rank << " finished upward." << std::endl;
     MPI_Barrier(MPI_COMM_WORLD);
-    // Upward result check
 #endif
     dumpLeaves(*root);
     dumpM(*root);

@@ -169,15 +169,35 @@ void tapas_kernel::P2M(Tapas::Cell &C) {
 void tapas_kernel::M2M(Tapas::Cell & C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
 
+  if (C.key() % 10000 == 7905) {
+    Stderr e("M2M");
+    e.out() << tapas::morton_common::SimplifyKey(C.key()) << ", "
+            << C.depth() << ", "
+            << C.center() << std::endl;
+  }
+  
   for (int i = 0; i < C.nsubcells(); ++i) {
     Tapas::Cell &Cj=C.subcell(i);
     // Skip empty cell
     if (Cj.nb() == 0) continue;
     vec3 dX = tovec(C.center() - Cj.center());
-    
+
     real_t rho, alpha, beta;
     cart2sph(rho, alpha, beta, dX);
     evalMultipole(rho, alpha, beta, Ynm, YnmTheta);
+
+    if (C.key() % 10000 == 7905) {
+      Stderr e("M2M");
+      e.out() << "rho=" << rho << std::endl;
+      e.out() << "alpha=" << alpha << std::endl;
+      e.out() << "dX=" << dX << std::endl;
+      e.out() << "Ynm=";
+      for (auto &y: Ynm) e.out() << y << ",";
+      e.out() << std::endl;
+      e.out() << "YnmTheta=";
+      for (auto &y: YnmTheta) e.out() << y << ",";
+      e.out() << std::endl;
+    }
 
     for (int j=0; j<P; j++) {
       for (int k=0; k<=j; k++) {
@@ -199,13 +219,21 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
       }
     }
   }
-  {
+  if (C.key() % 10000 == 7905) {
     Stderr e("M2M");
-    e.out() << std::setw(20) << C.key() << ", "
-            << C.depth() << ", "
-            << "nsubcells=" << C.nsubcells() << ", "
-            << "M=" << C.attr().M
-            << std::endl;
+    for (int i = 0; i < C.nsubcells(); i++) {
+      Tapas::Cell &Cj = C.subcell(i);
+      e.out() << "C[" << i << "].key = " << tapas::morton_common::SimplifyKey(Cj.key()) << std::endl;
+      e.out() << "C[" << i << "].IsLeaf = " << Cj.IsLeaf() << std::endl;
+#if EXAFMM_TAPAS_MPI
+      e.out() << "C[" << i << "].Local  = " << Cj.IsLocal() << std::endl;
+#endif 
+      e.out() << "C[" << i << "].depth  = " << Cj.depth() << std::endl;
+      e.out() << "C[" << i << "].center = " << Cj.center() << std::endl;
+      e.out() << "C[" << i << "].M = " << Cj.attr().M << std::endl;
+    }
+
+    e.out() << "M=" << C.attr().M << std::endl;
   }
 }
 

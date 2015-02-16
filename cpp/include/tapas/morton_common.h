@@ -99,6 +99,21 @@ T __id(const T& t) {
 }
 
 /**
+ * @brief Set depth information in a Morton key.
+ */
+inline
+KeyType MortonKeyAppendDepth(KeyType k, int depth) {
+    k = (k << DEPTH_BIT_WIDTH) | depth;
+    return k;
+}
+
+inline
+KeyType MortonKeyRemoveDepth(KeyType k) {
+    return k >> DEPTH_BIT_WIDTH;
+}
+
+
+/**
  * @brief Returns the range of bodies from an array of T (body type) that belong to the cell specified by the given key. 
  * @tparam DIM Dimension
  * @tparam T Body type.
@@ -131,20 +146,25 @@ template<int DIM, class T, class Functor>
 KeyPair GetBodyRange(const KeyType k, const std::vector<T> &hn, Functor get_key = __id<T>) {
     return GetBodyRange<DIM, T, typename std::vector<T>::const_iterator>(k, hn.begin(), hn.end(), get_key);
 }
-
+                        
 /**
- * @brief Set depth information in a Morton key.
+ * 
  */
-inline
-KeyType MortonKeyAppendDepth(KeyType k, int depth) {
-    k = (k << DEPTH_BIT_WIDTH) | depth;
-    return k;
+template <int DIM, class Iter>
+void GetDescendantRange(KeyType k, Iter beg, Iter end, index_t &b, index_t &e) {
+  auto comp = [](KeyType a, KeyType b) {
+    return MortonKeyRemoveDepth(a) < MortonKeyRemoveDepth(b);
+  };
+
+  KeyType kn = CalcMortonKeyNext<DIM>(k);
+
+  auto fst = std::lower_bound(beg, end, k, comp);
+  auto lst = std::lower_bound(fst, end, kn, comp);
+  b = fst - beg;
+  e = lst - beg;
 }
 
-inline
-KeyType MortonKeyRemoveDepth(KeyType k) {
-    return k >> DEPTH_BIT_WIDTH;
-}
+
 
 inline
 KeyType MortonKeyIncrementDepth(KeyType k, int inc) {

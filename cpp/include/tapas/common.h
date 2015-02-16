@@ -28,6 +28,7 @@
 #endif // TAPAS_DEBUG
 
 // for debug
+#include <iomanip>
 #include <unistd.h>
 #include <sys/syscall.h> // for gettid()
 #include <sys/types.h>   // for gettid()

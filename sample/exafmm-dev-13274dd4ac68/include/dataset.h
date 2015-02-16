@@ -8,9 +8,8 @@
 #include <sstream>
 #include "types.h"
 
-
-
 // for debug
+#include <iomanip>
 #include <unistd.h>
 #include <sys/syscall.h> // for gettid()
 #include <sys/types.h>   // for gettid()
@@ -89,11 +88,12 @@ private:
         numBodies = nx * ny * nz;
 
         long rem = numBodies % proc_size;
-        long nb_local = numBodies / proc_size + (proc_rank + 1 == proc_size ? rem : 0); // num bodies local
+        long nb_local = numBodies / proc_size + (proc_rank + 1 == proc_size ? rem : 0); // local number of bodies
         long beg = (numBodies / proc_size) * proc_rank;
         long end = beg + nb_local;
         Bodies bodies(nb_local);
         size_t gi = 0, li = 0;
+        assert(proc_size == 1 || numBodies > nb_local);
 
         for (int ix = 0; ix < nx; ix++) {
           for (int iy = 0; iy < ny; iy++) {
@@ -112,10 +112,11 @@ private:
           }
         }
         assert(li == nb_local);
+        assert(gi == numBodies);
         assert(nb_local == bodies.size());
         return bodies;                                              // Return bodies
     }
-
+  
     /**
      * @brief Random distribution in [-1,1]^3 cube
      * Generates cube distribution using the seed given to the constructor.
@@ -197,16 +198,15 @@ private:
             if (R >= 100.0) continue;
             
             if (beg <= i && i < end) {  // Use this particle if it belongs this process
-                real_t Z = (1.0 - 2.0 * X2) * R;                      //    z component
-                real_t X = sqrt(R * R - Z * Z) * cos(2.0 * M_PI * X3);//    x component
-                real_t Y = sqrt(R * R - Z * Z) * sin(2.0 * M_PI * X3);//    y component
-                real_t scale = 3.0 * M_PI / 16.0;                     //    Scaling factor
-                X *= scale; Y *= scale; Z *= scale;                   //    Scale coordinates
-                Body B;
-                B.X[0] = X;                                          //    Assign x coordinate to body
-                B.X[1] = Y;                                          //    Assign y coordinate to body
-                B.X[2] = Z;                                          //    Assign z coordinate to body
-                bodies.push_back(B);
+              real_t Z = (1.0 - 2.0 * X2) * R;                      //    z component
+              real_t X = sqrt(R * R - Z * Z) * cos(2.0 * M_PI * X3);//    x component
+              real_t Y = sqrt(R * R - Z * Z) * sin(2.0 * M_PI * X3);//    y component
+              real_t scale = 3.0 * M_PI / 16.0;                     //    Scaling factor
+              X *= scale; Y *= scale; Z *= scale;                   //    Scale coordinates
+              Body &B=bodies[i-beg];
+              B.X[0] = X;                                          //    Assign x coordinate to body
+              B.X[1] = Y;                                          //    Assign y coordinate to body
+              B.X[2] = Z;                                          //    Assign z coordinate to body
             }
             i++;
         }
