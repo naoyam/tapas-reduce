@@ -71,33 +71,33 @@ std::vector<T> SendRecvMapping(const std::vector<T> &S, // senders
 
   int s = S.size();
   int r = R.size();
+  int n = (r-1) / s + 1; // receivers per senders
   auto pos = std::find(std::begin(S), std::end(S), x);
 
   if (pos != std::end(S)) {
     // x is a sender
     int i = pos - std::begin(S);
-    if (s > r) {
-      if (i < r) return std::vector<int>(1, R[i]);
-      else       return std::vector<int>();
-    } else if (s == r) {
-      return std::vector<int>(1, R[i]);
-    } else { // s < r
-      int q = r / s;
-      int m = r % s;
-      int beg = q * i + std::min<int>(m, i);
-      int num = q + (i < m ? 1 : 0);
-      int end = beg + num;
-      return std::vector<int>(std::begin(R) + beg,
-                              std::begin(R) + end);
+    if (s >= r) {
+      if (i < r) {
+        return std::vector<T>(1, R[i]);
+      } else {
+        return std::vector<T>();
+      }
+    } else {
+      if (n*i >= r) {
+        return std::vector<T>();
+      } else {
+        int beg = n * i;
+        int end = std::min(n * (i+1), r);
+        return std::vector<T>(&R[beg], &R[end]);
+      }
     }
   } else {
     // x is a receiver
     int i = std::find(std::begin(R), std::end(R), x) - std::begin(R);
-    assert(0 <= i && i < r);
     if (s >= r) {
       return std::vector<int>(1, S[i]);
-    } else { // s < r
-      int n = (r-1) / s + 1;
+    } else {
       return std::vector<int>(1, S[i/n]);
     }
   }
@@ -225,7 +225,7 @@ class Cell: public tapas::BasicCell<TSP> {
        ) :
       tapas::BasicCell<TSP>(CalcRegion(key, region), body_beg, body_num),
       key_(key), is_local_(is_local), is_leaf_(is_leaf), is_dummy_(false),
-    ht_(ht),
+      ht_(ht),
       leaf_keys_(leaf_keys),
       leaf_owners_(leaf_owners),
       local_bodies_(local_bodies),
@@ -234,14 +234,6 @@ class Cell: public tapas::BasicCell<TSP> {
       owners_(),
       mpi_tag_(GetMpiTag(key))
   {
-    if (SimplifyKey(key) == "0461...7906") {
-      Stderr e("cell_ctr");
-      e.out() << "key    = "  << SimplifyKey(key) << std::endl;
-      e.out() << "IsLeaf = "  << this->IsLeaf() << std::endl;
-      e.out() << "IsLocal = " << this->IsLocal() << std::endl;
-      e.out() << "depth  = "  << this->depth() << std::endl;
-      e.out() << "center = "  << this->center() << std::endl;
-    }
     CalcOwnerProcesses();
   }
 
@@ -273,6 +265,10 @@ class Cell: public tapas::BasicCell<TSP> {
    */
   bool IsLocal() const;
 
+  /**
+   * @brief Returns if the cells is dummy, which means that the local process is not assigned any cell, 
+   *        thus Map function just skip it.
+   */
   bool IsDummy() const { return is_dummy_; }
 
   /**
@@ -611,35 +607,7 @@ void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
       std::vector<int> senders = cell.owners(); // Owner of the cells
       std::vector<int> recvers = SetDiff(cell.parent().owners(), senders); // Requesters
       std::vector<int> peers = SendRecvMapping(senders, recvers, rank);
-
-      if (SimplifyKey(cell.key()) == "0691...1857") {
-        Stderr e("mappings");
-        e.out() << "rank " << rank << " "
-                << "Cell " << SimplifyKey(cell.key()) << " "
-                << "senders=[";
-        for (auto &&s : senders) e.out() << s << ",";
-        e.out() << "] receivers=[";
-        for (auto &&r : recvers) e.out() << r << ",";
-        e.out() << "], my peers=[";
-        for (auto &&p : peers) e.out() << p << ",";
-        e.out() << "]" << std::endl;
-
-        for (auto && s : senders) {
-          e.out() << "rank " << s << " sends to ";
-          for (auto && r : SendRecvMapping(senders, recvers, s)) {
-            e.out() << r << " ";
-          }
-          e.out() << std::endl;
-        }
-        for (auto && r : recvers) {
-          e.out() << "rank " << r << " receives from ";
-          for (auto && s : SendRecvMapping(senders, recvers, r)) {
-            e.out() << s << " ";
-          }
-          e.out() << std::endl;
-        }
-      }
-
+      
       cell.SendCell(peers);
     }
   } else {
@@ -701,7 +669,7 @@ void Cell<TSP>::RecvCell(int pid) {
     stderr.out() << "RecvCell: cell=" << SimplifyKey(key_) << " "
                  << "I'm" << rank << " "
                  << "src=" << pid << " "
-                 << "tag=" << mpi_tag_
+                 << "tag=" << std::setw(10) << mpi_tag_
                  << std::endl;
   }
   
@@ -725,7 +693,7 @@ void Cell<TSP>::RecvCell(int pid) {
     stderr.out() << "RecvCell: cell=" << SimplifyKey(key_) << " "
                  << "I'm" << rank << " "
                  << "src=" << pid << " "
-                 << "tag=" << mpi_tag_ << " "
+                 << "tag=" << std::setw(10) << mpi_tag_ << " "
                  << "IsLeaf=" << binder.is_leaf << " "
                  << "check=" << binder.check << " "
                  << "done" << std::endl;
@@ -1150,7 +1118,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     MPI_Allreduce(leaf_nb_local, leaf_nb_global, MPI_SUM, MPI_COMM_WORLD);
 
     long max_nb = *std::max_element(leaf_nb_global.begin(), leaf_nb_global.end());
-
+    
     if (max_nb <= max_nb_) {    // Finished. all cells have at most max_nb_ bodies.
       break;
     } else {
@@ -1263,7 +1231,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                 MPI_COMM_WORLD);
 
   // Now we have all bodies & keys transferred to their owner processes.
-  // Sort the bodies locally.
+  // Sort the bodies locally using their keys.
   SortByPermutations(recv_keys, *recv_bodies);
 
   // Dump local bodies into a file named exch_bodies.dat
@@ -1297,13 +1265,10 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     KeyType k = leaf_keys[i];
     //KeyType kn = CalcMortonKeyNext<Dim>(k);
 
-    // bodies that the Cell, of which key is k, owns.
+    // Find bodies owned by the Cell whose key is k.
     index_t bbeg, bend;
     FindRangeByKey<TSP>(recv_keys, k, bbeg, bend);
-    //auto bbeg = std::lower_bound(std::begin(recv_keys), std::end(recv_keys), k ) - std::begin(recv_keys);
-    //auto bend = std::lower_bound(std::begin(recv_keys), std::end(recv_keys), kn) - std::begin(recv_keys);
-    //auto bend = std::upper_bound(std::begin(recv_keys), std::end(recv_keys), kn) - std::begin(recv_keys);
-
+    
     // Create a leaf cell
     CellType *c = new CellType(k,               // key
                                true,            // is_local
@@ -1320,22 +1285,34 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     (*ht)[k] = c;
     assert(c->IsLocal() && c->IsLeaf());
 
+    Stderr e("check0001");
+
     // Create anscestors of the cell c (in a recursive upward way)
     while(1) {
       k = MortonKeyParent<Dim>(k);
-      //kn = CalcMortonKeyNext<Dim>(k);
       int dp = MortonKeyGetDepth(k);
-      index_t bbeg, bend;
-      FindRangeByKey<TSP>(recv_keys, k, bbeg, bend);
-      //int bbeg = std::lower_bound(std::begin(recv_keys), std::end(recv_keys), k ) - std::begin(recv_keys);
-      //int bend = std::lower_bound(std::begin(recv_keys), std::end(recv_keys), kn) - std::begin(recv_keys);
 
       if (ht->count(k) == 0) {
+        index_t bbeg, bend;
+        //FindRangeByKey<TSP>(recv_keys, k, bbeg, bend);
+        FindRangeByKey<TSP>(leaf_keys, k, bbeg, bend);
+        int nb = 0;
+        for (auto i = bbeg; i < bend; i++) {
+          nb += leaf_nb_global[i];
+        }
+        
+        if (k == 1) {
+          e.out() << "key=" << k << std::endl;
+          e.out() << "nb = " << nb << std::endl;
+        }
+        
         // Create interior cellls (anscestors)
+        // Note: if a cell is non-leaf, then bbeg (body begin index) is not correct.
+        //       This is because bodies are help only by a process that owns the corresponding leaf cells.
         CellType *c = new CellType(k,                 // key
                                    true,              // is_local
                                    false,             // is_leaf
-                                   bbeg, bend - bbeg,
+                                   0, nb,             // start index of bodies and numBodies. read the note above
                                    ht,                // CellHashTable
                                    r,                 // Region region
                                    leaf_keys2,
@@ -1374,8 +1351,8 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
         e.out() << SimplifyKey(k) << " "
                 << "d=" << MortonKeyGetDepth(k) << " "
                 << "leaf=" << c->IsLeaf() << " "
-                << "owner=" << rank << " "
-                << "nb=" << c->nb() << " "
+                << "owner=" << std::setw(2) << std::right << rank << " "
+                << "nb=" << std::setw(3) << c->nb() << " "
                 << "center=[" << c->center() << "] "
                 << "next_key=" << SimplifyKey(CalcMortonKeyNext<Dim>(k))
                 << std::endl;

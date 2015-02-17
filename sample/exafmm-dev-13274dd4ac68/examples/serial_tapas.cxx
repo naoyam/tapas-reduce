@@ -210,11 +210,6 @@ int main(int argc, char ** argv) {
     dumpLeaves(*root);
     dumpM(*root);
     
-#ifdef EXAFMM_TAPAS_MPI
-    MPI_Finalize();
-#endif
-    exit(0);
-
 #if 0
     {
       std::ofstream tapas_out("tapas_P2M.txt");
@@ -228,6 +223,11 @@ int main(int argc, char ** argv) {
     numM2L = 0; numP2P = 0;
     tapas::Map(FMM_M2L, tapas::Product(*root, *root), args.mutual, args.nspawn);
     logger::stopTimer("Traverse");
+    
+#ifdef EXAFMM_TAPAS_MPI
+    MPI_Finalize();
+#endif
+    exit(0);
     
     TAPAS_LOG_DEBUG() << "M2L done\n";
     jbodies = bodies;

@@ -38,6 +38,7 @@
 #endif
 
 namespace {
+
 class Stderr {
   std::ostream *fs_;
 

@@ -169,25 +169,33 @@ void tapas_kernel::P2M(Tapas::Cell &C) {
 void tapas_kernel::M2M(Tapas::Cell & C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
 
-  if (C.key() % 10000 == 7905) {
+  if (C.key() == 0) {
     Stderr e("M2M");
-    e.out() << tapas::morton_common::SimplifyKey(C.key()) << ", "
+    e.out() << "M2M(1) "
+            << tapas::morton_common::SimplifyKey(C.key()) << ", "
             << C.depth() << ", "
             << C.center() << std::endl;
   }
   
   for (int i = 0; i < C.nsubcells(); ++i) {
     Tapas::Cell &Cj=C.subcell(i);
+    if (C.key() == 0) {
+      Stderr e("M2M");
+      e.out() << "Cj.key = " << Cj.key() << " "
+              << "Cj.nb() = " << Cj.nb() << std::endl;
+    }
+    
     // Skip empty cell
     if (Cj.nb() == 0) continue;
     vec3 dX = tovec(C.center() - Cj.center());
-
+    
     real_t rho, alpha, beta;
     cart2sph(rho, alpha, beta, dX);
     evalMultipole(rho, alpha, beta, Ynm, YnmTheta);
 
-    if (C.key() % 10000 == 7905) {
+    if (C.key() == 0) {
       Stderr e("M2M");
+      e.out() << "subcell " << i << std::endl;
       e.out() << "rho=" << rho << std::endl;
       e.out() << "alpha=" << alpha << std::endl;
       e.out() << "dX=" << dX << std::endl;
@@ -219,7 +227,7 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
       }
     }
   }
-  if (C.key() % 10000 == 7905) {
+  if (C.key() == 0) {
     Stderr e("M2M");
     for (int i = 0; i < C.nsubcells(); i++) {
       Tapas::Cell &Cj = C.subcell(i);
