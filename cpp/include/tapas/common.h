@@ -72,6 +72,16 @@ class Stderr {
     return *fs_;
   }
 };
+
+template<class T>
+std::string join(const char *glue, const std::vector<T>& v) {
+  std::stringstream ss;
+  for (int i = 0; i < v.size(); i++) {
+    ss << v[i] << (i == v.size()-1 ? "" : " ");
+  }
+  return ss.str();
+}
+
 }
 
 /**
@@ -82,7 +92,7 @@ namespace tapas {
 using std::string;
 using std::ostream;
 
-typedef int index_t;
+typedef long index_t;
 
 inline void Exit(int status, const char *file, const char *func, int line) {
   if (status) {

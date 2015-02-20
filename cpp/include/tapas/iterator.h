@@ -6,16 +6,18 @@
 
 namespace tapas {
 
-template <class CellType>
+template <class Cell>
 class BodyIterator {
-  const CellType &c_;
+  const Cell &c_;
   index_t idx_;
  public:
+  typedef Cell CellType;
+  typedef BodyIterator value_type;
+  typedef typename CellType::body_attr_type attr_type;  
+  
   int index() const { return idx_; } // for debugging
   BodyIterator(const CellType &c)
       : c_(c), idx_(0) {}
-  typedef BodyIterator value_type;
-  typedef typename CellType::body_attr_type attr_type;  
   index_t size() const {
     return c_.nb();
   }
@@ -77,6 +79,7 @@ class CellIterator {
  public:
   CellIterator(CELL &c): c_(c) {}
   typedef CELL value_type;
+  typedef CELL CellType;
   typedef typename CELL::attr_type attr_type;
   CELL &operator*() {
     return c_;
@@ -118,11 +121,12 @@ class CellIterator {
   }
 }; // class CellIterator
 
-template <class CellType>
+template <class Cell>
 class SubCellIterator {
-  const CellType &c_;
+  const Cell &c_;
   int idx_;
  public:
+  typedef Cell CellType;
   typedef CellType value_type;
   typedef typename CellType::attr_type attr_type;
   

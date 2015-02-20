@@ -52,6 +52,31 @@ void dumpM(Tapas::Cell &root) {
   ofs.close();
 }
 
+// Dump the L vectors of all cells.
+void dumpL(Tapas::Cell &root) {
+  std::stringstream ss;
+#ifdef EXAFMM_TAPAS_MPI
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  ss << "L." << std::setw(4) << std::setfill('0') << rank << ".dat";
+#else
+  ss << "L.dat";
+#endif
+  std::mutex mtx;
+  std::ofstream ofs(ss.str().c_str());
+  std::function<void(Tapas::Cell&)> dump = [&](Tapas::Cell& cell) {
+    mtx.lock();
+    ofs << std::setw(20) << std::right << tapas::morton_common::SimplifyKey(cell.key()) << " ";
+    ofs << std::setw(3) << cell.depth() << " ";
+    ofs << cell.IsLeaf() << " ";
+    ofs << cell.attr().L << std::endl;
+    mtx.unlock();
+    tapas::Map(dump, cell.subcells());
+  };
+  tapas::Map(dump, root);
+  ofs.close();
+}
+
 void dumpLeaves(Tapas::Cell &root) {
   std::stringstream ss;
 #ifdef EXAFMM_TAPAS_MPI
@@ -209,7 +234,7 @@ int main(int argc, char ** argv) {
 #endif
     dumpLeaves(*root);
     dumpM(*root);
-    
+
 #if 0
     {
       std::ofstream tapas_out("tapas_P2M.txt");
@@ -224,36 +249,20 @@ int main(int argc, char ** argv) {
     tapas::Map(FMM_M2L, tapas::Product(*root, *root), args.mutual, args.nspawn);
     logger::stopTimer("Traverse");
     
+    TAPAS_LOG_DEBUG() << "M2L done\n";
+    jbodies = bodies;
+
+    dumpL(*root);
 #ifdef EXAFMM_TAPAS_MPI
     MPI_Finalize();
 #endif
-    exit(0);
+    exit(0); // --------------------------------------------------
     
-    TAPAS_LOG_DEBUG() << "M2L done\n";
-    jbodies = bodies;
-#if 0
-    {
-      std::ofstream tapas_out("tapas_M2L.txt");
-      for (int i = 0; i < args.numBodies; ++i) {
-        tapas_out << root->body_attrs()[i] << std::endl;
-      }
-    }
-#endif
-
     logger::startTimer("Downward pass");
     tapas::Map(FMM_L2P, *root);
     logger::stopTimer("Downward pass");
     
     TAPAS_LOG_DEBUG() << "L2P done\n";
-#if 0
-    {
-      std::ofstream tapas_out("tapas_L2P.txt");
-      for (int i = 0; i < args.numBodies; ++i) {
-        tapas_out << root->body_attrs()[i] << std::endl;
-      }
-    }
-#endif
-
 
     CopyBackResult(bodies, root->body_attrs(), args.numBodies);
 #if 0

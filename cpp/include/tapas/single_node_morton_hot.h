@@ -70,10 +70,12 @@ class Cell: public tapas::BasicCell<TSP> {
     friend class Partitioner<TSP>;
     friend class BodyIterator<Cell>;
  public:
-    typedef unordered_map<KeyType, Cell*> HashTable;
-  protected:
-    KeyType key_;
-    HashTable *ht_;
+  typedef unordered_map<KeyType, Cell*> HashTable;
+  typedef Cell<TSP> CellType;
+  typedef BodyIterator<CellType> BodyIter;
+ protected:
+  KeyType key_;
+  HashTable *ht_;
  public:
     Cell(const Region<TSP> &region,
          index_t bid, index_t nb, KeyType key,
@@ -84,7 +86,12 @@ class Cell: public tapas::BasicCell<TSP> {
             ht_(ht), bodies_(bodies), body_attrs_(body_attrs),
             is_leaf_(true) {}
     
-  static void Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f);
+  static void Map(Cell<TSP> &cell,
+                  std::function<void(Cell<TSP>&)> f);
+  static void Map(Cell<TSP> &c1, Cell<TSP> &c2,
+                  std::function<void(Cell<TSP>&, Cell<TSP>&)> f);
+  static void Map(BodyIter &b1, BodyIter &b2,
+                  std::function<void(BodyIter&, BodyIter&)> f);
 
     typedef typename TSP::ATTR attr_type;
     typedef typename TSP::BT_ATTR body_attr_type;
@@ -245,6 +252,18 @@ template <class TSP>
 void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
   f(cell);
 }
+
+template <class TSP>
+void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2, std::function<void(Cell<TSP>&, Cell<TSP>&)> f) {
+  f(c1, c2);
+}
+
+template <class TSP>
+void Cell<TSP>::Map(BodyIterator<Cell<TSP>> &b1, BodyIterator<Cell<TSP>> &b2,
+                    std::function<void(BodyIterator<Cell<TSP>>&, BodyIterator<Cell<TSP>>&)> f) {
+  f(b1, b2);
+}
+
 
 template <class TSP>
 bool Cell<TSP>::operator==(const Cell &c) const {
@@ -416,19 +435,24 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
         Cell<TSP> *c = iter.second;
         if (c->key() != 0) {
           e.out() << SimplifyKey(k) << " "
-                  << MortonKeyGetDepth(k) << " "
-                  << "nb=" << c->nb() << " "
+                  << "d=" << MortonKeyGetDepth(k) << " "
+                  << "leaf=" << c->IsLeaf() << " "
+                  << "owners=" << std::setw(2) << std::right << 0 << " "
+                  << "nb=" << std::setw(3) << c->nb() << " "
                   << "center=[" << c->center() << "] "
-                  << "next_key=" << SimplifyKey(CalcMortonKeyNext<Dim>(k))
+                  << "next_key=" << SimplifyKey(CalcMortonKeyNext<Dim>(k)) << " "
+                  << "parent=" << SimplifyKey(MortonKeyParent<Dim>(k)) 
                   << std::endl;
           // Print bodies which belong to Cell c
-          int body_beg, body_end;
-          FindRangeByKey<TSP>(recv_keys, k, body_beg, body_end);
-          for (int i = body_beg; i < body_end; i++) {
-            e.out() << "\t\t\t| "
-                    << SimplifyKey(recv_keys[i]) << ": "
-                    << b[i].X
-                    << std::endl;
+          if (c->IsLeaf()) {
+            index_t body_beg, body_end;
+            FindRangeByKey<TSP>(recv_keys, k, body_beg, body_end);
+            for (int i = body_beg; i < body_end; i++) {
+              e.out() << "\t\t\t| "
+                      << SimplifyKey(recv_keys[i]) << ": "
+                      << b[i].X
+                      << std::endl;
+            }
           }
         }
       }

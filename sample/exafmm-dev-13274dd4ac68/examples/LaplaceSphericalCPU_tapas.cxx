@@ -169,9 +169,11 @@ void tapas_kernel::P2M(Tapas::Cell &C) {
 void tapas_kernel::M2M(Tapas::Cell & C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
 
-  if (C.key() == 0) {
+  tapas::morton_common::KeyType debug_key = 7905;
+  
+  if (C.key() % 10000 == debug_key) {
     Stderr e("M2M");
-    e.out() << "M2M(1) "
+    e.out() << "M2M "
             << tapas::morton_common::SimplifyKey(C.key()) << ", "
             << C.depth() << ", "
             << C.center() << std::endl;
@@ -179,10 +181,17 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
   
   for (int i = 0; i < C.nsubcells(); ++i) {
     Tapas::Cell &Cj=C.subcell(i);
-    if (C.key() == 0) {
+    
+    if (C.key() % 10000 == debug_key) {
       Stderr e("M2M");
-      e.out() << "Cj.key = " << Cj.key() << " "
-              << "Cj.nb() = " << Cj.nb() << std::endl;
+      e.out() << "Cj=subcell " << i << std::endl;
+      e.out() << "Cj.key = " << tapas::morton_common::SimplifyKey(Cj.key()) << std::endl;
+      e.out() << "Cj.nb() = " << Cj.nb() << std::endl;
+      e.out() << "Cj.center() = " << Cj.center() << std::endl;
+      e.out() << "Cj.M = " << Cj.attr().M << std::endl;
+#if EXAFMM_TAPAS_MPI
+      //e.out() << "Cj.IsLocal() = " << Cj.IsLocal() << std::endl;
+#endif
     }
     
     // Skip empty cell
@@ -193,12 +202,11 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
     cart2sph(rho, alpha, beta, dX);
     evalMultipole(rho, alpha, beta, Ynm, YnmTheta);
 
-    if (C.key() == 0) {
+    if (C.key() % 10000 == debug_key) {
       Stderr e("M2M");
-      e.out() << "subcell " << i << std::endl;
+      e.out() << "dX=" << dX << std::endl;
       e.out() << "rho=" << rho << std::endl;
       e.out() << "alpha=" << alpha << std::endl;
-      e.out() << "dX=" << dX << std::endl;
       e.out() << "Ynm=";
       for (auto &y: Ynm) e.out() << y << ",";
       e.out() << std::endl;
@@ -227,20 +235,20 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
       }
     }
   }
-  if (C.key() == 0) {
+  if (C.key() % 10000 == debug_key) {
     Stderr e("M2M");
     for (int i = 0; i < C.nsubcells(); i++) {
       Tapas::Cell &Cj = C.subcell(i);
       e.out() << "C[" << i << "].key = " << tapas::morton_common::SimplifyKey(Cj.key()) << std::endl;
       e.out() << "C[" << i << "].IsLeaf = " << Cj.IsLeaf() << std::endl;
 #if EXAFMM_TAPAS_MPI
-      e.out() << "C[" << i << "].Local  = " << Cj.IsLocal() << std::endl;
+      //e.out() << "C[" << i << "].Local  = " << Cj.IsLocal() << std::endl;
 #endif 
       e.out() << "C[" << i << "].depth  = " << Cj.depth() << std::endl;
       e.out() << "C[" << i << "].center = " << Cj.center() << std::endl;
       e.out() << "C[" << i << "].M = " << Cj.attr().M << std::endl;
     }
-
+    
     e.out() << "M=" << C.attr().M << std::endl;
   }
 }
@@ -260,6 +268,7 @@ void tapas_kernel::M2L(Tapas::Cell &Ci, Tapas::Cell &Cj, vec3 Xperiodic, bool mu
     // std::cerr << "tapas_kernel::M2L Y: " << Ynmi[i] << std::endl;
   }
   if (mutual) evalLocal(rho, alpha+M_PI, beta, Ynmj);
+
   for (int j=0; j<P; j++) {
 #if MASS
     real_t Cnm = std::real(Ci->M[0] * Cj->M[0]) * ODDEVEN(j);
@@ -278,7 +287,6 @@ void tapas_kernel::M2L(Tapas::Cell &Ci, Tapas::Cell &Cj, vec3 Xperiodic, bool mu
       for (int n=0; n<P-j; n++)
 #endif
       {
-
         for (int m=-n; m<0; m++) {
           int nms  = n * (n + 1) / 2 - m;
           int jnkm = (j + n) * (j + n) + j + n + m - k;
@@ -303,45 +311,6 @@ void tapas_kernel::M2L(Tapas::Cell &Ci, Tapas::Cell &Cj, vec3 Xperiodic, bool mu
   }
 }
 
-#if 0
-void tapas_kernel::L2P(Tapas::Cell &C) {
-  complex_t Ynm[P*P], YnmTheta[P*P];
-  for (int i = 0; i < C.size(); ++i) {
-    const Body &B = C.particle(i);  
-    vec3 dX = B.X - C.attr().X;
-    vec3 spherical = 0;
-    vec3 cartesian = 0;
-    real_t r, theta, phi;
-    cart2sph(r, theta, phi, dX);
-    evalMultipole(r, theta, phi, Ynm, YnmTheta);
-    C.attr(i) /= B.SRC;
-    for (int n=0; n<P; n++) {
-      int nm  = n * n + n;
-      int nms = n * (n + 1) / 2;
-      //B->TRG[0] += std::real(C.attr().L[nms] * Ynm[nm]);
-      C.attr(i)[0] += std::real(C.attr().L[nms] * Ynm[nm]);
-      spherical[0] += std::real(C.attr().L[nms] * Ynm[nm]) / r * n;
-      spherical[1] += std::real(C.attr().L[nms] * YnmTheta[nm]);
-      for( int m=1; m<=n; m++) {
-        nm  = n * n + n + m;
-        nms = n * (n + 1) / 2 + m;
-        //B->TRG[0] += 2 * std::real(C.attr().L[nms] * Ynm[nm]);
-        C.attr(i)[0] += 2 * std::real(C.attr().L[nms] * Ynm[nm]);
-        spherical[0] += 2 * std::real(C.attr().L[nms] * Ynm[nm]) / r * n;
-        spherical[1] += 2 * std::real(C.attr().L[nms] * YnmTheta[nm]);
-        spherical[2] += 2 * std::real(C.attr().L[nms] * Ynm[nm] * I) * m;
-      }
-    }
-    sph2cart(r, theta, phi, spherical, cartesian);
-    C.attr(i)[1] += cartesian[0];
-    //B->TRG[2] += cartesian[1];
-    C.attr(i)[2] += cartesian[1];
-    //B->TRG[3] += cartesian[2];
-    C.attr(i)[3] += cartesian[2]; 
-  }
-}
-
-#else
 
 void tapas_kernel::L2P(Tapas::BodyIterator &B) {
   complex_t Ynm[P*P], YnmTheta[P*P];
@@ -378,12 +347,23 @@ void tapas_kernel::L2P(Tapas::BodyIterator &B) {
   B.attr()[3] += cartesian[2]; 
 }
 
-#endif
 void tapas_kernel::L2L(Tapas::Cell &C) {
+  assert(0);
+  std::cerr << "***********L2L" << std::endl;
   complex_t Ynm[P*P], YnmTheta[P*P];
   const Tapas::Cell &Cj = C.parent();
   vec3 dX = tovec(C.center() - Cj.center());
   real_t rho, alpha, beta;
+
+  Stderr e("L2L");
+  e.out() << "C.key = " << tapas::morton_common::SimplifyKey(Cj.key()) << std::endl;
+  e.out() << "C.IsLeaf = " << Cj.IsLeaf() << std::endl;
+#if EXAFMM_TAPAS_MPI
+  //e.out() << "C[" << i << "].Local  = " << Cj.IsLocal() << std::endl;
+#endif 
+  e.out() << "C.depth  = " << Cj.depth() << std::endl;
+  e.out() << "C.center = " << Cj.center() << std::endl;
+  
   cart2sph(rho, alpha, beta, dX);
   evalMultipole(rho, alpha, beta, Ynm, YnmTheta);
 #if MASS
@@ -410,4 +390,14 @@ void tapas_kernel::L2L(Tapas::Cell &C) {
       C.attr().L[jks] += L;
     }
   }
+
+  e.out() << "Cj.key = " << tapas::morton_common::SimplifyKey(Cj.key()) << std::endl;
+  e.out() << "Cj.IsLeaf = " << Cj.IsLeaf() << std::endl;
+#if EXAFMM_TAPAS_MPI
+  //e.out() << "C[" << i << "].Local  = " << Cj.IsLocal() << std::endl;
+#endif 
+  e.out() << "Cj.depth  = " << Cj.depth() << std::endl;
+  e.out() << "Cj.center = " << Cj.center() << std::endl;
+  e.out() << "Cj.L = " << Cj.attr().L << std::endl;
+  e.out() << "C.L=" << C.attr().L << std::endl;
 }

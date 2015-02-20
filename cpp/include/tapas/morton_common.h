@@ -308,7 +308,7 @@ std::string SimplifyKey(KeyType k) {
  * @brief Find the range(beg,end) of cells/bodies that the cell
  */
 template<class TSP, class T>
-inline void FindRangeByKey(const T& vec, KeyType k, int &range_beg, int &range_end) {
+inline void FindRangeByKey(const T& vec, KeyType k, index_t &range_beg, index_t &range_end) {
   constexpr int Dim = TSP::Dim;
   auto beg = std::begin(vec);
   auto end = std::end(vec);

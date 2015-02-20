@@ -61,34 +61,46 @@ template<class T1_Iter, class T2_Iter, class Funct, class...Args>
 static void product_map(T1_Iter iter1, int beg1, int end1,
                         T2_Iter iter2, int beg2, int end2,
                         Funct f, Args... args) {
-    assert(beg1 < end1 && beg2 < end2);
-    if (end1 - beg1 <= ThreadSpawnThreshold<T1_Iter>::Value ||
-        end2 - beg2 <= ThreadSpawnThreshold<T2_Iter>::Value) {
-        for(int i = beg1; i < end1; i++) {
-            for(int j = beg2; j < end2; j++) {
-                bool am = AllowMutual<T1_Iter, T2_Iter>::value(iter1, iter2);
-                if ((am && i <= j) || !am) {
-                    f(*(iter1+i), *(iter2+j), args...);
-                }
-            }
+  assert(beg1 < end1 && beg2 < end2);
+  
+  typedef typename T1_Iter::value_type C1; // Container type (actually Body or Cell)
+  typedef typename T2_Iter::value_type C2;
+  typedef typename T1_Iter::CellType CellType;
+
+  if (end1 - beg1 <= ThreadSpawnThreshold<T1_Iter>::Value ||
+      end2 - beg2 <= ThreadSpawnThreshold<T2_Iter>::Value) {
+    // The two ranges (beg1,end1) and (beg2,end2) are fine enough to apply f in a serial manner.
+
+    // Create a function object to be given to the Container's Map function.
+    typedef std::function<void(C1&, C2&)> Callback;
+    Callback g = [=](C1 &c1, C2 &c2) { f(c1, c2, args...); };
+
+    for(int i = beg1; i < end1; i++) {
+      for(int j = beg2; j < end2; j++) {
+        // if i and j are mutually interactive, f(i,j) is evaluated only once.
+        bool am = AllowMutual<T1_Iter, T2_Iter>::value(iter1, iter2);
+        if ((am && i <= j) || !am) {
+          CellType::Map(*(iter1+i), *(iter2+j), g);
         }
-    } else {
-        int mid1 = (end1 + beg1) / 2;
-        int mid2 = (end2 + beg2) / 2;
-        // run (beg1,mid1) x (beg2,mid2) and (mid1,end1) x (mid2,end2) in parallel
-        {
-            mk_task_group;
-            create_taskA(product_map(iter1, beg1, mid1, iter2, beg2, mid2, f, args...));
-            create_taskA(product_map(iter1, mid1, end1, iter2, mid2, end2, f, args...));
-            wait_tasks;
-        }
-        {
-            mk_task_group;
-            create_taskA(product_map(iter1, beg1, mid1, iter2, mid2, end2, f, args...));
-            create_taskA(product_map(iter1, mid1, end1, iter2, beg2, mid2, f, args...));
-            wait_tasks;
-        }
+      }
     }
+  } else {
+    int mid1 = (end1 + beg1) / 2;
+    int mid2 = (end2 + beg2) / 2;
+    // run (beg1,mid1) x (beg2,mid2) and (mid1,end1) x (mid2,end2) in parallel
+    {
+      mk_task_group;
+      create_taskA(product_map(iter1, beg1, mid1, iter2, beg2, mid2, f, args...));
+      create_taskA(product_map(iter1, mid1, end1, iter2, mid2, end2, f, args...));
+      wait_tasks;
+    }
+    {
+      mk_task_group;
+      create_taskA(product_map(iter1, beg1, mid1, iter2, mid2, end2, f, args...));
+      create_taskA(product_map(iter1, mid1, end1, iter2, beg2, mid2, f, args...));
+      wait_tasks;
+    }
+  }
 }
 
 #define USE_NEW_PRODUCT_MAP
@@ -147,7 +159,7 @@ void Map(Funct f, SubCellIterator<CellType> iter, Args...args) {
 template <class Funct, class T, class... Args>
 void Map(Funct f, BodyIterator<T> iter, Args...args) {
   TAPAS_LOG_DEBUG() << "map non-product body iterator size: "
-                    << iter.size() << std::endl;  
+                    << iter.size() << std::endl;
   for (int i = 0; i < iter.size(); ++i) {
     f(*iter, args...);
     iter++;

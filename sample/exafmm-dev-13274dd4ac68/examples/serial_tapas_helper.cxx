@@ -28,27 +28,48 @@ static inline void FMM_P2M(Tapas::Cell &c, real_t theta) {
   if (!c.IsLeaf()) {
     tapas::Map(FMM_P2M, c.subcells(), theta);
   }
+  
+  c.attr().R = 0;
   c.attr().M = 0;
   c.attr().L = 0;
+  {
+    Stderr e("FMM_P2M");
+    e.out() << tapas::morton_common::SimplifyKey(c.key()) << " (1) " << c.IsLeaf() << " ";
+    e.out() << "c.attr().R = " << std::fixed << std::setprecision(6) << c.attr().R << " ";
+    e.out() << std::endl;
+  }
   if (c.IsLeaf()) {
     tapas_kernel::P2M(c);
   } else {
     tapas_kernel::M2M(c);
   }
+  
+  Stderr e("FMM_P2M");
+  e.out() << tapas::morton_common::SimplifyKey(c.key()) << " (2) " << c.IsLeaf() << " ";
+  e.out() << "c.attr().R = " << std::fixed << std::setprecision(6) << c.attr().R << " ";
+
   for (int i = 0; i < 3; ++i) {
     c.attr().R = std::max(c.width(i), c.attr().R);
   }
+
   c.attr().R = c.attr().R / 2 * 1.00001; // see bounds2box func
   c.attr().R /= theta;
+  
+  e.out() << "c.width=[";
+  for (int i=0; i<3; i++) e.out() << c.width(i) << " ";
+  e.out() << "] ";
+  e.out() << "c.attr().R = " << c.attr().R << " ";
+  e.out() << std::endl;
 }
 
 static inline void FMM_L2P(Tapas::Cell &c) {
+  std::cerr << "FMM_L2P : " << tapas::morton_common::SimplifyKey(c.key()) << std::endl;
   if (c.nb() == 0) return;
   if (!c.IsRoot()) tapas_kernel::L2L(c);
   if (c.IsLeaf()) {
     tapas::Map(tapas_kernel::L2P, c.bodies());
   } else {
-    tapas::Map(FMM_L2P, c.subcells());
+    //tapas::Map(FMM_L2P, c.subcells());
   }
 }
 
@@ -91,24 +112,33 @@ static inline void tapas_splitCell(Tapas::Cell &Ci, Tapas::Cell &Cj, int mutual,
 
 static inline void FMM_M2L(Tapas::Cell &Ci, Tapas::Cell &Cj, int mutual, int nspawn) {
   //static inline void FMM_M2L(TapasCell &Ci, TapasCell &Cj, int
+
   //mutual) {
   if (Ci.nb() == 0 || Cj.nb() == 0) return;
   vec3 dX;
   asn(dX, Ci.center() - Cj.center());
   real_t R2 = norm(dX);
   vec3 Xperiodic = 0; // dummy; periodic not ported
-  if (R2 > (Ci.attr().R+Cj.attr().R) * (Ci.attr().R+Cj.attr().R)) {
-    //std::cerr << "R2 Y: " << R2 << " vs " << (Ci.attr().R+Cj.attr().R) * (Ci.attr().R+Cj.attr().R) << std::endl;
-  } else {
-    //std::cerr << "R2: " << R2 << " vs " << (Ci.attr().R+Cj.attr().R) * (Ci.attr().R+Cj.attr().R) << std::endl;
+  
+  {
+    Stderr e("FMM_M2L");
+    real_t R = (Ci.attr().R+Cj.attr().R) * (Ci.attr().R+Cj.attr().R);
+    e.out() << "Ci=" << tapas::morton_common::SimplifyKey(Ci.key()) << "(" << Ci.nb() << ") "
+            << "Cj=" << tapas::morton_common::SimplifyKey(Cj.key()) << "(" << Cj.nb() << ") "
+            << "Ci.attr().R=" << std::fixed << std::setprecision(8) << Ci.attr().R << " "
+            << "Cj.attr().R=" << std::fixed << std::setprecision(8) << Cj.attr().R << " "
+            << "R=" << R << " "
+            << std::endl;
   }
+  
   if (R2 > (Ci.attr().R+Cj.attr().R) * (Ci.attr().R+Cj.attr().R)) {                   // If distance is far enough
     //std::cerr << "M2L approx\n";
     numM2L++;
     tapas_kernel::M2L(Ci, Cj, Xperiodic, mutual);                   //  M2L kernel
   } else if (Ci.IsLeaf() && Cj.IsLeaf()) {            // Else if both cells are bodies
-    tapas::Map(tapas_kernel::P2P, tapas::Product(Ci.bodies(), Cj.bodies()),
-               Xperiodic);
+    // !!!!! Temporarily commented out to implement & debug 2-parameter Map function in MortonHOT.
+    //tapas::Map(tapas_kernel::P2P, tapas::Product(Ci.bodies(), Cj.bodies()),
+    //Xperiodic);
     numP2P++;
   } else {                                                    // Else if cells are close but not bodies
     tapas_splitCell(Ci, Cj, mutual, nspawn);             //  Split cell and call function recursively for child

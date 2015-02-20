@@ -23,6 +23,7 @@
 #include <iterator> // for std::back_inserter
 #include <functional>
 #include <limits>
+#include <mutex>
 
 #include <unistd.h>
 #include <mpi.h>
@@ -121,7 +122,7 @@ void BarrierExec(F func) {
     if (rank == i) {
       func(rank, size);
     }
-    usleep(10000);
+    usleep(1000000);
     MPI_Barrier(MPI_COMM_WORLD);
   }
 }
@@ -189,6 +190,7 @@ class Cell: public tapas::BasicCell<TSP> {
   typedef unordered_map<KeyType, Cell*> CellHashTable;
   typedef typename TSP::BT::type BodyType;
   typedef typename TSP::BT_ATTR BodyAttrType;
+  typedef BodyIterator<Cell> BodyIter;
 
  public:
   
@@ -207,26 +209,30 @@ class Cell: public tapas::BasicCell<TSP> {
    * @param ht Hashtable.
    * @param region A Region object.
    * @param leaf_keys array of space filling keys of leaf cells
+   * @param leaf_nb array of body numbers of leaf cells
    * @param leaf_owners Process ID (i.e. rank if in MPI) that cells belong to
    * @param local_bodies Array of bodies that the local process owns.
    * @param local_body_keys Keys of local bodies
    * @param local_body_attrs Array of BodyAttrType corresponding to local_body_keys
    */
   Cell(KeyType key,
-       bool is_local, bool is_leaf,
+       bool is_local,
        index_t body_beg, index_t body_num,
        std::shared_ptr<CellHashTable> ht,
+       std::shared_ptr<std::mutex> ht_mtx,
        const Region<TSP> &region,
        VecPtr<KeyType>  leaf_keys,       // Keys of all (local and remote) leaf cells
+       VecPtr<index_t>  leaf_nb,
        VecPtr<int>      leaf_owners,     // Process IDs that own i-th leaf cell.
        VecPtr<BodyType> local_bodies,    // Bodies which this process owns
        VecPtr<KeyType>  local_body_keys, // Keys of local_bodies
        VecPtr<BodyAttrType> local_body_attrs
        ) :
       tapas::BasicCell<TSP>(CalcRegion(key, region), body_beg, body_num),
-      key_(key), is_local_(is_local), is_leaf_(is_leaf), is_dummy_(false),
-      ht_(ht),
+      key_(key), is_local_(is_local), is_dummy_(false), region_global_(region),
+      ht_(ht), ht_mtx_(ht_mtx),
       leaf_keys_(leaf_keys),
+      leaf_nb_(leaf_nb),
       leaf_owners_(leaf_owners),
       local_bodies_(local_bodies),
       local_body_keys_(local_body_keys),
@@ -235,11 +241,26 @@ class Cell: public tapas::BasicCell<TSP> {
       mpi_tag_(GetMpiTag(key))
   {
     CalcOwnerProcesses();
+
+    // Check if I'm a leaf
+    is_leaf_ = find(leaf_keys_->begin(), leaf_keys_->end(), key) != leaf_keys_->end();
+
+    // Count number of bodies of this cell (including cells that are indirectly owned bodies)
+    if (body_num == 0) {
+      index_t beg, end;
+      GetDescendantRange<TSP::Dim>(key, leaf_keys_->begin(), leaf_keys->end(), beg, end);
+      int nb = 0;
+      for (auto i=beg; i < end; i++) {
+        nb += (*leaf_nb_)[i];
+      }
+      this->nb_ = nb;
+    }
   }
 
-  Cell(std::shared_ptr<CellHashTable> ht, const Region<TSP> &r) :
+  // Create a dummy root node
+  Cell(std::shared_ptr<CellHashTable> ht, std::shared_ptr<std::mutex> ht_mtx, const Region<TSP> &r) :
       tapas::BasicCell<TSP>(r, 0, 0),
-      key_(0), is_local_(false), is_leaf_(false), is_dummy_(true), ht_(ht),
+      key_(0), is_local_(false), is_leaf_(false), is_dummy_(true), ht_(ht), ht_mtx_(ht_mtx),
       mpi_tag_(0)
   {
   }
@@ -253,7 +274,11 @@ class Cell: public tapas::BasicCell<TSP> {
   bool operator==(const T &) const { return false; }
   bool IsRoot() const;
 
-  static void Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f);
+  static void Map(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
+  static void Map(Cell<TSP> &c1, Cell<TSP> &c2,
+                  std::function<void(Cell<TSP>&, Cell<TSP>&)> f);
+  static void Map(BodyIter &b1, BodyIter &b2,
+                  std::function<void(BodyIter&, BodyIter&)> f);
 
   /**
    * @brief Returns if the cell is a leaf cell
@@ -280,7 +305,6 @@ class Cell: public tapas::BasicCell<TSP> {
    * @brief Returns idx-th subcell.
    */
   Cell &subcell(int idx) const;
-  Cell &subcell(int idx, const Region<TSP> &r) const;
 
   /**
    * @brief Returns the parent cell if it's local.
@@ -318,10 +342,13 @@ class Cell: public tapas::BasicCell<TSP> {
   bool is_local_;
   bool is_leaf_;
   bool is_dummy_; //!< A dummy cell is returned from Partition if no leaf cell is assigned to the process.
+  Region<TSP> region_global_;
   
-  std::shared_ptr<CellHashTable> ht_; //!< Hash table of KeyType -> Cell* (only local cells)
+  std::shared_ptr<CellHashTable> ht_; //!< Hash table of KeyType -> Cell*
+  std::shared_ptr<std::mutex>    ht_mtx_; //!< mutex to manipulate ht_
 
   VecPtr<KeyType>  leaf_keys_;
+  VecPtr<index_t>  leaf_nb_;
   VecPtr<int>      leaf_owners_;
   VecPtr<BodyType> local_bodies_;
   VecPtr<KeyType>  local_body_keys_;
@@ -334,16 +361,18 @@ class Cell: public tapas::BasicCell<TSP> {
   CellHashTable *ht() { return ht_; }
   typename TSP::BT_ATTR &body_attr(index_t idx) const;
   virtual void make_pure_virtual() const {}
+  void RegisterCell(Cell<TSP> *c);
 
   static std::vector<int> CalcOwnerProcsOfCell(KeyType key,
                                                const std::vector<KeyType> &leaf_keys,
                                                const std::vector<int> &leaf_owners);
   void CalcOwnerProcesses();
   static Region<TSP> CalcRegion(KeyType, const Region<TSP>& r);
-
+  
   // Map-related stuff
   void RecvCell(int pid);
-  void SendCell(const std::vector<int> &pids);
+  void SendCell(const std::vector<int> pids);
+  void ExchangeCell(Cell<TSP> &remote_cell);
 
   /**
    *
@@ -360,6 +389,30 @@ class Cell: public tapas::BasicCell<TSP> {
     for (int i = 0; i < sizeof(KeyType); i++) {
       val = (val + (key & 0xFF)) * 37 % max_tag;
       key >>= 8;
+    }
+
+    return val;
+  }
+  
+  /**
+   *
+   */
+  static int GetMpiTag(KeyType k1, KeyType k2) {
+    // int max_tag = std::numeric_limits<int>::max();
+    void *v;
+    int flag;
+    MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &v, &flag);
+    assert(flag);
+
+    if (k1 > k2) std::swap(k1, k2);
+
+    int max_tag = *(int*)v;
+    int val = 1;
+    for (int i = 0; i < sizeof(KeyType); i++) {
+      val = (val + (k1 & 0xFF)) * 37 % max_tag;
+      val = (val + (k2 & 0xFF)) * 37 % max_tag;
+      k1 >>= 8;
+      k2 >>= 8;
     }
 
     return val;
@@ -595,6 +648,14 @@ void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
   int rank = -1;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+  if (SimplifyKey(cell.key()) == "0461...7906") {
+    Stderr e("debug");
+    e.out() << cell.key() << " Map() is called." << std::endl;
+    e.out() << cell.key() << " time= " << (long)(MPI_Wtime()*1000)%100000/1000.0 << std::endl;
+    e.out() << cell.key() << " object address = " << &cell << std::endl;
+    e.out() << cell.key() << " :           M = " << cell.attr().M << std::endl;
+  }
+  
   if (cell.is_local_) {
     f(cell);
 
@@ -626,22 +687,16 @@ void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
 
     auto peers = SendRecvMapping(senders, recvers, rank);
     assert(peers.size() == 1);
-    if (peers[0] < 0) {
-      std::cerr << "peers = [";
-      for (auto &p : peers) std::cerr << p << ", ";
-      std::cerr << "]" << std::endl;
-
-      std::cerr << "senders = [";
-      for (auto &s : senders) std::cerr << s << ", ";
-      std::cerr << "]" << std::endl;
-      
-      std::cerr << "receivers = [";
-      for (auto &r : recvers) std::cerr << r << ", ";
-      std::cerr << "]" << std::endl;
-      
-      std::cerr << "I'm " << rank << std::endl;
-    }
+    
     cell.RecvCell(peers[0]); // the sender finishes applying f first, then send the cell info to this process.
+    usleep(100000);
+    if (SimplifyKey(cell.key()) == "0461...7906") {
+      Stderr e("debug");
+      e.out() << cell.key() << " RecvCell finished." << std::endl;
+      e.out() << cell.key() << " time= " << (long)(MPI_Wtime()*1000)%100000/1000.0 << std::endl;
+      e.out() << cell.key() << " object address = " << &cell << std::endl;
+      e.out() << cell.key() << " :           M = " << cell.attr().M << std::endl;
+    }
   }
 }
 
@@ -655,19 +710,209 @@ struct CellInfoBinder {
   int check;
 };
 
+/**
+ * @brief Exchange cell information between the local process and a remote process
+ * 
+ * Exchange *this cell, which is local, and the remote cell.
+ */
+template<class TSP>
+void Cell<TSP>::ExchangeCell(Cell<TSP> &remote) {
+  assert(this->IsLocal() && !remote.IsLocal());
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  
+  Stderr e("exchangecell");
+
+  std::vector<int> local_owners = this->owners();
+  std::vector<int> remote_owners = remote.owners();
+  
+  // this process sends *this cell to some remote processes
+  std::vector<int> send_to = SendRecvMapping(local_owners, remote_owners, rank);
+  std::vector<int> recv_from = SendRecvMapping(remote_owners, local_owners, rank);
+
+  if (SimplifyKey(this->key()) == "0345...0929") {
+    e.out() << "*** I have 0345...0929" << std::endl;
+  }
+  
+  int mpi_tag = Cell::GetMpiTag(this->key(), remote.key());
+
+  e.out() << "Exchanging cells " << SimplifyKey(this->key()) << " && " << SimplifyKey(remote.key()) << std::endl;
+  e.out() << SimplifyKey(this->key()) << "'s owners = ";
+  for (auto &&o : local_owners) e.out() << o << " ";
+  e.out() << " (" << this->owners().size() << " elements)";
+  e.out() << std::endl;
+  
+  e.out() << SimplifyKey(remote.key()) << "'s owners = ";
+  for (auto &&o : remote_owners) e.out() << o << " ";
+  e.out() << std::endl;
+  
+  e.out() << "tag = " << mpi_tag << std::endl;
+  e.out() << "send " << SimplifyKey(this->key()) << " to = ";
+  for (auto && i: send_to) e.out() << i << " ";
+  e.out() << std::endl;
+  
+  e.out() << "recv " << SimplifyKey(remote.key()) << " from = ";
+  for (auto && i: recv_from) e.out() << i << " ";
+  e.out() << std::endl;
+    
+  CellInfoBinder<TSP> send_data = {
+    key_,
+    this->attr(),
+    this->nb(),
+    this->IsLeaf(),
+    rand() // check
+  };
+  
+  std::vector<MPI_Status>  stats(send_to.size());
+  std::vector<MPI_Request> reqs(send_to.size());
+
+  for (int i = 0; i < send_to.size(); i++) {
+    // Send the local cell to the remote node(s) asynchornously
+    Stderr stderr("send");
+    stderr.out() << "SendCell: cell=" << SimplifyKey(key_) << " "
+                 << "I'm=" << rank << " "
+                 << "dst=" << send_to[i] << " "
+                 << "IsLeaf=" << send_data.is_leaf << " " 
+                 << "check=" << send_data.check << " "
+                 << "tag=" << mpi_tag_ << " "
+                 << std::endl;
+    MPI_Isend(&send_data, sizeof(send_data), MPI_BYTE, send_to[i], mpi_tag, MPI_COMM_WORLD, &reqs[i]);
+  }
+
+  e.out() << "Isend done" << std::endl;
+
+  // Receive data from one of the owners fo the remote cell
+  CellInfoBinder<TSP> recv_data;
+  MPI_Status recv_stat;
+  int ret = MPI_Recv(&recv_data, sizeof(recv_data), MPI_BYTE, recv_from[0], mpi_tag, MPI_COMM_WORLD, &recv_stat);
+  assert(ret == MPI_SUCCESS);
+  if (recv_data.key != remote.key()) {
+    std::cerr << "tag = " << mpi_tag << std::endl;
+    assert(recv_data.key == remote.key());
+  }
+
+  remote.attr_    = recv_data.cell_attr;
+  remote.nb_      = recv_data.num_bodies;
+  remote.is_leaf_ = recv_data.is_leaf;
+
+  e.out() << "Recv done." << std::endl;
+
+  MPI_Waitall(reqs.size(), reqs.data(), stats.data());
+  e.out() << "Waitall done." << std::endl;
+  e.out() << std::endl;
+}
+
+/**
+ * 2-parameter Map function
+ */
+template<class TSP>
+void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
+                    std::function<void(Cell<TSP>&, Cell<TSP>&)> f) {
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  {
+    Stderr e("map2");
+    e.out() << "Map: "
+            << SimplifyKey(c1.key()) << ", "
+            << SimplifyKey(c2.key()) << " : "
+            << (c1.IsLocal() ? "local" : "remote") << ","
+            << (c2.IsLocal() ? "local" : "remote")
+            << std::endl;
+    ;
+  }
+
+  if (!c1.IsLocal() && !c2.IsLocal()) return;
+
+  mk_task_group;
+
+  if (c1.IsLocal()) {
+    // Send cell information to necessary processes
+    // recvers : processes that has c2 but not c1, and will require c1 information
+    // senders : processes that have c1 locally and can send c1 information to other processes.
+    // send_to : Assignment of the local process 
+    std::vector<int> recvers = SetDiff(c2.owners(), c1.owners());
+    std::vector<int> senders = c1.owners();
+    std::vector<int> send_to = SendRecvMapping(senders, recvers, rank);
+    {
+      Stderr e("map2");
+      e.out() << "c1 [" << SimplifyKey(c1.key()) << "] is local. (I'm " << rank << ")" << std::endl;
+      e.out() << "c1.owners() = " << "[" << join(" ", c1.owners()) << "]" << std::endl;
+      e.out() << "c2.owners() = " << "[" << join(" ", c2.owners()) << "]" << std::endl;
+      e.out() << "recvers = " << "[" << join(" ", recvers) << "]" << std::endl;
+      e.out() << "senders = " << "[" << join(" ", senders) << "]" << std::endl;
+      e.out() << "send_to = " << "[" << join(" ", send_to) << "]" << std::endl;
+      e.out() << std::endl;
+    }
+    auto task = [&c1, send_to]() { c1.SendCell(send_to); };
+    create_taskc(task);
+  }
+  
+  if (c2.IsLocal()) {
+    std::vector<int> recvers = SetDiff(c1.owners(), c2.owners());
+    std::vector<int> senders = c2.owners();
+    std::vector<int> send_to = SendRecvMapping(senders, recvers, rank);
+    {
+      Stderr e("map2");
+      e.out() << "c2 [" << SimplifyKey(c2.key()) << "] is local. (I'm " << rank << ")" << std::endl;
+      e.out() << "c2.owners() = " << "[" << join(" ", c2.owners()) << "]" << std::endl;
+      e.out() << "c1.owners() = " << "[" << join(" ", c1.owners()) << "]" << std::endl;
+      e.out() << "recvers = "     << "[" << join(" ", recvers) << "]" << std::endl;
+      e.out() << "senders = "     << "[" << join(" ", senders) << "]" << std::endl;
+      e.out() << "send_to = "     << "[" << join(" ", send_to) << "]" << std::endl;
+      e.out() << std::endl;
+    }
+    auto task = [&c2, send_to]() { c2.SendCell(send_to); };
+    create_taskc(task);
+  }
+  
+  if (!c1.IsLocal()) {
+    std::vector<int> recvers = SetDiff(c2.owners(), c1.owners());
+    std::vector<int> senders = c1.owners();
+    std::vector<int> recv_from = SendRecvMapping(senders, recvers, rank);
+    Stderr e("map2");
+    e.out() << "Requesting " << SimplifyKey(c1.key()) << " to " << recv_from[0] << std::endl;
+      
+    c1.RecvCell(recv_from[0]);
+  }
+  
+  if (!c2.IsLocal()) {
+    std::vector<int> recvers = SetDiff(c1.owners(), c2.owners());
+    std::vector<int> senders = c2.owners();
+    std::vector<int> recv_from = SendRecvMapping(senders, recvers, rank);
+    
+    Stderr e("map2");
+    e.out() << "Requesting " << SimplifyKey(c2.key()) << " to " << recv_from[0] << std::endl;
+    
+    c2.RecvCell(recv_from[0]);
+  }
+
+  wait_tasks;
+
+  {
+    Stderr e("map2");
+    e.out() << "Map: "
+            << SimplifyKey(c1.key()) << ", "
+            << SimplifyKey(c2.key()) << " : "
+            << "done." << std::endl;
+  }
+  
+  f(c1, c2);
+}
+
 template <class TSP>
 void Cell<TSP>::RecvCell(int pid) {
   // Send a recv request Cell/BodyAttr info to the process<pid>.
   //   Cell attributes
   //   Bodies (if the cell is a leaf)
   //   Body Attributes (if the cell is a leaf)
-
+  
   {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     Stderr stderr("recv");
     stderr.out() << "RecvCell: cell=" << SimplifyKey(key_) << " "
-                 << "I'm" << rank << " "
+                 << "me=" << rank << " "
                  << "src=" << pid << " "
                  << "tag=" << std::setw(10) << mpi_tag_
                  << std::endl;
@@ -691,21 +936,25 @@ void Cell<TSP>::RecvCell(int pid) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     Stderr stderr("recv");
     stderr.out() << "RecvCell: cell=" << SimplifyKey(key_) << " "
-                 << "I'm" << rank << " "
+                 << "me=" << rank << " "
                  << "src=" << pid << " "
                  << "tag=" << std::setw(10) << mpi_tag_ << " "
                  << "IsLeaf=" << binder.is_leaf << " "
                  << "check=" << binder.check << " "
-                 << "done" << std::endl;
+                 << "done "
+                 << "R=" << this->attr().R << " "
+                 << std::endl;
   }
 }
 
 template <class TSP>
-void Cell<TSP>::SendCell(const std::vector<int> &pids) {
-  if (pids.size() == 0) {
+void Cell<TSP>::SendCell(std::vector<int> remote_pids) {
+  // This function does not take a reference because may be called in an independent thread (task)
+  // and the original vector might be destroyed.
+  if (remote_pids.size() == 0) {
     return;
   }
-
+  
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
@@ -714,34 +963,34 @@ void Cell<TSP>::SendCell(const std::vector<int> &pids) {
     this->attr(),
     this->nb(),
     this->IsLeaf(),
-    static_cast<int>(this->key() % 10000)
+    rand()
   };
-  MPI_Status *stats = new MPI_Status[pids.size()];
-  MPI_Request *reqs = new MPI_Request[pids.size()];
-
-  for (int i = 0; i < pids.size(); i++) {
+  MPI_Status *stats = new MPI_Status[remote_pids.size()];
+  MPI_Request *reqs = new MPI_Request[remote_pids.size()];
+  
+  for (int i = 0; i < remote_pids.size(); i++) {
     {
       Stderr stderr("send");
       stderr.out() << "SendCell: cell=" << SimplifyKey(key_) << " "
                    << "I'm=" << rank << " "
-                   << "dst=" << pids[i] << " "
+                   << "dst=" << remote_pids[i] << " "
                    << "IsLeaf=" << binder.is_leaf << " " 
-                   << "tag=" << mpi_tag_ << " "
                    << "check=" << binder.check << " "
+                   << "tag=" << mpi_tag_ << " "
                    << std::endl;
     }
-    MPI_Isend(&binder, sizeof(binder), MPI_BYTE, pids[i], mpi_tag_, MPI_COMM_WORLD, &reqs[i]);
+    MPI_Isend(&binder, sizeof(binder), MPI_BYTE, remote_pids[i], mpi_tag_, MPI_COMM_WORLD, &reqs[i]);
   }
 
-  MPI_Waitall(pids.size(), reqs, stats);
+  MPI_Waitall(remote_pids.size(), reqs, stats);
   delete[] stats;
   delete[] reqs;
   
-  for (int i = 0; i < pids.size(); i++) {
+  for (int i = 0; i < remote_pids.size(); i++) {
     Stderr stderr("send");
     stderr.out() << "SendCell: cell=" << SimplifyKey(key_) << " "
                  << "I'm=" << rank << " "
-                 << "dst=" << pids[i] << " "
+                 << "dst=" << remote_pids[i] << " "
                  << "IsLeaf=" << binder.is_leaf << " " 
                  << "check=" << binder.check << " "
                  << "tag=" << mpi_tag_ << " "
@@ -782,31 +1031,24 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) const {
     TAPAS_DIE();
   }
 
-  KeyType child_key = MortonKeyChild<TSP::Dim>(key_, idx);
-  Cell *c = Lookup(child_key);
 
-  if (c == nullptr) {
-    assert(!"The subcell requested is a remote cell, but not yet created.");
-  }
-
-  return *Lookup(child_key);
-}
-
-template <class TSP>
-Cell<TSP> &Cell<TSP>::subcell(int idx, const Region<TSP> &r) const {
   KeyType child_key = MortonKeyChild<TSP::Dim>(key_, idx);
   Cell *c = Lookup(child_key);
   
   if (c == nullptr) {
-    // This means c is a remote cell (owned by other processes)
-    // and this is the first access to the remote cell.
-    bool is_leaf = find(leaf_keys_->begin(), leaf_keys_->end(), child_key) == leaf_keys_->end();
-    c = new Cell(child_key, false, is_leaf, 0, 0, ht_, r,
-                 leaf_keys_, leaf_owners_, local_bodies_, local_body_keys_, local_body_attrs_);
-    (*ht_)[child_key] = c;
+    std::lock_guard<std::mutex> lock(*ht_mtx_);
+    c = Lookup(child_key);
+    if (c == nullptr) {
+      // leaf if if key is contained in leaf_keys_
+
+      c = new Cell(child_key, false, 0, 0, ht_, ht_mtx_, region_global_,
+                   leaf_keys_, leaf_nb_, leaf_owners_,
+                   local_bodies_, local_body_keys_, local_body_attrs_);
+      (*ht_)[child_key] = c;
+    }
   }
   
-  return *Lookup(child_key);
+  return *c;
 }
 
 template <class TSP>
@@ -917,7 +1159,7 @@ std::vector<KeyType> GetChildren(KeyType parent) {
  */
 template<int DIM>
 std::vector<KeyType> SplitLargeCellsOnce(const std::vector<KeyType> &cell_keys,
-                                         const std::vector<long> &nb,
+                                         const std::vector<index_t> &nb,
                                          int max_nb) {
   std::vector<KeyType> ret; // new
 
@@ -947,7 +1189,7 @@ std::vector<KeyType> SplitLargeCellsOnce(const std::vector<KeyType> &cell_keys,
  * @return Array of process numbers
  * @todo inline is required here to avoid multiple definitions
  */
-inline std::vector<int> SplitKeysSimple(const std::vector<long> &nb, int proc_size) {
+inline std::vector<int> SplitKeysSimple(const std::vector<index_t> &nb, int proc_size) {
   index_t total_nb = std::accumulate(nb.begin(), nb.end(), 0); // total number of bodies
   index_t guide = total_nb / proc_size;
 
@@ -981,11 +1223,17 @@ void Cell<TSP>::CalcOwnerProcesses() {
   this->owners_ = CalcOwnerProcsOfCell(key_, *leaf_keys_, *leaf_owners_);
 }
 
+template<class TSP>
+void Cell<TSP>::RegisterCell(Cell<TSP> *c) {
+  std::lock_guard<std::mutex> lock(*ht_mtx_);
+  (*ht_)[c->key()] = c;
+}
+
 template <class TSP>
 Region<TSP> Cell<TSP>::CalcRegion(KeyType key, const Region<TSP> &region) {
   const int kDim = TSP::Dim;
   const int kMask = (1 << TSP::Dim) - 1;
-
+  
   Stderr err("center");
 
   auto r = region;
@@ -1020,6 +1268,20 @@ std::vector<int> Cell<TSP>::CalcOwnerProcsOfCell(KeyType key,
   index_t owner_end = std::lower_bound(beg, end, key_next) - beg;
 
   GetDescendantRange<TSP::Dim>(key, beg, end, owner_beg, owner_end);
+
+  if (SimplifyKey(key) == "0230...3954") {
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    std::stringstream ss;
+    ss << rank << " " << SimplifyKey(key) << " "
+       << "owner_beg = " << owner_beg << ","
+       << "owner_beg = " << owner_end << " ";
+    for (auto i=owner_beg; i < owner_end; i++) {
+      ss << leaf_owners[i] << " ";
+    }
+    ss << "  leaf_keys.size() = " << leaf_keys.size();
+    std::cerr << ss.str() << std::endl;
+  }
 
   // Since each process builds a local tree in a bottom-up way,
   // if a process P ownes any of leaf cells uncer the cell, P owns the cell.
@@ -1072,8 +1334,8 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     });
 
   std::vector<KeyType> leaf_keys;   // Morton keys of leaf cells (global)
-  std::vector<long> leaf_nb_local;  // Number of local bodies in leaf cell[i] (all global cells)
-  std::vector<long> leaf_nb_global; // Number of global bodies in leaf cell[i] (all global cells)
+  std::vector<index_t> leaf_nb_local;  // Number of local bodies in leaf cell[i] (all global cells)
+  std::vector<index_t> leaf_nb_global; // Number of global bodies in leaf cell[i] (all global cells)
 
   // MPI rank and size
   // TOOD: to be replaced by an appropriate abstraction of communication component.
@@ -1246,6 +1508,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
   // CellHashTable (which is std::unordered_map<KeyType, CellType*>
   auto ht = std::make_shared<typename CellType::CellHashTable>();
+  auto ht_mtx = std::make_shared<std::mutex>();
 
   // construct a local tree from cells which belong to this process.
   auto leaf_beg = std::lower_bound(std::begin(leaf_owners), std::end(leaf_owners), rank) - std::begin(leaf_owners);
@@ -1254,6 +1517,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   // heap copy of vectors (shared by Cells)
   auto leaf_owners2     = std::make_shared<std::vector<int>>(leaf_owners);
   auto leaf_keys2       = std::make_shared<std::vector<KeyType>>(leaf_keys);
+  auto leaf_nb_global2  = std::make_shared<std::vector<index_t>>(leaf_nb_global);
   auto local_body_keys  = std::make_shared<std::vector<KeyType>>(recv_keys);
   auto local_body_attrs = std::make_shared<std::vector<BodyAttrType>>(num_bodies_recv);
 
@@ -1272,12 +1536,12 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     // Create a leaf cell
     CellType *c = new CellType(k,               // key
                                true,            // is_local
-                               true,            // is_leaf
                                bbeg,            // body index
                                bend - bbeg,     // #bodies
-                               ht,              // CellHashTable
+                               ht, ht_mtx,      // CellHashTable & its mutex
                                r,               // Region region
                                leaf_keys2,
+                               leaf_nb_global2,
                                leaf_owners2,
                                recv_bodies,     // local bodies
                                local_body_keys, // local body keys
@@ -1311,11 +1575,11 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
         //       This is because bodies are help only by a process that owns the corresponding leaf cells.
         CellType *c = new CellType(k,                 // key
                                    true,              // is_local
-                                   false,             // is_leaf
                                    0, nb,             // start index of bodies and numBodies. read the note above
-                                   ht,                // CellHashTable
+                                   ht, ht_mtx,        // CellHashTable
                                    r,                 // Region region
                                    leaf_keys2,
+                                   leaf_nb_global2,
                                    leaf_owners2,
                                    recv_bodies,       // local bodies
                                    local_body_keys,   // local body keys
@@ -1330,15 +1594,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       if (dp == 0) break; // stop if k is the root cell;
     }
   }
-  // Created all local cells
-
-  // Create remote cells (proxy cells)
-  for (auto &&c : interior_cells) {
-    int nchld = c->nsubcells();
-    for (int i = 0; i < nchld; i++) {
-      c->subcell(i, r);
-    }
-  }
+  // we have created all local cells
 
   // Debug
   // Dump all (local) cells to a file
@@ -1351,26 +1607,31 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
         e.out() << SimplifyKey(k) << " "
                 << "d=" << MortonKeyGetDepth(k) << " "
                 << "leaf=" << c->IsLeaf() << " "
-                << "owner=" << std::setw(2) << std::right << rank << " "
+                << "owners=" << std::setw(2) << std::right << join(",", c->owners()) << " "
                 << "nb=" << std::setw(3) << c->nb() << " "
                 << "center=[" << c->center() << "] "
-                << "next_key=" << SimplifyKey(CalcMortonKeyNext<Dim>(k))
+                << "next_key=" << SimplifyKey(CalcMortonKeyNext<Dim>(k)) << " "
+                << "parent=" << SimplifyKey(MortonKeyParent<Dim>(k)) << " "
                 << std::endl;
         // Print bodies which belong to Cell c
-        int body_beg, body_end;
-        FindRangeByKey<TSP>(recv_keys, k, body_beg, body_end);
-        for (int i = body_beg; i < body_end; i++) {
-          e.out() << "\t\t\t| "
-                  << SimplifyKey(recv_keys[i]) << ": "
-                  << (*recv_bodies)[i].X
-                  << std::endl;
+        if (c->IsLeaf()) {
+          index_t body_beg, body_end;
+          FindRangeByKey<TSP>(recv_keys, k, body_beg, body_end);
+          for (int i = body_beg; i < body_end; i++) {
+            e.out() << "\t\t\t| "
+                    << SimplifyKey(recv_keys[i]) << ": "
+                    << (*recv_bodies)[i].X
+                    << std::endl;
+          }
         }
       }
     }
   }
-
+  
   if ((*ht)[0] == nullptr) {
-    (*ht)[0] = new CellType(ht, r);
+    // Create a dummy cell if ht[0] is nullptr, which means the local process
+    // was assigned no leaf cell (but need to return a root cell).
+    (*ht)[0] = new CellType(ht, ht_mtx, r);
   }
   
   // return the root cell (root key is always 0)

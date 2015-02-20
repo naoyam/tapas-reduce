@@ -14,6 +14,7 @@
 #include <sys/syscall.h> // for gettid()
 #include <sys/types.h>   // for gettid()
 namespace _local {
+#if 0
 class Stderr {
   std::ostream *fs_;
 
@@ -28,6 +29,8 @@ class Stderr {
     int tid=0;
 #endif
     std::stringstream ss;
+    std::cerr << "Stderr is created with label=" << label << std::endl;
+
     ss << "stderr"
        << "." << rank
        << "." << tid
@@ -41,12 +44,13 @@ class Stderr {
     delete fs_;
     fs_ = nullptr;
   }
-
+  
   std::ostream &out() {
     assert(fs_ != nullptr);
     return *fs_;
   }
 };
+#endif
 
 }
 

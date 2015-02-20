@@ -161,22 +161,22 @@ TEST(TestMap, TestSetDiff) {
   }
 
   {
-    std::vector<int> a {};
-    std::vector<int> b {1,3};
+    std::vector<int> a   {};
+    std::vector<int> b   {1,3};
     std::vector<int> ans {};
     ASSERT_TRUE(ans == SetDiff(a,b));
   }
 
   {
-    std::vector<int> a {1,2,3};
-    std::vector<int> b {1,3,4,5};
+    std::vector<int> a   {1,2,3};
+    std::vector<int> b   {1,3,4,5};
     std::vector<int> ans {2};
     ASSERT_TRUE(ans == SetDiff(a,b));
   }
   
   {
-    std::vector<int> a {1,2,3};
-    std::vector<int> b {};
+    std::vector<int> a   {1,2,3};
+    std::vector<int> b   {};
     std::vector<int> ans {1,2,3};
     ASSERT_TRUE(ans == SetDiff(a,b));
   }
