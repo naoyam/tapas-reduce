@@ -15,6 +15,14 @@ if(EXAFMM_ENABLE_SIMD)
   endif()
 endif()
 
+
+#------------------------------------------------------------------
+# Ad-hoc, env dependnet flags & libraries
+#------------------------------------------------------------------
+site_name(HOST)
+if (HOST MATCHES ^t2[ab])
+endif()
+
 #------------------------------------------------------------------
 # Original ExaFMM, w/o multithreading
 #------------------------------------------------------------------
@@ -43,7 +51,7 @@ if (EXAFMM_ENABLE_MT)
 
   set_property(TARGET serial_mt APPEND PROPERTY INCLUDE_DIRECTORIES ${MYTH_INCLUDE_DIRS})
   set_property(TARGET serial_mt PROPERTY COMPILE_FLAGS "-DMTHREAD")
-  target_link_libraries(serial_mt ${MYTH_LIBRARIES})
+  target_link_libraries(serial_mt ${MYTH_LIBRARIES} ${CUDA_LIBRARIES})
 endif()
 
 #------------------------------------------------------------------
@@ -75,11 +83,10 @@ if (EXAFMM_ENABLE_MPI)
   set_property(TARGET parallel APPEND PROPERTY COMPILE_FLAGS       "-DTO_SERIAL")
   set_property(TARGET parallel APPEND PROPERTY INCLUDE_DIRECTORIES "${MPI_CXX_INCLUDE_PATH}")
   set_property(TARGET parallel APPEND PROPERTY LINK_FLAGS          "${MPI_CXX_LINK_FLAGS}")
-  #set_property(TARGET parallel APPEND PROPERTY LINK_LIBRARIES      "${MPI_CXX_LIBRARIES}")
 
   target_link_libraries(parallel ${MPI_CXX_LIBRARIES})
+  #target_link_libraries(parallel ${MPI_CXX_LIBRARIES} ${CUDA_LIBRARIES} -lcuda -lpciaccess)
 endif()
-
 
 #------------------------------------------------------------------
 # Original ExaFMM with multithreading (w/ MPI&SIMD)
@@ -133,21 +140,21 @@ endif()
 #------------------------------------------------------------------
 # Tapas implementation of ExaFMM with MPI
 #------------------------------------------------------------------
-if(EXAFMM_ENABLE_MPI)
-  add_executable(parallel_tapas
-    serial_tapas.cxx
-    ${EXAFMM_EQUATION}${EXAFMM_BASIS}${EXAFMM_DEVICE}_tapas.cxx
-    ${EXAFMM_EQUATION}P2P${EXAFMM_DEVICE}_tapas.cxx
-    ../kernels/${EXAFMM_EQUATION}${EXAFMM_BASIS}${EXAFMM_DEVICE}.cxx
-    ../kernels/${EXAFMM_EQUATION}P2P${EXAFMM_DEVICE}.cxx
-    )
-  set_property(TARGET parallel_tapas APPEND_STRING PROPERTY COMPILE_FLAGS  "${MPI_CXX_COMPILE_FLAGS} -DTO_SERIAL ${SIMD_FLAG}")
-  set_property(TARGET parallel_tapas APPEND PROPERTY INCLUDE_DIRECTORIES "${MPI_CXX_INCLUDE_PATH}")
-  set_property(TARGET parallel_tapas APPEND PROPERTY LINK_FLAGS          "${MPI_CXX_LINK_FLAGS}")
+# if(EXAFMM_ENABLE_MPI)
+#   add_executable(parallel_tapas
+#     serial_tapas.cxx
+#     ${EXAFMM_EQUATION}${EXAFMM_BASIS}${EXAFMM_DEVICE}_tapas.cxx
+#     ${EXAFMM_EQUATION}P2P${EXAFMM_DEVICE}_tapas.cxx
+#     ../kernels/${EXAFMM_EQUATION}${EXAFMM_BASIS}${EXAFMM_DEVICE}.cxx
+#     ../kernels/${EXAFMM_EQUATION}P2P${EXAFMM_DEVICE}.cxx
+#     )
+#   set_property(TARGET parallel_tapas APPEND_STRING PROPERTY COMPILE_FLAGS  "${MPI_CXX_COMPILE_FLAGS} -DTO_SERIAL ${SIMD_FLAG}")
+#   set_property(TARGET parallel_tapas APPEND PROPERTY INCLUDE_DIRECTORIES "${MPI_CXX_INCLUDE_PATH}")
+#   set_property(TARGET parallel_tapas APPEND PROPERTY LINK_FLAGS          "${MPI_CXX_LINK_FLAGS}")
   
-  set_property(TARGET parallel_tapas APPEND_STRING PROPERTY COMPILE_FLAGS " -DEXAFMM_TAPAS_MPI")
-  target_link_libraries(parallel_tapas ${MPI_CXX_LIBRARIES})
-endif()
+#   set_property(TARGET parallel_tapas APPEND_STRING PROPERTY COMPILE_FLAGS " -DEXAFMM_TAPAS_MPI")
+#   target_link_libraries(parallel_tapas ${MPI_CXX_LIBRARIES})
+# endif()
 
 #------------------------------------------------------------------
 # Tapas implementation of ExaFMM with MPI & Mutlithreading
@@ -160,15 +167,16 @@ if(EXAFMM_ENABLE_MPI AND EXAFMM_ENABLE_MT)
     ../kernels/${EXAFMM_EQUATION}${EXAFMM_BASIS}${EXAFMM_DEVICE}.cxx
     ../kernels/${EXAFMM_EQUATION}P2P${EXAFMM_DEVICE}.cxx
     )
+  set_property(TARGET parallel_tapas_mt APPEND_STRING PROPERTY COMPILE_FLAGS " -DTO_MTHREAD_NATIVE")
   set_property(TARGET parallel_tapas_mt APPEND_STRING PROPERTY COMPILE_FLAGS " ${MPI_CXX_COMPILE_FLAGS}")
   set_property(TARGET parallel_tapas_mt APPEND PROPERTY INCLUDE_DIRECTORIES "${MPI_CXX_INCLUDE_PATH}")
   set_property(TARGET parallel_tapas_mt APPEND PROPERTY LINK_FLAGS          "${MPI_CXX_LINK_FLAGS}")
-  
+
+  target_link_libraries(parallel_tapas_mt ${MYTH_LIBRARIES})
   target_link_libraries(parallel_tapas_mt ${MPI_CXX_LIBRARIES})
-  
+
   set_property(TARGET parallel_tapas_mt APPEND_STRING PROPERTY COMPILE_FLAGS " -DMTHREAD ${SIMD_FLAG}")
   set_property(TARGET parallel_tapas_mt APPEND PROPERTY INCLUDE_DIRECTORIES ${MYTH_INCLUDE_DIRS})
-  target_link_libraries(parallel_tapas_mt ${MYTH_LIBRARIES})
   
   set_property(TARGET parallel_tapas_mt APPEND_STRING PROPERTY COMPILE_FLAGS " -DEXAFMM_TAPAS_MPI")
 endif()

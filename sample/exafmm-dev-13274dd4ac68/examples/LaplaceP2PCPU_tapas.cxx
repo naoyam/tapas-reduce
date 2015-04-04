@@ -3,7 +3,6 @@
 const real_t EPS2 = 0.0;                                        //!< Softening parameter (squared)
 
 void tapas_kernel::P2P(Tapas::BodyIterator &Bi, Tapas::BodyIterator &Bj, vec3 Xperiodic) {
-  std::cerr << ".";
   kreal_t pot = 0; 
   kreal_t ax = 0;
   kreal_t ay = 0;
@@ -31,3 +30,4 @@ void tapas_kernel::P2P(Tapas::BodyIterator &Bi, Tapas::BodyIterator &Bj, vec3 Xp
     }
   }
 }
+

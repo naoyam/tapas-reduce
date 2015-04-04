@@ -13,7 +13,7 @@ class BodyIterator {
  public:
   typedef Cell CellType;
   typedef BodyIterator value_type;
-  typedef typename CellType::body_attr_type attr_type;  
+  typedef typename CellType::BodyAttrType attr_type;  
   
   int index() const { return idx_; } // for debugging
   BodyIterator(const CellType &c)

@@ -129,7 +129,7 @@ void BarrierExec(F func) {
 
 template<class T1, class T2>
 static void Dump(const T1 &bodies, const T2 &keys, std::ostream & strm) {
-  for (int i = 0; i < bodies.size(); i++) {
+  for (size_t i = 0; i < bodies.size(); i++) {
     auto &b = bodies[i];
     strm << std::scientific << std::showpos << b.X[0] << " "
          << std::scientific << std::showpos << b.X[1] << " "
@@ -188,6 +188,7 @@ class Cell: public tapas::BasicCell<TSP> {
   
  public:
   typedef unordered_map<KeyType, Cell*> CellHashTable;
+  typedef typename TSP::ATTR attr_type;
   typedef typename TSP::BT::type BodyType;
   typedef typename TSP::BT_ATTR BodyAttrType;
   typedef BodyIterator<Cell> BodyIter;
@@ -265,8 +266,6 @@ class Cell: public tapas::BasicCell<TSP> {
   {
   }
   
-  typedef typename TSP::ATTR attr_type;
-  typedef typename TSP::BT_ATTR body_attr_type;
   KeyType key() const { return key_; }
   
   bool operator==(const Cell &c) const;
@@ -279,7 +278,12 @@ class Cell: public tapas::BasicCell<TSP> {
                   std::function<void(Cell<TSP>&, Cell<TSP>&)> f);
   static void Map(BodyIter &b1, BodyIter &b2,
                   std::function<void(BodyIter&, BodyIter&)> f);
-
+  
+  static void Map(BodyType &b1, std::function<void(BodyType &b1)> f);
+  
+  static void Map(BodyType &b1, BodyType &b2,
+                  std::function<void(BodyType &b1, BodyType &b2)> f);
+  
   /**
    * @brief Returns if the cell is a leaf cell
    */
@@ -386,7 +390,7 @@ class Cell: public tapas::BasicCell<TSP> {
 
     int max_tag = *(int*)v;
     int val = 1;
-    for (int i = 0; i < sizeof(KeyType); i++) {
+    for (size_t i = 0; i < sizeof(KeyType); i++) {
       val = (val + (key & 0xFF)) * 37 % max_tag;
       key >>= 8;
     }
@@ -802,8 +806,21 @@ void Cell<TSP>::ExchangeCell(Cell<TSP> &remote) {
   e.out() << std::endl;
 }
 
+template<class TSP>
+void Cell<TSP>::Map(Cell<TSP>::BodyType &b1,
+                    Cell<TSP>::BodyType &b2,
+                    std::function<void(Cell<TSP>::BodyType &b1, Cell<TSP>::BodyType &b2)> f) {
+  assert(0);
+}
+
+template<class TSP>
+void Cell<TSP>::Map(Cell<TSP>::BodyType &b1,
+                    std::function<void(Cell<TSP>::BodyType &b1)> f) {
+  assert(0);
+}
+
 /**
- * 2-parameter Map function
+ * 2-parameter Map function over cells (apply user function to products of cells)
  */
 template<class TSP>
 void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
@@ -902,7 +919,7 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
 
 template <class TSP>
 void Cell<TSP>::RecvCell(int pid) {
-  // Send a recv request Cell/BodyAttr info to the process<pid>.
+  // Receive Cell/BodyAttr info from the process(pid).
   //   Cell attributes
   //   Bodies (if the cell is a leaf)
   //   Body Attributes (if the cell is a leaf)
@@ -920,82 +937,125 @@ void Cell<TSP>::RecvCell(int pid) {
   
   // First, request CellAttr data. On sender side (in SendCell)
   // note that this MPI_recv() call is handled by MPI_Isend in SendCell() in proc pid.
-  CellInfoBinder<TSP> binder;
+
+  // First, call MPI_Probe to get the message size.
   MPI_Status stat;
-  int ret = MPI_Recv(&binder, sizeof(binder), MPI_BYTE, pid, mpi_tag_, MPI_COMM_WORLD, &stat);
+  int ret = MPI_Probe(pid, mpi_tag_, MPI_COMM_WORLD, &stat);
   assert(ret == MPI_SUCCESS);
-  assert(binder.key == key_);
+
+  int bytes; // received size in bytes
+  MPI_Get_count(&stat, MPI_BYTE, &bytes);
+
+  assert(bytes / sizeof(CellInfoBinder<TSP>) == 0);
+
+  CellInfoBinder<TSP> *data = new CellInfoBinder<TSP>[bytes/sizeof(CellInfoBinder<TSP>)];
+  
+  ret = MPI_Recv(data, bytes, MPI_BYTE, pid, mpi_tag_, MPI_COMM_WORLD, &stat);
+  assert(ret == MPI_SUCCESS);
+
+  assert(data[0].key == key_);
   
   //assert(stat.MPI_ERROR == MPI_SUCCESS);
-  this->attr()   = binder.cell_attr;
-  this->nb_      = binder.num_bodies;
-  this->is_leaf_ = binder.is_leaf;
+  this->attr()   = data[0].cell_attr;
+  this->nb_      = data[0].num_bodies;
+  this->is_leaf_ = data[0].is_leaf;
+
+  // set the bodies
+  BodyType *bodies = reinterpret_cast<BodyType*>(&data[1]);
+  this->bid_ = 0;
+  this->local_bodies_ = VecPtr<BodyType>(new std::vector<BodyType>(bodies, bodies + this->nb_));
 
   {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     Stderr stderr("recv");
     stderr.out() << "RecvCell: cell=" << SimplifyKey(key_) << " "
-                 << "me=" << rank << " "
-                 << "src=" << pid << " "
-                 << "tag=" << std::setw(10) << mpi_tag_ << " "
-                 << "IsLeaf=" << binder.is_leaf << " "
-                 << "check=" << binder.check << " "
+                 << "me="     << rank << " "
+                 << "src="    << pid << " "
+                 << "tag="    << std::setw(10) << mpi_tag_ << " "
+                 << "IsLeaf=" << data[0].is_leaf << " "
+                 << "check="  << data[0].check << " "
+                 << "R="      << this->attr().R << " "
                  << "done "
-                 << "R=" << this->attr().R << " "
                  << std::endl;
   }
 }
 
 template <class TSP>
 void Cell<TSP>::SendCell(std::vector<int> remote_pids) {
+  typedef typename TSP::BT::type BodyType;
+  
   // This function does not take a reference because may be called in an independent thread (task)
   // and the original vector might be destroyed.
   if (remote_pids.size() == 0) {
     return;
   }
-  
+
+  // Send cell attributes and bodies (if the cell is leaf) to the remote pids.
+  // To send both of cell attrs and bodies, array of binder is used.
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  CellInfoBinder<TSP> binder = {
-    key_,
-    this->attr(),
-    this->nb(),
-    this->IsLeaf(),
-    rand()
-  };
+  // note that this->nb() is the total number of bodies in the cell, even if the cell is not leaf
+  index_t num_bodies = this->nb();
+  index_t size_bodies = sizeof(BodyType) * num_bodies;
+
+  // length of total data to be sent.
+  // the data is allocated as an array of CellInfoBinder<TSP>.
+  // len is the minimal length that can accomodate cell attributes and bodies.
+  index_t len = (size_bodies - 1) / sizeof(CellInfoBinder<TSP>) + 2;
+  CellInfoBinder<TSP> *data = new CellInfoBinder<TSP>[len];
+  
+  data[0].key = key_;
+  data[0].cell_attr = this->attr();
+  data[0].num_bodies = num_bodies;
+  data[0].is_leaf = this->IsLeaf(); 
+  data[0].check = rand(); // for debugging. to be deleted.
+
+  BodyType *bodies = reinterpret_cast<BodyType*>(&data[1]);
+  index_t bid = this->bid();
+
+  for (int bi = 0; bi < num_bodies; bi++) {
+    bodies[bi] = local_bodies_->at(bi + bid);
+  }
+
   MPI_Status *stats = new MPI_Status[remote_pids.size()];
   MPI_Request *reqs = new MPI_Request[remote_pids.size()];
   
-  for (int i = 0; i < remote_pids.size(); i++) {
+  for (size_t i = 0; i < remote_pids.size(); i++) {
     {
       Stderr stderr("send");
       stderr.out() << "SendCell: cell=" << SimplifyKey(key_) << " "
-                   << "I'm=" << rank << " "
-                   << "dst=" << remote_pids[i] << " "
-                   << "IsLeaf=" << binder.is_leaf << " " 
-                   << "check=" << binder.check << " "
-                   << "tag=" << mpi_tag_ << " "
+                   << "I'm="    << rank << " "
+                   << "dst="    << remote_pids[i] << " "
+                   << "nb="     << num_bodies << " "
+                   << "sizeof(CellInfoBinder)=" << sizeof(CellInfoBinder<TSP>) << " "
+                   << "sizeof(BodyType)=" << sizeof(BodyType) << " "
+                   << "sizeof(BodyType)*" << num_bodies << "=" << sizeof(BodyType) * num_bodies << " "
+                   << "len="  << len << " "
+                   << "IsLeaf=" << data[0].is_leaf << " "
+                   << "check="  << data[0].check << " "
+                   << "tag="    << mpi_tag_ << " "
                    << std::endl;
     }
-    MPI_Isend(&binder, sizeof(binder), MPI_BYTE, remote_pids[i], mpi_tag_, MPI_COMM_WORLD, &reqs[i]);
+    MPI_Isend(data, sizeof(data[0]) * len, MPI_BYTE, remote_pids[i], mpi_tag_, MPI_COMM_WORLD, &reqs[i]);
   }
 
   MPI_Waitall(remote_pids.size(), reqs, stats);
   delete[] stats;
   delete[] reqs;
   
-  for (int i = 0; i < remote_pids.size(); i++) {
+  for (size_t i = 0; i < remote_pids.size(); i++) {
     Stderr stderr("send");
     stderr.out() << "SendCell: cell=" << SimplifyKey(key_) << " "
-                 << "I'm=" << rank << " "
-                 << "dst=" << remote_pids[i] << " "
-                 << "IsLeaf=" << binder.is_leaf << " " 
-                 << "check=" << binder.check << " "
-                 << "tag=" << mpi_tag_ << " "
-                 << "done" << std::endl;
+                 << "I'm="    << rank << " "
+                 << "dst="    << remote_pids[i] << " "
+                 << "IsLeaf=" << data[0].is_leaf << " " 
+                 << "check="  << data[0].check << " "
+                 << "tag="    << mpi_tag_ << " "
+                 << "done"    << std::endl;
   }
+  delete[] data;
 }
 
 template <class TSP>
@@ -1070,10 +1130,12 @@ Cell<TSP> &Cell<TSP>::parent() const {
     KeyType parent_key = MortonKeyParent<TSP::Dim>(key_);
     auto *c = Lookup(parent_key);
     if (c == nullptr) {
-        TAPAS_LOG_ERROR() << "Parent (" << parent_key << ") of "
-                          << "cell (" << key_ << ") not found."
-                          << std::endl;
-        TAPAS_DIE();
+      TAPAS_LOG_ERROR() << "Parent (" << parent_key << ") of "
+                        << "cell (" << key_ << ") not found.\n"
+                        << "Parent key = " << MortonKeyDecode<TSP::Dim>(parent_key) << "\n"
+                        << "Child key =  " << MortonKeyDecode<TSP::Dim>(key_)
+                        << std::endl;
+      TAPAS_DIE();
     }
     return *c;
 }
@@ -1163,7 +1225,7 @@ std::vector<KeyType> SplitLargeCellsOnce(const std::vector<KeyType> &cell_keys,
                                          int max_nb) {
   std::vector<KeyType> ret; // new
 
-  for (int i = 0; i < cell_keys.size(); i++) {
+  for (size_t i = 0; i < cell_keys.size(); i++) {
     if (nb[i] <= max_nb) {
       // This cell does not need to be split.
       ret.push_back(cell_keys[i]);
@@ -1197,7 +1259,7 @@ inline std::vector<int> SplitKeysSimple(const std::vector<index_t> &nb, int proc
   int psum = 0; // partial sum
   int cur_proc = 0;
 
-  for (int i = 0; i < nb.size(); i++) {
+  for (size_t i = 0; i < nb.size(); i++) {
     psum += nb[i];
     ret[i] = cur_proc;
     if (psum > guide * (cur_proc+1)) {
@@ -1401,7 +1463,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   // count bodies to be sent to process 'proc' in cell ci
   // note that send_count and recv_count are multiplied by sizeof(BodyType) so that
   // BodyType objects will be sent as arrays of MPI_BYTE
-  for (int ci = 0; ci < leaf_keys.size(); ci++) {
+  for (size_t ci = 0; ci < leaf_keys.size(); ci++) {
     int proc = leaf_owners[ci];
     send_counts[proc] += leaf_nb_local[ci];
   }
@@ -1430,7 +1492,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   // which also means they are sorted by their parent process.
   std::vector<BodyType> send_bodies(num_bodies);
   std::vector<KeyType>  send_keys(num_bodies);
-  for (int hi = 0; hi < hn.size(); hi++) {
+  for (size_t hi = 0; hi < hn.size(); hi++) {
     int bi = hn[hi].p_index;
     send_bodies[hi] = b[bi];
     send_keys[hi] = hn[hi].key;
@@ -1472,7 +1534,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   // Calculate recv displacement, which is prefix sum of recv_bytes_bodies and recv_bytes_keys
   std::vector<int> recv_disp_bodies(size, 0);
   std::vector<int> recv_disp_keys(size, 0);
-  for (int pi = 0; pi < recv_counts.size(); pi++) {
+  for (size_t pi = 0; pi < recv_counts.size(); pi++) {
     if (pi == 0) {
       recv_disp_bodies[pi] = 0;
       recv_disp_keys[pi] = 0;

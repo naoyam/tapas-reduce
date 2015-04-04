@@ -103,8 +103,6 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
   }
 }
 
-#define USE_NEW_PRODUCT_MAP
-
 /**
  * Map function f over product of two iterators
  */
@@ -112,14 +110,14 @@ template <class Funct, class T1_Iter, class T2_Iter, class... Args>
 void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
   TAPAS_LOG_DEBUG() << "map product iterator size: "
                     << prod.size() << std::endl;
-#ifdef USE_NEW_PRODUCT_MAP
   product_map(prod.t1_, 0, prod.t1_.size(),
               prod.t2_, 0, prod.t2_.size(),
               f, args...);
-#else
+  
+#if 0
   for (index_t i = 0; i < prod.size(); ++i) {
-      f(prod.first(), prod.second(), args...);
-      prod++;
+    f(prod.first(), prod.second(), args...);
+    prod++;
   }
 #endif
 }

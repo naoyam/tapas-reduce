@@ -331,7 +331,7 @@ void SortByPermutations(std::vector<T1> &keys, std::vector<T2> &vals) {
 
   std::vector<size_t> perm(len);
 
-  for (int i = 0; i < len; i++) {
+  for (size_t i = 0; i < len; i++) {
     perm[i] = i;
   }
 

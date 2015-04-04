@@ -39,11 +39,14 @@
 
 namespace {
 
+#define DEBUG_WRITE
+
 class Stderr {
   std::ostream *fs_;
 
  public:
   Stderr(const char *label) : fs_(nullptr) {
+#ifdef DEBUG_WRITE
 #ifdef EXAFMM_TAPAS_MPI
     pid_t tid = syscall(SYS_gettid);
     int rank;
@@ -59,6 +62,9 @@ class Stderr {
        << "." << label
        << ".txt";
     fs_ = new std::ofstream(ss.str().c_str(), std::ios_base::app);
+#else
+    fs_ = new std::stringstream();
+#endif
   }
   
   ~Stderr() {
@@ -76,7 +82,7 @@ class Stderr {
 template<class T>
 std::string join(const char *glue, const std::vector<T>& v) {
   std::stringstream ss;
-  for (int i = 0; i < v.size(); i++) {
+  for (size_t i = 0; i < v.size(); i++) {
     ss << v[i] << (i == v.size()-1 ? "" : " ");
   }
   return ss.str();

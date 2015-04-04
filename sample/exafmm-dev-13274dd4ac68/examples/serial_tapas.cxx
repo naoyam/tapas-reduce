@@ -26,6 +26,7 @@
 #include "serial_tapas_helper.cxx"
 #endif
 
+#include "myth.h"
 
 // Dump the M vectors of all cells.
 void dumpM(Tapas::Cell &root) {
@@ -137,20 +138,24 @@ void BarrierExec(F func) {
 int main(int argc, char ** argv) {
   Args args(argc, argv);
   
+  myth_init();
+    
 #ifdef EXAFMM_TAPAS_MPI
   int required = MPI_THREAD_MULTIPLE;
   int provided;
+
   MPI_Init_thread(&argc, &argv, required, &provided);
 
   if (provided < required) {
     std::cerr << "Your MPI implementation's support level of multi threading is insufficient. "
               << "We need  MPI_THREAD_MULTIPLE" << std::endl;
+    MPI_Finalize();
     exit(-1);
   }
   MPI_Comm_rank(MPI_COMM_WORLD, &args.mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &args.mpi_size);
 #endif
-    
+
   Bodies bodies, bodies2, bodies3, jbodies;
   BoundBox boundBox(args.nspawn);
   Bounds bounds;
@@ -253,11 +258,13 @@ int main(int argc, char ** argv) {
     jbodies = bodies;
 
     dumpL(*root);
-#ifdef EXAFMM_TAPAS_MPI
-    MPI_Finalize();
-#endif
-    exit(0); // --------------------------------------------------
-    
+
+// #ifdef EXAFMM_TAPAS_MPI
+//     MPI_Finalize();
+// #endif
+//     myth_fini();
+//     exit(0); // --------------------------------------------------
+
     logger::startTimer("Downward pass");
     tapas::Map(FMM_L2P, *root);
     logger::stopTimer("Downward pass");
