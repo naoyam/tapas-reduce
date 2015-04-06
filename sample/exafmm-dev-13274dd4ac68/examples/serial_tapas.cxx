@@ -76,6 +76,40 @@ void dumpL(Tapas::Cell &root) {
   ofs.close();
 }
 
+// Dump the body attrs of all cells
+void dumpBodies(Tapas::Cell &root) {
+  std::stringstream ss;
+#ifdef EXAFMM_TAPAS_MPI
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  ss << "bodies." << std::setw(4) << std::setfill('0') << rank << ".dat";
+#else
+  ss << "bodies.dat";
+#endif
+  std::mutex mtx;
+  std::ofstream ofs(ss.str().c_str());
+  std::function<void(Tapas::Cell&)> dump = [&](Tapas::Cell& cell) {
+    if (cell.IsLeaf()) {
+      mtx.lock();
+      //ofs << std::setw(20) << std::right << tapas::morton_common::SimplifyKey(cell.key()) << " ";
+      auto iter = cell.bodies();
+      for (int bi=0; bi < cell.nb(); bi++, iter++) {
+        ofs << iter->X << " ";
+        ofs << iter->SRC << " ";
+        for (int j = 0; j < 4; j++) {
+          ofs << std::setw(20) << std::right << iter.attr()[j] << " ";
+        }
+        ofs << std::endl;
+      }
+      mtx.unlock();
+    } else {
+      tapas::Map(dump, cell.subcells());
+    }
+  };
+  tapas::Map(dump, root);
+  ofs.close();
+}
+
 void dumpLeaves(Tapas::Cell &root) {
   std::stringstream ss;
 #ifdef EXAFMM_TAPAS_MPI
@@ -220,6 +254,8 @@ int main(int argc, char ** argv) {
     }
 #endif
 
+    dumpBodies(*root);
+    
 #ifdef EXAFMM_TAPAS_MPI
     int rank = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -236,15 +272,6 @@ int main(int argc, char ** argv) {
     dumpLeaves(*root);
     dumpM(*root);
 
-#if 0
-    {
-      std::ofstream tapas_out("tapas_P2M.txt");
-      for (int i = 0; i < args.numBodies; ++i) {
-        tapas_out << root->body_attrs()[i] << std::endl;
-      }
-    }
-#endif
-
     logger::startTimer("Traverse");
     numM2L = 0; numP2P = 0;
     tapas::Map(FMM_M2L, tapas::Product(*root, *root), args.mutual, args.nspawn);
@@ -253,13 +280,14 @@ int main(int argc, char ** argv) {
     TAPAS_LOG_DEBUG() << "M2L done\n";
     jbodies = bodies;
 
+    //dumpBodies(*root);
     dumpL(*root);
 
-// #ifdef EXAFMM_TAPAS_MPI
-//     MPI_Finalize();
-// #endif
-//     myth_fini();
-//     exit(0); // --------------------------------------------------
+    // Note: tapas::Map(FMM_L2P, c.subcells()) is commented out in serial_tapas_helper.cxx
+#ifdef EXAFMM_TAPAS_MPI
+    MPI_Finalize();
+#endif
+    exit(0); // --------------------------------------------------
 
     logger::startTimer("Downward pass");
     tapas::Map(FMM_L2P, *root);

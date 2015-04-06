@@ -946,7 +946,7 @@ void Cell<TSP>::RecvCell(int pid) {
   int bytes; // received size in bytes
   MPI_Get_count(&stat, MPI_BYTE, &bytes);
 
-  assert(bytes / sizeof(CellInfoBinder<TSP>) == 0);
+  assert(bytes % sizeof(CellInfoBinder<TSP>) == 0);
 
   CellInfoBinder<TSP> *data = new CellInfoBinder<TSP>[bytes/sizeof(CellInfoBinder<TSP>)];
   
@@ -1582,6 +1582,9 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   auto leaf_nb_global2  = std::make_shared<std::vector<index_t>>(leaf_nb_global);
   auto local_body_keys  = std::make_shared<std::vector<KeyType>>(recv_keys);
   auto local_body_attrs = std::make_shared<std::vector<BodyAttrType>>(num_bodies_recv);
+
+  bzero(reinterpret_cast<void*>(&local_body_attrs->at(0)),
+        sizeof(BodyAttrType) * local_body_attrs->size());
 
   std::vector<Cell<TSP>*> interior_cells;
   Stderr e("partition");
