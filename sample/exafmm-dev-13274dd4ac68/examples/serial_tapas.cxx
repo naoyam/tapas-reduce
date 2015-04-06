@@ -26,8 +26,6 @@
 #include "serial_tapas_helper.cxx"
 #endif
 
-#include "myth.h"
-
 // Dump the M vectors of all cells.
 void dumpM(Tapas::Cell &root) {
   std::stringstream ss;
@@ -138,8 +136,6 @@ void BarrierExec(F func) {
 int main(int argc, char ** argv) {
   Args args(argc, argv);
   
-  myth_init();
-    
 #ifdef EXAFMM_TAPAS_MPI
   int required = MPI_THREAD_MULTIPLE;
   int provided;
