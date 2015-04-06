@@ -73,6 +73,12 @@ class Cell: public tapas::BasicCell<TSP> {
   typedef unordered_map<KeyType, Cell*> HashTable;
   typedef Cell<TSP> CellType;
   typedef BodyIterator<CellType> BodyIter;
+  
+  typedef typename TSP::ATTR attr_type;
+  typedef typename TSP::BT::type BodyType;
+  typedef typename TSP::BT_ATTR BodyAttrType;
+  //typedef typename TSP::BT_ATTR body_attr_type;
+  
  protected:
   KeyType key_;
   HashTable *ht_;
@@ -93,8 +99,6 @@ class Cell: public tapas::BasicCell<TSP> {
   static void Map(BodyIter &b1, BodyIter &b2,
                   std::function<void(BodyIter&, BodyIter&)> f);
 
-    typedef typename TSP::ATTR attr_type;
-    typedef typename TSP::BT_ATTR body_attr_type;
     KeyType key() const { return key_; }
 
     bool operator==(const Cell &c) const;
