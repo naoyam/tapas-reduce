@@ -18,13 +18,11 @@
 #include <fstream>
 
 #ifdef TAPAS_DEBUG
-#if TAPAS_DEBUG == 0
-#undef TAPAS_DEBUG
-#else
-#define TAPAS_DEBUG
-#endif
+# if TAPAS_DEBUG == 0
+#  undef TAPAS_DEBUG
+# endif
 #else  // TAPAS_DEBUG
-#define TAPAS_DEBUG // default
+# define TAPAS_DEBUG // default
 #endif // TAPAS_DEBUG
 
 // for debug

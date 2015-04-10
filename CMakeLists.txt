@@ -34,16 +34,32 @@ endif()
 
 message(STATUS "Compiler = ${CMAKE_CXX_COMPILER_ID}")
 
+set(TAPAS_FLAGS_DEBUG "-DTAPAS_LOG_LEVEL=3 -DTAPAS_DEBUG=1")
+set(TAPAS_FLAGS_RELEASE "-DTAPAS_LOG_LEVEL=0 -DTAPAS_DEBUG=0")
+
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -ggdb3 -Wall -O2")
+  # Debug/Release common cxxflags
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -funroll-loops -fcolor-diagnostics")
+  
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O2 ${TAPAS_FLAGS_RELEASE}")
+  set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS} -O0 -ggdb3 ${TAPAS_FLAGS_DEBUG}")
+  
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -ggdb3 -Wall -O2 -Wno-unused-local-typedefs -fopenmp")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -Wno-unused-local-typedefs -fopenmp")
+  
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O2 ${TAPAS_FLAGS_RELEASE} ")
+  set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS} -O0 -ggdb3 ${TAPAS_FLAGS_DEBUG}")
+  
+  # GCC has some bugs
   if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.1")
     message(FATAL_ERROR "Insufficient gcc version (Tapas requires >= 4.8.1, but your version is ${CMAKE_CXX_COMPILER_VERSION})")
   endif()
+  
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -fast -fopenmp")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${TAPAS_FLAGS_RELEASE}")
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${TAPAS_FLAGS_DEBUG}")
 endif()
 
 add_subdirectory(sample)
