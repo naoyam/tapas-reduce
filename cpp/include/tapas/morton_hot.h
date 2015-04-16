@@ -276,14 +276,17 @@ class Cell: public tapas::BasicCell<TSP> {
   static void Map(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
   static void Map(Cell<TSP> &c1, Cell<TSP> &c2,
                   std::function<void(Cell<TSP>&, Cell<TSP>&)> f);
+  
   static void Map(BodyIter &b1, BodyIter &b2,
-                  std::function<void(BodyIter&, BodyIter&)> f);
-  
-  static void Map(BodyType &b1, std::function<void(BodyType &b1)> f);
-  
-  static void Map(BodyType &b1, BodyType &b2,
-                  std::function<void(BodyType &b1, BodyType &b2)> f);
-  
+                  std::function<void(BodyIter&, BodyIter&)> f) {
+    f(b1, b2);
+  }
+
+  static void Map(BodyIter &b1,
+                  std::function<void(BodyIter)> f) {
+    f(b1);
+  }
+
   /**
    * @brief Returns if the cell is a leaf cell
    */
@@ -804,19 +807,6 @@ void Cell<TSP>::ExchangeCell(Cell<TSP> &remote) {
   MPI_Waitall(reqs.size(), reqs.data(), stats.data());
   e.out() << "Waitall done." << std::endl;
   e.out() << std::endl;
-}
-
-template<class TSP>
-void Cell<TSP>::Map(Cell<TSP>::BodyType &b1,
-                    Cell<TSP>::BodyType &b2,
-                    std::function<void(Cell<TSP>::BodyType &b1, Cell<TSP>::BodyType &b2)> f) {
-  assert(0);
-}
-
-template<class TSP>
-void Cell<TSP>::Map(Cell<TSP>::BodyType &b1,
-                    std::function<void(Cell<TSP>::BodyType &b1)> f) {
-  assert(0);
 }
 
 /**
