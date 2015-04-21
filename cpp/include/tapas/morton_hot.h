@@ -34,6 +34,7 @@
 #include "tapas/debug_util.h"
 #include "tapas/iterator.h"
 #include "tapas/morton_common.h"
+#include "tapas/threading/default.h"
 
 #define DEBUG_SENDRECV
 
@@ -192,6 +193,7 @@ class Cell: public tapas::BasicCell<TSP> {
   typedef typename TSP::BT::type BodyType;
   typedef typename TSP::BT_ATTR BodyAttrType;
   typedef BodyIterator<Cell> BodyIter;
+  typedef typename TSP::Threading Threading;
 
  public:
   
@@ -793,6 +795,7 @@ void Cell<TSP>::ExchangeCell(Cell<TSP> &remote) {
   MPI_Status recv_stat;
   int ret = MPI_Recv(&recv_data, sizeof(recv_data), MPI_BYTE, recv_from[0], mpi_tag, MPI_COMM_WORLD, &recv_stat);
   assert(ret == MPI_SUCCESS);
+  
   if (recv_data.key != remote.key()) {
     std::cerr << "tag = " << mpi_tag << std::endl;
     assert(recv_data.key == remote.key());
@@ -817,6 +820,7 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
                     std::function<void(Cell<TSP>&, Cell<TSP>&)> f) {
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  using TaskGroup = typename TSP::Threading::TaskGroup;
 
   {
     Stderr e("map2");
@@ -831,7 +835,7 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
 
   if (!c1.IsLocal() && !c2.IsLocal()) return;
 
-  mk_task_group;
+  TaskGroup tg;
 
   if (c1.IsLocal()) {
     // Send cell information to necessary processes
@@ -851,8 +855,7 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
       e.out() << "send_to = " << "[" << join(" ", send_to) << "]" << std::endl;
       e.out() << std::endl;
     }
-    auto task = [&c1, send_to]() { c1.SendCell(send_to); };
-    create_taskc(task);
+    c1.SendCell(send_to);
   }
   
   if (c2.IsLocal()) {
@@ -869,8 +872,7 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
       e.out() << "send_to = "     << "[" << join(" ", send_to) << "]" << std::endl;
       e.out() << std::endl;
     }
-    auto task = [&c2, send_to]() { c2.SendCell(send_to); };
-    create_taskc(task);
+    c2.SendCell(send_to);
   }
   
   if (!c1.IsLocal()) {
@@ -894,8 +896,9 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
     c2.RecvCell(recv_from[0]);
   }
 
-  wait_tasks;
-
+  //wait_tasks;
+  tg.wait();
+  
   {
     Stderr e("map2");
     e.out() << "Map: "
@@ -939,11 +942,26 @@ void Cell<TSP>::RecvCell(int pid) {
   assert(bytes % sizeof(CellInfoBinder<TSP>) == 0);
 
   CellInfoBinder<TSP> *data = new CellInfoBinder<TSP>[bytes/sizeof(CellInfoBinder<TSP>)];
-  
-  ret = MPI_Recv(data, bytes, MPI_BYTE, pid, mpi_tag_, MPI_COMM_WORLD, &stat);
-  assert(ret == MPI_SUCCESS);
 
-  assert(data[0].key == key_);
+  // Receive cell data with MPI_Recv.
+  // If the threading system supports preemptive context switching, use the plain MPI_recv.
+  // Otherwise, we explicitly yield a control to other tasks using Th::yield().
+  using Th = typename TSP::Threading;
+  if (Th::Preemptive) {
+    MPI_Recv(data, bytes, MPI_BYTE, pid, mpi_tag_, MPI_COMM_WORLD, &stat);
+  } else {
+    MPI_Request req;
+    int done = 0;
+    MPI_Irecv(data, bytes, MPI_BYTE, pid, mpi_tag_, MPI_COMM_WORLD, &req);
+    while (true) {
+      MPI_Test(&req, &done, &stat);
+      if (done) break;
+      Th::yield();
+    }
+  }
+  
+  TAPAS_ASSERT(ret == MPI_SUCCESS);
+  TAPAS_ASSERT(data[0].key == key_);
   
   //assert(stat.MPI_ERROR == MPI_SUCCESS);
   this->attr()   = data[0].cell_attr;
@@ -994,6 +1012,7 @@ void Cell<TSP>::SendCell(std::vector<int> remote_pids) {
   // the data is allocated as an array of CellInfoBinder<TSP>.
   // len is the minimal length that can accomodate cell attributes and bodies.
   index_t len = (size_bodies - 1) / sizeof(CellInfoBinder<TSP>) + 2;
+  std::cerr << "Cell::SendCell() : len = " << len << std::endl;
   CellInfoBinder<TSP> *data = new CellInfoBinder<TSP>[len];
   
   data[0].key = key_;
@@ -1031,9 +1050,34 @@ void Cell<TSP>::SendCell(std::vector<int> remote_pids) {
     MPI_Isend(data, sizeof(data[0]) * len, MPI_BYTE, remote_pids[i], mpi_tag_, MPI_COMM_WORLD, &reqs[i]);
   }
 
-  MPI_Waitall(remote_pids.size(), reqs, stats);
-  delete[] stats;
-  delete[] reqs;
+  // Completes the Isend request asynchronously.
+  // If the threading runtime is non-preemptive, 
+  using Th = typename TSP::Threading;
+  if (Th::Preemptive) {
+    // If the threading system supports preemptive context switching,
+    // use the plain Waitall for efficiency.
+    MPI_Waitall(remote_pids.size(), reqs, stats);
+    delete[] stats;
+    delete[] reqs;
+    delete[] data;
+  } else {
+    // Otherwise, we need to use Threading::yiled() to explicitly yield a control to other tasks
+    // while blocked in MPI_Testall.
+    Th::run( [&]() {
+        int flag = 0;
+        while(true) {
+          MPI_Testall(remote_pids.size(), reqs, &flag, stats);
+          if (flag) {
+            break;
+          } else {
+            TSP::Threading::yield();
+          }
+        }
+        delete[] stats;
+        delete[] reqs;
+        delete[] data;
+      });
+  }
   
   for (size_t i = 0; i < remote_pids.size(); i++) {
     Stderr stderr("send");
@@ -1045,7 +1089,6 @@ void Cell<TSP>::SendCell(std::vector<int> remote_pids) {
                  << "tag="    << mpi_tag_ << " "
                  << "done"    << std::endl;
   }
-  delete[] data;
 }
 
 template <class TSP>
@@ -1803,7 +1846,6 @@ ProductIterator<CellIterator<morton_hot::Cell<TSP>>,
         CellIterType(c1), CellIterType(c2));
 }
 
-
 /**
  * @brief A partitioning plugin class that provides Morton-curve based octree partitioning.
  */
@@ -1815,31 +1857,61 @@ struct MortonHOT {
  */
 template <int DIM, class FP, class BT,
           class BT_ATTR, class CELL_ATTR,
-          class PartitionAlgorithm>
+          class PartitionAlgorithm,
+          class Threading>
 class Tapas;
 
 /**
  * @brief Specialization of Tapas for HOT (Morton HOT) algorithm
  */
 template <int DIM, class FP, class BT,
-          class BT_ATTR, class CELL_ATTR>
-class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, MortonHOT> {
-    typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR> TSP; // Tapas static params
-  public:
-    typedef tapas::Region<TSP> Region;
-    typedef morton_hot::Cell<TSP> Cell;
-    typedef tapas::BodyIterator<Cell> BodyIterator;
+          class BT_ATTR, class CELL_ATTR,
+          class Threading>
+class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, MortonHOT, Threading> {
+  typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR, Threading> TSP; // Tapas static params
+ public:
+  typedef tapas::Region<TSP> Region;
+  typedef morton_hot::Cell<TSP> Cell;
+  typedef tapas::BodyIterator<Cell> BodyIterator;
+  
+  /**
+   * @brief Partition and build an octree of the target space.
+   * @param b Array of body of BT::type.
+   */
+  static Cell *Partition(typename BT::type *b,
+                         index_t nb, const Region &r,
+                         int max_nb) {
+    morton_hot::Partitioner<TSP> part(max_nb);
+    return part.Partition(b, nb, r);
+  }
+};
 
-    /**
-     * @brief Partition and build an octree of the target space.
-     * @param b Array of body of BT::type.
-     */
-    static Cell *Partition(typename BT::type *b,
-                           index_t nb, const Region &r,
-                           int max_nb) {
-        morton_hot::Partitioner<TSP> part(max_nb);
-        return part.Partition(b, nb, r);
-    }
+namespace threading {
+class MassiveThreads;
+}
+
+/**
+ * @brief Specialization of Tapas for HOT (Morton HOT) algorithm
+ */
+template <int DIM, class FP, class BT,
+          class BT_ATTR, class CELL_ATTR>
+class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, MortonHOT, tapas::threading::MassiveThreads> {
+  typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR, tapas::threading::MassiveThreads> TSP; // Tapas static params
+ public:
+  typedef tapas::Region<TSP> Region;
+  typedef morton_hot::Cell<TSP> Cell;
+  typedef tapas::BodyIterator<Cell> BodyIterator;
+  
+  /**
+   * @brief Partition and build an octree of the target space.
+   * @param b Array of body of BT::type.
+   */
+  static Cell *Partition(typename BT::type *b,
+                         index_t nb, const Region &r,
+                         int max_nb) {
+    morton_hot::Partitioner<TSP> part(max_nb);
+    return part.Partition(b, nb, r);
+  }
 };
 
 } // namespace tapas

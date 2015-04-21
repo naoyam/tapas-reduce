@@ -168,13 +168,14 @@ void PrintKeys(const T &s, std::ostream &os) {
 /** 
  * @brief Holder of template parameter types (given by user code).
  */
-template<int _DIM, class _FP, class _BT, class _BT_ATTR, class _ATTR=tapas::NONE>
+template<int _DIM, class _FP, class _BT, class _BT_ATTR, class _ATTR, class _Threading>
 struct TapasStaticParams {
-    static const int Dim = _DIM; //!< dimension of simulation space
-    typedef _FP FP;              //!< Floating point types
-    typedef _BT BT;              //!< body info
-    typedef _BT_ATTR BT_ATTR;    //!< body attributes
-    typedef _ATTR ATTR;          //!< cell attributes
+  static const int Dim = _DIM; //!< dimension of simulation space
+  typedef _FP FP;              //!< Floating point types
+  typedef _BT BT;              //!< body info
+  typedef _BT_ATTR BT_ATTR;    //!< body attributes
+  typedef _ATTR ATTR;          //!< cell attributes
+  typedef _Threading Threading; //!< threading policy
 };
 
 } // namespace tapas

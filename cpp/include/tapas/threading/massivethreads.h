@@ -18,7 +18,8 @@ class MassiveThreads {
  public:
   typedef myth_thread_t tid_t;
   
-  static const constexpr bool Preenptive = false;
+  static const constexpr bool Concurrent = false;
+  static const constexpr bool Preemptive = false;
   
   class Task {
    private:
@@ -57,7 +58,7 @@ class MassiveThreads {
     TaskGroup() : tasks_() { }
 
     template<class F>
-    void create_task(F f) {
+    void createTask(F f) {
       auto *t = new CallableTask<F>(f);
       t->run();
       tasks_.push_back(t);
@@ -71,9 +72,15 @@ class MassiveThreads {
       tasks_.clear();
     }
   };
-  
-  void yield() {
+
+  // Threading::yield
+  static void yield() {
     myth_yield(0);
+  }
+
+  template<class F>
+  static void run(F f) {
+    CallableTask<F>(f).execute();
   }
   
 };

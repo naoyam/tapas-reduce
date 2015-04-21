@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <functional>
 
-#include "tapas/thread.h"
 #include "tapas/cell.h"
 #include "tapas/iterator.h"
 
@@ -66,6 +65,7 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
   typedef typename T1_Iter::value_type C1; // Container type (actually Body or Cell)
   typedef typename T2_Iter::value_type C2;
   typedef typename T1_Iter::CellType CellType;
+  typedef typename CellType::Threading Th;
 
   if (end1 - beg1 <= ThreadSpawnThreshold<T1_Iter>::Value ||
       end2 - beg2 <= ThreadSpawnThreshold<T2_Iter>::Value) {
@@ -89,16 +89,16 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
     int mid2 = (end2 + beg2) / 2;
     // run (beg1,mid1) x (beg2,mid2) and (mid1,end1) x (mid2,end2) in parallel
     {
-      mk_task_group;
-      create_taskA(product_map(iter1, beg1, mid1, iter2, beg2, mid2, f, args...));
-      create_taskA(product_map(iter1, mid1, end1, iter2, mid2, end2, f, args...));
-      wait_tasks;
+      typename Th::TaskGroup tg;
+      tg.createTask([&]() { product_map(iter1, beg1, mid1, iter2, beg2, mid2, f, args...); });
+      tg.createTask([&]() { product_map(iter1, mid1, end1, iter2, mid2, end2, f, args...); });
+      tg.wait();
     }
     {
-      mk_task_group;
-      create_taskA(product_map(iter1, beg1, mid1, iter2, mid2, end2, f, args...));
-      create_taskA(product_map(iter1, mid1, end1, iter2, beg2, mid2, f, args...));
-      wait_tasks;
+      typename Th::TaskGroup tg;
+      tg.createTask([&]() {product_map(iter1, beg1, mid1, iter2, mid2, end2, f, args...);});
+      tg.createTask([&]() {product_map(iter1, mid1, end1, iter2, beg2, mid2, f, args...);});
+      tg.wait();
     }
   }
 }
@@ -142,16 +142,17 @@ template <class Funct, class CellType, class... Args>
 void Map(Funct f, SubCellIterator<CellType> iter, Args...args) {
   TAPAS_LOG_DEBUG() << "map non-product subcell iterator size: "
                     << iter.size() << std::endl;
+  typedef typename CellType::Threading Th;
 
   // pack args... into a lambda closure
   std::function<void(CellType&)> lambda = [=](CellType &cell) { f(cell, args...); };
-  
-  mk_task_group;
+
+  typename Th::TaskGroup tg;
   for (int i = 0; i < iter.size(); i++) {
-    create_task0(CellType::Map(*iter, lambda));
+    tg.createTask([&]() { CellType::Map(*iter, lambda); });
     iter++;
-  }
-  wait_tasks;
+  } 
+  tg.wait();
 }
 
 template <class Funct, class T, class... Args>

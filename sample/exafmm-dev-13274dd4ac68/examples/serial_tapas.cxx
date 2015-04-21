@@ -205,7 +205,7 @@ int main(int argc, char ** argv) {
     std::cerr << "Use --useRopt 0 option." << std::endl;
     exit(1);
   }
-  UpDownPass upDownPass(args.theta, args.useRmax, args.useRopt);
+  //UpDownPass upDownPass(args.theta, args.useRmax, args.useRopt);
   Verify verify;
 
   Region tr;

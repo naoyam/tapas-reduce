@@ -77,6 +77,7 @@ class Cell: public tapas::BasicCell<TSP> {
   typedef typename TSP::ATTR attr_type;
   typedef typename TSP::BT::type BodyType;
   typedef typename TSP::BT_ATTR BodyAttrType;
+  typedef typename TSP::Threading Threading;
   //typedef typename TSP::BT_ATTR body_attr_type;
   
  protected:
@@ -562,32 +563,59 @@ struct SingleNodeMortonHOT {
  */
 template <int DIM, class FP, class BT,
           class BT_ATTR, class CELL_ATTR,
-          class PartitionAlgorithm>
+          class PartitionAlgorithm,
+          class Threading>
 class Tapas;
 
 /**
  * @brief Specialization of Tapas for HOT (single node Morton HOT) algorithm
  */
 template <int DIM, class FP, class BT,
-          class BT_ATTR, class CELL_ATTR>
-class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, SingleNodeMortonHOT> {
-    typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR> TSP; // Tapas static params
-  public:
-    typedef tapas::Region<TSP> Region;  
-    typedef single_node_morton_hot::Cell<TSP> Cell;
-    //typedef tapas::BodyIterator<DIM, BT, BT_ATTR, Cell> BodyIterator;
-    typedef tapas::BodyIterator<Cell> BodyIterator;  
+          class BT_ATTR, class CELL_ATTR, class Threading>
+class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, SingleNodeMortonHOT, Threading> {
+  typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR, Threading> TSP; // Tapas static params
+ public:
+  typedef tapas::Region<TSP> Region;  
+  typedef single_node_morton_hot::Cell<TSP> Cell;
+  //typedef tapas::BodyIterator<DIM, BT, BT_ATTR, Cell> BodyIterator;
+  typedef tapas::BodyIterator<Cell> BodyIterator;  
 
-    /**
-     * @brief Partition and build an octree of the target space.
-     * @param b Array of body of BT::type.
-     */
-    static Cell *Partition(typename BT::type *b,
-                           index_t nb, const Region &r,
-                           int max_nb) {
-        single_node_morton_hot::Partitioner<TSP> part(max_nb);
-        return part.Partition(b, nb, r);
-    }
+  /**
+   * @brief Partition and build an octree of the target space.
+   * @param b Array of body of BT::type.
+   */
+  static Cell *Partition(typename BT::type *b,
+                         index_t nb, const Region &r,
+                         int max_nb) {
+    single_node_morton_hot::Partitioner<TSP> part(max_nb);
+    return part.Partition(b, nb, r);
+  }
+};
+
+/**
+ * @brief Specialization of Tapas for HOT (single node Morton HOT) algorithm
+ * With default threading policy 'Serial'
+ */
+template <int DIM, class FP, class BT,
+          class BT_ATTR, class CELL_ATTR>
+class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, SingleNodeMortonHOT, tapas::threading::Serial> {
+  typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR, tapas::threading::Serial> TSP; // Tapas static params
+ public:
+  typedef tapas::Region<TSP> Region;  
+  typedef single_node_morton_hot::Cell<TSP> Cell;
+  //typedef tapas::BodyIterator<DIM, BT, BT_ATTR, Cell> BodyIterator;
+  typedef tapas::BodyIterator<Cell> BodyIterator;  
+  
+  /**
+   * @brief Partition and build an octree of the target space.
+   * @param b Array of body of BT::type.
+   */
+  static Cell *Partition(typename BT::type *b,
+                         index_t nb, const Region &r,
+                         int max_nb) {
+    single_node_morton_hot::Partitioner<TSP> part(max_nb);
+    return part.Partition(b, nb, r);
+  }
 };
 
 } // namespace tapas

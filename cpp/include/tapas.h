@@ -5,5 +5,6 @@
 
 #include "tapas/main.h"
 #include "tapas/map.h"
+#include "tapas/threading/default.h"
 
 #endif

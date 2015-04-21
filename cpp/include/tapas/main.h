@@ -26,10 +26,12 @@ class BodyInfo {
  * @tparam BT_ATTR
  * @tparam CELL_ATTR
  * @tparam PartitionAlgorithm Algorithm to be used to partition the space and build an octree.
+ * @tparam Threading Algorithm to be used for threading 
  */
 template <int DIM, class FP, class BT,
           class BT_ATTR, class CELL_ATTR,
-          class PartitionAlgorithm>
+          class PartitionAlgorithm,
+          class Threading>
 class Tapas {
     // Generic definition of Tapas class.
     // This is just a placeholder and actual definition is provided by
