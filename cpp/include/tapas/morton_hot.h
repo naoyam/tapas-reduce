@@ -939,9 +939,7 @@ void Cell<TSP>::RecvCell(int pid) {
   int bytes; // received size in bytes
   MPI_Get_count(&stat, MPI_BYTE, &bytes);
 
-  assert(bytes % sizeof(CellInfoBinder<TSP>) == 0);
-
-  CellInfoBinder<TSP> *data = new CellInfoBinder<TSP>[bytes/sizeof(CellInfoBinder<TSP>)];
+  auto *data = new char[bytes];
 
   // Receive cell data with MPI_Recv.
   // If the threading system supports preemptive context switching, use the plain MPI_recv.
@@ -961,17 +959,28 @@ void Cell<TSP>::RecvCell(int pid) {
   }
   
   TAPAS_ASSERT(ret == MPI_SUCCESS);
-  TAPAS_ASSERT(data[0].key == key_);
+
+  // Three information is packed into bytes.
+  // See SendCell() about details
+  index_t len_cellinfo = sizeof(CellInfoBinder<TSP>);
+  auto *cellinfo = reinterpret_cast<CellInfoBinder<TSP>*>(data);
   
   //assert(stat.MPI_ERROR == MPI_SUCCESS);
-  this->attr()   = data[0].cell_attr;
-  this->nb_      = data[0].num_bodies;
-  this->is_leaf_ = data[0].is_leaf;
+  this->attr()   = cellinfo->cell_attr;
+  this->nb_      = cellinfo->num_bodies;
+  this->is_leaf_ = cellinfo->is_leaf;
 
+  index_t num_bodies = this->nb_;
+  index_t len_bodies = IsLeaf() ? sizeof(BodyType)     * num_bodies : 0;
+  auto *bodies = reinterpret_cast<BodyType*>(data + len_cellinfo);
+  auto *attrs = reinterpret_cast<BodyAttrType*>(data + len_cellinfo + len_bodies);
+  
+  TAPAS_ASSERT(cellinfo->key == key_);
+  
   // set the bodies
-  BodyType *bodies = reinterpret_cast<BodyType*>(&data[1]);
   this->bid_ = 0;
   this->local_bodies_ = VecPtr<BodyType>(new std::vector<BodyType>(bodies, bodies + this->nb_));
+  this->local_body_attrs_ = VecPtr<BodyAttrType>(new std::vector<BodyAttrType>(attrs, attrs + this->nb_));
 
   {
     int rank;
@@ -981,8 +990,8 @@ void Cell<TSP>::RecvCell(int pid) {
                  << "me="     << rank << " "
                  << "src="    << pid << " "
                  << "tag="    << std::setw(10) << mpi_tag_ << " "
-                 << "IsLeaf=" << data[0].is_leaf << " "
-                 << "check="  << data[0].check << " "
+                 << "IsLeaf=" << cellinfo->is_leaf << " "
+                 << "check="  << cellinfo->check << " "
                  << "R="      << this->attr().R << " "
                  << "done "
                  << std::endl;
@@ -1006,30 +1015,53 @@ void Cell<TSP>::SendCell(std::vector<int> remote_pids) {
 
   // note that this->nb() is the total number of bodies in the cell, even if the cell is not leaf
   index_t num_bodies = this->nb();
-  index_t size_bodies = sizeof(BodyType) * num_bodies;
 
   // length of total data to be sent.
   // the data is allocated as an array of CellInfoBinder<TSP>.
   // len is the minimal length that can accomodate cell attributes and bodies.
-  index_t len = (size_bodies - 1) / sizeof(CellInfoBinder<TSP>) + 2;
-  std::cerr << "Cell::SendCell() : len = " << len << std::endl;
-  CellInfoBinder<TSP> *data = new CellInfoBinder<TSP>[len];
-  
-  data[0].key = key_;
-  data[0].cell_attr = this->attr();
-  data[0].num_bodies = num_bodies;
-  data[0].is_leaf = this->IsLeaf(); 
-  data[0].check = rand(); // for debugging. to be deleted.
+  index_t len_cellinfo = sizeof(CellInfoBinder<TSP>);
+  index_t len_bodies = IsLeaf() ? sizeof(BodyType)     * num_bodies : 0;
+  index_t len_attrs  = IsLeaf() ? sizeof(BodyAttrType) * num_bodies : 0;
 
-  BodyType *bodies = reinterpret_cast<BodyType*>(&data[1]);
+  index_t len = len_cellinfo + len_bodies + len_attrs;
+  {
+    Stderr e("send");
+    e.out() << "len = " << len << std::endl;
+    e.out() << "len_cellinfo = " << len_cellinfo << std::endl;
+    e.out() << "len_bodies = " << len_bodies << std::endl;
+    e.out() << "len_attrs = " << len_attrs << std::endl;
+  }
+  char *data = new char[len];
+
+  auto *cellinfo = reinterpret_cast<CellInfoBinder<TSP>*>(data);
+  auto *bodies = reinterpret_cast<BodyType*>(data + len_cellinfo);
+  auto *attrs = reinterpret_cast<BodyAttrType*>(data + len_cellinfo + len_bodies);
+
+  // Copy cell info
+  cellinfo->key = key_;
+  cellinfo->cell_attr = this->attr();
+  cellinfo->num_bodies = num_bodies;
+  cellinfo->is_leaf = this->IsLeaf(); 
+  cellinfo->check = rand(); // for debugging. to be deleted.
+
   index_t bid = this->bid();
 
-  for (int bi = 0; bi < num_bodies; bi++) {
-    bodies[bi] = local_bodies_->at(bi + bid);
+  std::cerr << "num_bodies = " << num_bodies << std::endl;
+  if (cellinfo->is_leaf) {
+    // Copy body info if the cell is a leaf
+    for (int bi = 0; bi < num_bodies; bi++) {
+      bodies[bi] = local_bodies_->at(bi + bid);
+    }
+
+    // Copy body attributes
+    for (int bi = 0; bi < num_bodies; bi++) {
+      attrs[bi] = local_body_attrs_->at(bi + bid);
+    }
   }
 
-  MPI_Status *stats = new MPI_Status[remote_pids.size()];
-  MPI_Request *reqs = new MPI_Request[remote_pids.size()];
+  std::cerr << "remote_pids.size() = " << remote_pids.size() << std::endl;
+  auto *reqs = new MPI_Request[remote_pids.size()];
+  auto *stats = new MPI_Status[remote_pids.size()];
   
   for (size_t i = 0; i < remote_pids.size(); i++) {
     {
@@ -1042,12 +1074,12 @@ void Cell<TSP>::SendCell(std::vector<int> remote_pids) {
                    << "sizeof(BodyType)=" << sizeof(BodyType) << " "
                    << "sizeof(BodyType)*" << num_bodies << "=" << sizeof(BodyType) * num_bodies << " "
                    << "len="  << len << " "
-                   << "IsLeaf=" << data[0].is_leaf << " "
-                   << "check="  << data[0].check << " "
+                   << "IsLeaf=" << cellinfo->is_leaf << " "
+                   << "check="  << cellinfo->check << " "
                    << "tag="    << mpi_tag_ << " "
                    << std::endl;
     }
-    MPI_Isend(data, sizeof(data[0]) * len, MPI_BYTE, remote_pids[i], mpi_tag_, MPI_COMM_WORLD, &reqs[i]);
+    MPI_Isend(data, len, MPI_BYTE, remote_pids[i], mpi_tag_, MPI_COMM_WORLD, &reqs[i]);
   }
 
   // Completes the Isend request asynchronously.
@@ -1063,7 +1095,7 @@ void Cell<TSP>::SendCell(std::vector<int> remote_pids) {
   } else {
     // Otherwise, we need to use Threading::yiled() to explicitly yield a control to other tasks
     // while blocked in MPI_Testall.
-    Th::run( [&]() {
+    Th::run( [=]() {
         int flag = 0;
         while(true) {
           MPI_Testall(remote_pids.size(), reqs, &flag, stats);
@@ -1084,8 +1116,8 @@ void Cell<TSP>::SendCell(std::vector<int> remote_pids) {
     stderr.out() << "SendCell: cell=" << SimplifyKey(key_) << " "
                  << "I'm="    << rank << " "
                  << "dst="    << remote_pids[i] << " "
-                 << "IsLeaf=" << data[0].is_leaf << " " 
-                 << "check="  << data[0].check << " "
+                 << "IsLeaf=" << cellinfo->is_leaf << " " 
+                 << "check="  << cellinfo->check << " "
                  << "tag="    << mpi_tag_ << " "
                  << "done"    << std::endl;
   }
