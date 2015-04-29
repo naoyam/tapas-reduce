@@ -254,8 +254,6 @@ int main(int argc, char ** argv) {
     }
 #endif
 
-    dumpBodies(*root);
-    
 #ifdef EXAFMM_TAPAS_MPI
     int rank = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -280,7 +278,7 @@ int main(int argc, char ** argv) {
     TAPAS_LOG_DEBUG() << "M2L done\n";
     jbodies = bodies;
 
-    //dumpBodies(*root);
+    dumpBodies(*root);
     dumpL(*root);
 
     // Note: tapas::Map(FMM_L2P, c.subcells()) is commented out in serial_tapas_helper.cxx
