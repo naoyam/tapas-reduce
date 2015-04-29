@@ -974,17 +974,18 @@ void Cell<TSP>::RecvCell(int pid) {
   this->is_leaf_ = cellinfo->is_leaf;
 
   index_t num_bodies = this->nb_;
-  index_t len_bodies = IsLeaf() ? sizeof(BodyType)     * num_bodies : 0;
-  auto *bodies = reinterpret_cast<BodyType*>(data + len_cellinfo);
-  auto *attrs = reinterpret_cast<BodyAttrType*>(data + len_cellinfo + len_bodies);
-  
-  TAPAS_ASSERT(cellinfo->key == key_);
-  
-  // set the bodies
-  this->bid_ = 0;
-  this->local_bodies_ = VecPtr<BodyType>(new std::vector<BodyType>(bodies, bodies + this->nb_));
-  this->local_body_attrs_ = VecPtr<BodyAttrType>(new std::vector<BodyAttrType>(attrs, attrs + this->nb_));
+  index_t len_bodies = IsLeaf() ? sizeof(BodyType) * num_bodies : 0;
 
+  if (IsLeaf()) {
+    auto *bodies = reinterpret_cast<BodyType*>(data + len_cellinfo);
+    auto *attrs = reinterpret_cast<BodyAttrType*>(data + len_cellinfo + len_bodies);
+
+    // Set the bodies
+    this->bid_ = 0;
+    this->local_bodies_ = VecPtr<BodyType>(new std::vector<BodyType>(bodies, bodies + this->nb_));
+    this->local_body_attrs_ = VecPtr<BodyAttrType>(new std::vector<BodyAttrType>(attrs, attrs + this->nb_));
+  }
+  
   {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -1049,7 +1050,6 @@ void Cell<TSP>::SendCell(std::vector<int> remote_pids) {
 
   index_t bid = this->bid();
 
-  std::cerr << "num_bodies = " << num_bodies << std::endl;
   if (cellinfo->is_leaf) {
     // Copy body info if the cell is a leaf
     for (int bi = 0; bi < num_bodies; bi++) {
@@ -1062,7 +1062,6 @@ void Cell<TSP>::SendCell(std::vector<int> remote_pids) {
     }
   }
 
-  std::cerr << "remote_pids.size() = " << remote_pids.size() << std::endl;
   auto *reqs = new MPI_Request[remote_pids.size()];
   auto *stats = new MPI_Status[remote_pids.size()];
   
