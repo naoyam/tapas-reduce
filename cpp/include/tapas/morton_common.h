@@ -31,6 +31,8 @@ using std::unordered_map;
 // 
 // Maximum depth of octree:
 //   Maximum depth is determined by the type of KeyType and #bits of depth bits.
+//   This information is now hardcoded (computed by a external script),
+//   but will be coputed using constexpr feature of C++11.
 //
 //   Type        | Depth bits | Max depth
 //
