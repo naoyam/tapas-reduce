@@ -404,7 +404,7 @@ class Cell: public tapas::BasicCell<TSP> {
   }
   
   /**
-   *
+   * MPI tag is used when two cells are exchanged between processes.
    */
   static int GetMpiTag(KeyType k1, KeyType k2) {
     // int max_tag = std::numeric_limits<int>::max();
@@ -964,6 +964,9 @@ void Cell<TSP>::RecvCell(int pid) {
   // See SendCell() about details
   index_t len_cellinfo = sizeof(CellInfoBinder<TSP>);
   auto *cellinfo = reinterpret_cast<CellInfoBinder<TSP>*>(data);
+
+  TAPAS_ASSERT(cellinfo->key == key_);
+  TAPAS_ASSERT(cellinfo->is_leaf == IsLeaf());
   
   //assert(stat.MPI_ERROR == MPI_SUCCESS);
   this->attr()   = cellinfo->cell_attr;
