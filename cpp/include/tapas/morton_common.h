@@ -30,9 +30,21 @@ using std::unordered_map;
 
 // 
 // Maximum depth of octree:
-//   Maximum depth is determined by the type of KeyType and #bits of depth bits.
+//   Maximum depth is determined by the type of KeyType and length of depth bits.
 //   This information is now hardcoded (computed by a external script),
-//   but will be coputed using constexpr feature of C++11.
+//   but will be computed using constexpr feature of C++11.
+//
+//   In case of Morton Key:
+//   Let 
+//     B = Number of bits of the whole key value
+//     D = Length of depth bits
+//     dim = Dimension (3 in many cases but not always)
+//
+//   Thus, maximum depth of an octree is:
+//      min(a, b)
+//        where
+//          a = 2 ^ D
+//          b = (B-D-1) / dim
 //
 //   Type        | Depth bits | Max depth
 //
