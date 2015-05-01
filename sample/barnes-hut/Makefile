@@ -1,4 +1,4 @@
-CXX = clang++ -std=c++11 -stdlib=libc++ -fcolor-diagnostics 
+CXX = clang++ -std=c++11 -fcolor-diagnostics -Wall -Wextra
 #CXX = clang++ -std=c++11 -fcolor-diagnostics 
 #CXX = g++ -std=c++11
 

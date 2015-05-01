@@ -6,6 +6,7 @@
 #include <sys/time.h>
 
 #include "tapas.h"
+#include "tapas/single_node_morton_hot.h"
 
 #define DIM (3)
 typedef double real_t;
@@ -27,7 +28,9 @@ const real_t EPS2 = 1e-6;
 
 typedef tapas::BodyInfo<float4, 0> BodyInfo;
 typedef tapas::Tapas<DIM, real_t, BodyInfo,
-        float4, float4, tapas::HOT> Tapas;
+                     float4, float4,
+                     tapas::SingleNodeMortonHOT,
+                     tapas::threading::Default> Tapas;
 
 double get_time() {
   struct timeval tv;
