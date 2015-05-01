@@ -10,10 +10,12 @@
 # endif
 #endif
 
-#include <string>
 #include <cstdlib>
-#include <sstream>
 #include <cassert>
+
+#include <string>
+#include <sstream>
+#include <vector>
 #include <iostream>
 #include <fstream>
 
