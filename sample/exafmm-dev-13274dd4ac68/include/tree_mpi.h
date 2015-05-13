@@ -102,9 +102,9 @@ protected:
     vec3 dX;                                                    // Distance vector
     for (int d=0; d<3; d++) {                                   // Loop over dimensions
       dX[d] = (C->X[d] + Xperiodic[d] > bounds.Xmax[d]) *       //  Calculate the distance between cell C and
-	(C->X[d] + Xperiodic[d] - bounds.Xmax[d]) +             //  the nearest point in domain [xmin,xmax]^3
-	(C->X[d] + Xperiodic[d] < bounds.Xmin[d]) *             //  Take the differnece from xmin or xmax
-	(C->X[d] + Xperiodic[d] - bounds.Xmin[d]);              //  or 0 if between xmin and xmax
+							(C->X[d] + Xperiodic[d] - bounds.Xmax[d]) +             //  the nearest point in domain [xmin,xmax]^3
+							(C->X[d] + Xperiodic[d] < bounds.Xmin[d]) *             //  Take the differnece from xmin or xmax
+							(C->X[d] + Xperiodic[d] - bounds.Xmin[d]);              //  or 0 if between xmin and xmax
     }                                                           // End loop over dimensions
     return norm(dX);                                            // Return distance squared
   }
