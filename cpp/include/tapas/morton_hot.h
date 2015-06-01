@@ -34,6 +34,7 @@
 #include "tapas/debug_util.h"
 #include "tapas/iterator.h"
 #include "tapas/morton_common.h"
+#include "tapas/morton_key.h"
 #include "tapas/threading/default.h"
 
 #define DEBUG_SENDRECV
@@ -113,6 +114,7 @@ struct HelperNode {
   index_t np;           //!< Number of particles in a node
 };
 
+// Debug helper function
 template<class F>
 void BarrierExec(F func) {
   int size, rank;
@@ -329,7 +331,7 @@ class Cell: public tapas::BasicCell<TSP> {
   int depth() const {
     return MortonKeyGetDepth(key_);
   }
-
+  
 #ifdef DEPRECATED
     typename TSP::BT::type &particle(index_t idx) const {
         return body(idx);
@@ -1873,9 +1875,11 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
             child_r, cur_offset, child_bn, child_key, c->ht(),
             c->bodies_, c->body_attrs_);
         c->ht()->insert(std::make_pair(child_key, child_cell));
-        TAPAS_LOG_DEBUG() << "Particles: \n";
+#if 0
 #ifdef TAPAS_DEBUG
+        TAPAS_LOG_DEBUG() << "Particles: \n";
         tapas::debug::PrintBodies<Dim, FP, BT>(b+cur_offset, child_bn, std::cerr);
+#endif
 #endif
         Refine(child_cell, hn, b, cur_depth+1, child_key);
         child_key = CalcMortonKeyNext<Dim>(child_key);
@@ -1947,6 +1951,7 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, MortonHOT, Threading> {
   typedef tapas::Region<TSP> Region;
   typedef morton_hot::Cell<TSP> Cell;
   typedef tapas::BodyIterator<Cell> BodyIterator;
+  typedef tapas::key::Morton<DIM> Key;
   
   /**
    * @brief Partition and build an octree of the target space.

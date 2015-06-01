@@ -44,7 +44,7 @@ using std::unordered_map;
 //      min(a, b)
 //        where
 //          a = 2 ^ D
-//          b = (B-D-1) / dim
+//          b = (B-D-1) / dim (1 bit is necessary for overflow buffer)
 //
 //   Type        | Depth bits | Max depth
 //

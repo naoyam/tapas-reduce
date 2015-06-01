@@ -10,6 +10,14 @@
 # endif
 #endif
 
+#if __cplusplus >= 201402L   // C++14
+# define TAPAS_CPP14
+#elif __cplusplus >= 201103L // C++11
+# define TAPAS_CPP11
+#else
+# error "Tapas requires C++11 or later."
+#endif
+
 #include <cstdlib>
 #include <cassert>
 
