@@ -527,15 +527,6 @@ std::vector<HelperNode<TSP::Dim>> CreateInitialNodes(const typename TSP::BT::typ
       pitch[d] = (r.max()[d] - r.min()[d]) / num_cell;
     }
 
-#if 0
-    // debug print (to be deleted)
-    BarrierExec([&](int rank, int size) {
-        std::cerr << "CreateInitialNodes: rank " << rank << " pitch = " << pitch << std::endl;
-        std::cerr << "CreateInitialNodes: rank " << rank << " r.max = " << r.max() << std::endl;
-        std::cerr << "CreateInitialNodes: rank " << rank << " r.min = " << r.min() << std::endl;
-      });
-#endif
-
     for (index_t i = 0; i < nb; ++i) {
         // First, create 1 helper cell per particle
         HelperNode<Dim> &node = nodes[i];
@@ -558,7 +549,7 @@ std::vector<HelperNode<TSP::Dim>> CreateInitialNodes(const typename TSP::BT::typ
             }
         }
 #ifdef TAPAS_DEBUG
-        assert(node.anchor >= 0);
+        TAPAS_ASSERT(node.anchor >= 0);
 # if 1
         if (!(node.anchor < (1 << MAX_DEPTH))) {
             TAPAS_LOG_ERROR() << "Anchor, " << node.anchor
@@ -610,39 +601,39 @@ void SortBodies2(std::vector<BodyType> &bodies, const std::vector<HelperNode<DIM
 
 template <int DIM, class T>
 void AppendChildren(KeyType x, T &s) {
-    int x_depth = MortonKeyGetDepth(x);
-    int c_depth = x_depth + 1;
-    if (c_depth > MAX_DEPTH) return;
-    x = MortonKeyIncrementDepth(x, 1);
-    for (int i = 0; i < (1 << DIM); ++i) {
-      KeyType child_key = ((KeyType)i << ((MAX_DEPTH - c_depth) * DIM + DEPTH_BIT_WIDTH));
-      s.push_back(x | child_key);
-      TAPAS_LOG_DEBUG() << "Adding child " << (x | child_key) << std::endl;
-    }
+  int x_depth = MortonKeyGetDepth(x);
+  int c_depth = x_depth + 1;
+  if (c_depth > MAX_DEPTH) return;
+  x = MortonKeyIncrementDepth(x, 1);
+  for (int i = 0; i < (1 << DIM); ++i) {
+    KeyType child_key = ((KeyType)i << ((MAX_DEPTH - c_depth) * DIM + DEPTH_BIT_WIDTH));
+    s.push_back(x | child_key);
+    TAPAS_LOG_DEBUG() << "Adding child " << (x | child_key) << std::endl;
+  }
 }
 
 template <int DIM>
 void CompleteRegion(KeyType x, KeyType y,
                     KeyVector &s) {
-    KeyType fa = FindFinestAncestor<DIM>(x, y);
-    KeyList w;
-    AppendChildren<DIM>(fa, w);
-    tapas::PrintKeys(w, std::cout);
-    while (w.size() > 0) {
-        KeyType k = w.front();
-        w.pop_front();
-        TAPAS_LOG_DEBUG() << "visiting " << k << std::endl;
-        if ((k > x && k < y) && !MortonKeyIsDescendant<DIM>(k, y)) {
-            s.push_back(k);
-            TAPAS_LOG_DEBUG() << "Adding " << k << " to output set" << std::endl;
-        } else if (MortonKeyIsDescendant<DIM>(k, x) ||
-                   MortonKeyIsDescendant<DIM>(k, y)) {
-            TAPAS_LOG_DEBUG() << "Adding children of " << k << " to work set" << std::endl;
-            AppendChildren<DIM>(k, w);
+  KeyType fa = FindFinestAncestor<DIM>(x, y);
+  KeyList w;
+  AppendChildren<DIM>(fa, w);
+  tapas::PrintKeys(w, std::cout);
+  while (w.size() > 0) {
+    KeyType k = w.front();
+    w.pop_front();
+    TAPAS_LOG_DEBUG() << "visiting " << k << std::endl;
+    if ((k > x && k < y) && !MortonKeyIsDescendant<DIM>(k, y)) {
+      s.push_back(k);
+      TAPAS_LOG_DEBUG() << "Adding " << k << " to output set" << std::endl;
+    } else if (MortonKeyIsDescendant<DIM>(k, x) ||
+               MortonKeyIsDescendant<DIM>(k, y)) {
+      TAPAS_LOG_DEBUG() << "Adding children of " << k << " to work set" << std::endl;
+      AppendChildren<DIM>(k, w);
 
-        }
     }
-    std::sort(std::begin(s), std::end(s));
+  }
+  std::sort(std::begin(s), std::end(s));
 }
 
 /**
