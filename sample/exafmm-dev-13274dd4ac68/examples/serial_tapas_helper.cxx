@@ -69,7 +69,7 @@ static inline void FMM_L2P(Tapas::Cell &c) {
   if (c.IsLeaf()) {
     tapas::Map(tapas_kernel::L2P, c.bodies());
   } else {
-    //tapas::Map(FMM_L2P, c.subcells());
+    tapas::Map(FMM_L2P, c.subcells());
   }
 }
 

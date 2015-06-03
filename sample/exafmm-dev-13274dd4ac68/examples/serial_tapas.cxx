@@ -281,12 +281,6 @@ int main(int argc, char ** argv) {
     dumpBodies(*root);
     dumpL(*root);
 
-    // Note: tapas::Map(FMM_L2P, c.subcells()) is commented out in serial_tapas_helper.cxx
-#ifdef EXAFMM_TAPAS_MPI
-    MPI_Finalize();
-#endif
-    exit(0); // --------------------------------------------------
-
     logger::startTimer("Downward pass");
     tapas::Map(FMM_L2P, *root);
     logger::stopTimer("Downward pass");

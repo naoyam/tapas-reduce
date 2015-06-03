@@ -348,8 +348,6 @@ void tapas_kernel::L2P(Tapas::BodyIterator &B) {
 }
 
 void tapas_kernel::L2L(Tapas::Cell &C) {
-  assert(0);
-  std::cerr << "***********L2L" << std::endl;
   complex_t Ynm[P*P], YnmTheta[P*P];
   const Tapas::Cell &Cj = C.parent();
   vec3 dX = tovec(C.center() - Cj.center());

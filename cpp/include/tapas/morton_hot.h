@@ -657,14 +657,6 @@ void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
   int rank = -1;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-  if (SimplifyKey(cell.key()) == "0461...7906") {
-    Stderr e("debug");
-    e.out() << cell.key() << " Map() is called." << std::endl;
-    e.out() << cell.key() << " time= " << (long)(MPI_Wtime()*1000)%100000/1000.0 << std::endl;
-    e.out() << cell.key() << " object address = " << &cell << std::endl;
-    e.out() << cell.key() << " :           M = " << cell.attr().M << std::endl;
-  }
-  
   if (cell.is_local_) {
     f(cell);
 
