@@ -21,14 +21,15 @@ typedef tapas::BodyInfo<Body, 0> BodyInfo;
 #include "tapas/morton_hot.h" // Morton-key based partitioning with MPI
 #include "tapas/threading/massivethreads.h"
 typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr,
-                     tapas::MortonHOT,
+                     tapas::HOT<3, tapas::key::Morton>,
                      tapas::threading::MassiveThreads> Tapas;
-
 #else
 
 // Build single-node version
 #include "tapas/single_node_morton_hot.h" // Morton-key based single node partitioning
-typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr, tapas::SingleNodeMortonHOT, tapas::threading::Serial> Tapas;
+typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr,
+                     tapas::SingleNodeMortonHOT,
+                     tapas::threading::Serial> Tapas;
 
 #endif
 

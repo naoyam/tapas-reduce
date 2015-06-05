@@ -151,7 +151,7 @@ void tapas_kernel::P2M(Tapas::Cell &C) {
     real_t rho, alpha, beta;
     cart2sph(rho, alpha, beta, dX);
     evalMultipole(rho, alpha, beta, Ynm, YnmTheta);
-    e.out() << std::setw(10) << tapas::morton_common::SimplifyKey(C.key())
+    e.out() << std::setw(10) << Tapas::Key::Simplify(C.key())
             << " B[" << i << "].SRC=" << B.SRC << std::endl;
     for (int n=0; n<P; n++) {
       for (int m=0; m<=n; m++) {
@@ -161,7 +161,7 @@ void tapas_kernel::P2M(Tapas::Cell &C) {
       }
     }
   }
-  e.out() << std::setw(10) << tapas::morton_common::SimplifyKey(C.key())
+  e.out() << std::setw(10) << Tapas::Key::Simplify(C.key())
           << "M=" << C.attr().M
           << std::endl;
 }
@@ -169,12 +169,12 @@ void tapas_kernel::P2M(Tapas::Cell &C) {
 void tapas_kernel::M2M(Tapas::Cell & C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
 
-  tapas::morton_common::KeyType debug_key = 7905;
+  Tapas::Key::KeyType debug_key = 7905;
   
   if (C.key() % 10000 == debug_key) {
     Stderr e("M2M");
     e.out() << "M2M "
-            << tapas::morton_common::SimplifyKey(C.key()) << ", "
+            << Tapas::Key::Simplify(C.key()) << ", "
             << C.depth() << ", "
             << C.center() << std::endl;
   }
@@ -185,7 +185,7 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
     if (C.key() % 10000 == debug_key) {
       Stderr e("M2M");
       e.out() << "Cj=subcell " << i << std::endl;
-      e.out() << "Cj.key = " << tapas::morton_common::SimplifyKey(Cj.key()) << std::endl;
+      e.out() << "Cj.key = " << Tapas::Key::Simplify(Cj.key()) << std::endl;
       e.out() << "Cj.nb() = " << Cj.nb() << std::endl;
       e.out() << "Cj.center() = " << Cj.center() << std::endl;
       e.out() << "Cj.M = " << Cj.attr().M << std::endl;
@@ -239,7 +239,7 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
     Stderr e("M2M");
     for (int i = 0; i < C.nsubcells(); i++) {
       Tapas::Cell &Cj = C.subcell(i);
-      e.out() << "C[" << i << "].key = " << tapas::morton_common::SimplifyKey(Cj.key()) << std::endl;
+      e.out() << "C[" << i << "].key = " << Tapas::Key::Simplify(Cj.key()) << std::endl;
       e.out() << "C[" << i << "].IsLeaf = " << Cj.IsLeaf() << std::endl;
 #if EXAFMM_TAPAS_MPI
       //e.out() << "C[" << i << "].Local  = " << Cj.IsLocal() << std::endl;
@@ -354,7 +354,7 @@ void tapas_kernel::L2L(Tapas::Cell &C) {
   real_t rho, alpha, beta;
 
   Stderr e("L2L");
-  e.out() << "C.key = " << tapas::morton_common::SimplifyKey(Cj.key()) << std::endl;
+  e.out() << "C.key = " << Tapas::Key::Simplify(Cj.key()) << std::endl;
   e.out() << "C.IsLeaf = " << Cj.IsLeaf() << std::endl;
 #if EXAFMM_TAPAS_MPI
   //e.out() << "C[" << i << "].Local  = " << Cj.IsLocal() << std::endl;
@@ -389,7 +389,7 @@ void tapas_kernel::L2L(Tapas::Cell &C) {
     }
   }
 
-  e.out() << "Cj.key = " << tapas::morton_common::SimplifyKey(Cj.key()) << std::endl;
+  e.out() << "Cj.key = " << Tapas::Key::Simplify(Cj.key()) << std::endl;
   e.out() << "Cj.IsLeaf = " << Cj.IsLeaf() << std::endl;
 #if EXAFMM_TAPAS_MPI
   //e.out() << "C[" << i << "].Local  = " << Cj.IsLocal() << std::endl;

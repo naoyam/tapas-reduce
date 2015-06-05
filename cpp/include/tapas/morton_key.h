@@ -130,10 +130,16 @@ Dim Bits Depth_bits Max_depth
 /**
  * A class implementing Morton key
  */
-template<int _Dim, class _type = uint64_t>
+template<int _Dim, class _type>
 class Morton {
  public:
   using KeyType = _type;
+  
+  typedef std::list<KeyType> KeyList;
+  typedef std::vector<KeyType> KeyVector;
+  typedef std::unordered_set<KeyType> KeySet;
+  typedef std::pair<KeyType, KeyType> KeyPair;
+  
   static const int Dim = _Dim;
 
   /**
@@ -164,6 +170,9 @@ class Morton {
         : 0;
   }
 
+  static const constexpr int MAX_DEPTH = MaxDepth();
+  static const constexpr int DEPTH_BIT_WIDTH = DepthBits();
+
   static constexpr KeyType kDepthMask = (1 << DepthBits()) - 1;
 
   static inline constexpr
@@ -189,6 +198,13 @@ class Morton {
   static inline CONSTEXPR
   KeyType RemoveDepth(KeyType k) {
     return k >> DepthBits();
+  }
+
+  static inline CONSTEXPR
+  KeyType IncrementDepth(KeyType k, int inc) {
+    TAPAS_ASSERT(GetDepth(k) <= MAX_DEPTH);
+    return AppendDepth(RemoveDepth(k),
+                       GetDepth(k) + inc);
   }
 
   /**
@@ -250,6 +266,25 @@ class Morton {
     return k | ((KeyType)child_idx << ((MaxDepth() - d) * Dim + DepthBits()));
   }
 
+  static CONSTEXPR
+  /**
+   * @brief Returns a std::vector of parent's children
+   */
+  std::vector<KeyType> GetChildren(KeyType parent) {
+    std::vector<KeyType> ret;
+  
+    KeyType child_key = FirstChild(parent);
+    int nchild = (1 << Dim);
+    
+    for (int child_idx = 0; child_idx < nchild; child_idx++) {
+      ret.push_back(child_key);
+      child_key = GetNext(child_key);
+    }
+
+    return ret;
+  }
+
+
   static inline CONSTEXPR
   KeyType FinestAncestor(KeyType x, KeyType y) {
     int min_depth = std::min(GetDepth(x),
@@ -268,6 +303,7 @@ class Morton {
     return AppendDepth(x & mask, common_depth);
   }
 
+  static
   std::string Decode(KeyType k) {
     std::stringstream ss;
     // get the overflow bit
@@ -290,6 +326,7 @@ class Morton {
     return ss.str();
   }
 
+  static
   KeyType CalcFinestKey(const tapas::Vec<Dim, int> &anchor) {
     for (int d = Dim-1; d >= 0; --d) {
       assert(anchor[d] <= pow(2, MaxDepth()));
@@ -304,6 +341,49 @@ class Morton {
       mask >>= 1;
     }
     return AppendDepth(k, MaxDepth());
+  }
+
+  template<class Iter>
+  static void GetDescendantRange(KeyType k, Iter beg, Iter end, index_t &b, index_t &e) {
+    auto comp = [](KeyType a, KeyType b) {
+      return RemoveDepth(a) < RemoveDepth(b);
+    };
+
+    KeyType kn = GetNext(k);
+
+    auto fst = std::lower_bound(beg, end, k, comp);
+    auto lst = std::lower_bound(fst, end, kn, comp);
+    b = fst - beg;
+    e = lst - beg;
+  }
+
+  /**
+   * @brief Find the range(beg,end) of cells/bodies that the cell
+   */
+  template<class T>
+  static inline 
+  void FindRangeByKey(const T& vec, KeyType k, index_t &range_beg, index_t &range_end) {
+    auto beg = std::begin(vec);
+    auto end = std::end(vec);
+    range_beg = std::lower_bound(beg, end, k) - beg;
+    range_end = std::lower_bound(beg, end, GetNext(k)) - beg;
+  }
+
+  /**
+   * \brief returns a simplified, human-readable string representation of the key.
+   * The returned string cannot be converted to the original key back.
+   * NOTE: It might be useful to make this function constexpr, but 
+   *       we use stringstream in the current implementation.
+   * Example: "0461...7906"
+   */
+  static
+  std::string Simplify(KeyType k) {
+    int W=4;
+    std::stringstream ss;
+    ss << std::setw(20) << std::setfill('0') << k;
+    std::string s = ss.str();
+    s.replace(s.begin()+W, s.end()-W, "...");
+    return s;
   }
 };
 

@@ -45,6 +45,15 @@
 #include <mpi.h>
 #endif
 
+#if 0
+namespace tapas {
+namespace key {
+// Forward decleration
+template<int Dim, int KeyType> class Morton;
+}
+}
+#endif
+
 namespace {
 
 #define DEBUG_WRITE
@@ -176,16 +185,23 @@ void PrintKeys(const T &s, std::ostream &os) {
 }
 
 /** 
- * @brief Holder of template parameter types (given by user code).
+ * @brief Holder of template parameter types.
  */
-template<int _DIM, class _FP, class _BT, class _BT_ATTR, class _ATTR, class _Threading>
+template<int _DIM, class _FP, class _BT, class _BT_ATTR, class _ATTR,
+         class _Threading,
+         class _Key>
 struct TapasStaticParams {
-  static const int Dim = _DIM; //!< dimension of simulation space
-  typedef _FP FP;              //!< Floating point types
-  typedef _BT BT;              //!< body info
-  typedef _BT_ATTR BT_ATTR;    //!< body attributes
-  typedef _ATTR ATTR;          //!< cell attributes
+  static const int Dim = _DIM;  //!< dimension of simulation space
+  typedef _FP FP;               //!< Floating point types
+  typedef _BT BT;               //!< body info
+  typedef _BT_ATTR BT_ATTR;     //!< body attributes
+  typedef _ATTR ATTR;           //!< cell attributes
   typedef _Threading Threading; //!< threading policy
+  typedef _Key Key;             //!< SFC key type
+  
+  // FIXME: the `Key` class should not be here, because
+  //        the concept of `key` is specific to HOT partitioning algorithm.
+  //        As of now, HOT is the only implemented partitioning algorithm.
 };
 
 } // namespace tapas

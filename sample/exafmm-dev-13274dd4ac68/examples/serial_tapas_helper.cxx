@@ -32,12 +32,16 @@ static inline void FMM_P2M(Tapas::Cell &c, real_t theta) {
   c.attr().R = 0;
   c.attr().M = 0;
   c.attr().L = 0;
+  
+#ifdef TAPAS_DEBUG
   {
     Stderr e("FMM_P2M");
-    e.out() << tapas::morton_common::SimplifyKey(c.key()) << " (1) " << c.IsLeaf() << " ";
+    e.out() << Tapas::Key::Simplify(c.key()) << " (1) " << c.IsLeaf() << " ";
     e.out() << "c.attr().R = " << std::fixed << std::setprecision(6) << c.attr().R << " ";
     e.out() << std::endl;
   }
+#endif
+  
   if (c.IsLeaf()) {
     tapas_kernel::P2M(c);
   } else {
@@ -45,7 +49,7 @@ static inline void FMM_P2M(Tapas::Cell &c, real_t theta) {
   }
   
   Stderr e("FMM_P2M");
-  e.out() << tapas::morton_common::SimplifyKey(c.key()) << " (2) " << c.IsLeaf() << " ";
+  e.out() << Tapas::Key::Simplify(c.key()) << " (2) " << c.IsLeaf() << " ";
   e.out() << "c.attr().R = " << std::fixed << std::setprecision(6) << c.attr().R << " ";
 
   for (int i = 0; i < 3; ++i) {
@@ -63,7 +67,7 @@ static inline void FMM_P2M(Tapas::Cell &c, real_t theta) {
 }
 
 static inline void FMM_L2P(Tapas::Cell &c) {
-  std::cerr << "FMM_L2P : " << tapas::morton_common::SimplifyKey(c.key()) << std::endl;
+  std::cerr << "FMM_L2P : " << Tapas::Key::Simplify(c.key()) << std::endl;
   if (c.nb() == 0) return;
   if (!c.IsRoot()) tapas_kernel::L2L(c);
   if (c.IsLeaf()) {
@@ -123,8 +127,8 @@ static inline void FMM_M2L(Tapas::Cell &Ci, Tapas::Cell &Cj, int mutual, int nsp
   {
     Stderr e("FMM_M2L");
     real_t R = (Ci.attr().R+Cj.attr().R) * (Ci.attr().R+Cj.attr().R);
-    e.out() << "Ci=" << tapas::morton_common::SimplifyKey(Ci.key()) << "(" << Ci.nb() << ") "
-            << "Cj=" << tapas::morton_common::SimplifyKey(Cj.key()) << "(" << Cj.nb() << ") "
+    e.out() << "Ci=" << Tapas::Key::Simplify(Ci.key()) << "(" << Ci.nb() << ") "
+            << "Cj=" << Tapas::Key::Simplify(Cj.key()) << "(" << Cj.nb() << ") "
             << "Ci.attr().R=" << std::fixed << std::setprecision(8) << Ci.attr().R << " "
             << "Cj.attr().R=" << std::fixed << std::setprecision(8) << Cj.attr().R << " "
             << "R=" << R << " "
