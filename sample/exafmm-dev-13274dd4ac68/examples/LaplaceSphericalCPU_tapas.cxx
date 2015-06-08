@@ -353,15 +353,6 @@ void tapas_kernel::L2L(Tapas::Cell &C) {
   vec3 dX = tovec(C.center() - Cj.center());
   real_t rho, alpha, beta;
 
-  Stderr e("L2L");
-  e.out() << "C.key = " << Tapas::Key::Simplify(Cj.key()) << std::endl;
-  e.out() << "C.IsLeaf = " << Cj.IsLeaf() << std::endl;
-#if EXAFMM_TAPAS_MPI
-  //e.out() << "C[" << i << "].Local  = " << Cj.IsLocal() << std::endl;
-#endif 
-  e.out() << "C.depth  = " << Cj.depth() << std::endl;
-  e.out() << "C.center = " << Cj.center() << std::endl;
-  
   cart2sph(rho, alpha, beta, dX);
   evalMultipole(rho, alpha, beta, Ynm, YnmTheta);
 #if MASS
@@ -388,14 +379,4 @@ void tapas_kernel::L2L(Tapas::Cell &C) {
       C.attr().L[jks] += L;
     }
   }
-
-  e.out() << "Cj.key = " << Tapas::Key::Simplify(Cj.key()) << std::endl;
-  e.out() << "Cj.IsLeaf = " << Cj.IsLeaf() << std::endl;
-#if EXAFMM_TAPAS_MPI
-  //e.out() << "C[" << i << "].Local  = " << Cj.IsLocal() << std::endl;
-#endif 
-  e.out() << "Cj.depth  = " << Cj.depth() << std::endl;
-  e.out() << "Cj.center = " << Cj.center() << std::endl;
-  e.out() << "Cj.L = " << Cj.attr().L << std::endl;
-  e.out() << "C.L=" << C.attr().L << std::endl;
 }

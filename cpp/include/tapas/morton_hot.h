@@ -686,14 +686,15 @@ void SortBodies2(std::vector<typename TSP::BT::type> &bodies,
 
 template <int DIM, class Key, class T>
 void AppendChildren(typename Key::KeyType x, T &s) {
-  typedef typename Key::KeyType KeyType;
+  using KeyType = typename Key::KeyType;
   
   int x_depth = Key::GetDepth(x);
   int c_depth = x_depth + 1;
   if (c_depth > Key::MAX_DEPTH) return;
   x = Key::IncrementDepth(x, 1);
   for (int i = 0; i < (1 << DIM); ++i) {
-    KeyType child_key = ((KeyType)i << ((KeyType::MAX_DEPTH - c_depth) * DIM + Key::DEPTH_BIT_WIDTH));
+    KeyType child_key = ((KeyType)i << ((KeyType::MAX_DEPTH - c_depth) * DIM +
+                                        Key::DEPTH_BIT_WIDTH));
     s.push_back(x | child_key);
     TAPAS_LOG_DEBUG() << "Adding child " << (x | child_key) << std::endl;
   }
@@ -706,10 +707,10 @@ void CompleteRegion(typename TSP::Key::KeyType x,
   typedef typename TSP::Key Key;
   typedef typename Key::KeyType KeyType; // Using 'using' crashes LLVM3.5 so we stick to typedef
   
-  KeyType fa = Key::FinestAncestor<TSP::Dim>(x, y);
+  KeyType fa = Key::FinestAncestor(x, y);
   typename Key::KeyList w;
   
-  AppendChildren<TSP::Dim, Key::KeyType>(fa, w);
+  AppendChildren<TSP::Dim, KeyType>(fa, w);
   tapas::PrintKeys(w, std::cout);
   
   while (w.size() > 0) {
@@ -1818,7 +1819,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   }
   // we have created all local cells
 
-#if TAPAS_DEBUG
+#ifdef TAPAS_DEBUG
   // Debug
   // Dump all (local) cells to a file
   {
@@ -1971,11 +1972,12 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
     typename Key::KeyType child_key = Key::FirstChild(cur_key);
     index_t cur_offset = c->bid();
     index_t cur_len = c->nb();
+    
+    auto getkey = [](const HelperNode<TSP> &hn) { return hn.key; };
+
     for (int i = 0; i < (1 << Dim); ++i) {
         TAPAS_LOG_DEBUG() << "Child key: " << child_key << std::endl;
         
-        auto getkey = [](const HelperNode<TSP> &hn) { return hn.key; };
-
         // std::pair<KeyType, KeyType>
         auto kp = GetBodyRange<KeyType, HelperNode<TSP>>(child_key,
                                                          hn.begin() + cur_offset,

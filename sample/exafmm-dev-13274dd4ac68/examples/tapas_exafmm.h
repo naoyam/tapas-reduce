@@ -28,7 +28,7 @@ typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr,
 // Build single-node version
 #include "tapas/single_node_morton_hot.h" // Morton-key based single node partitioning
 typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr,
-                     tapas::SingleNodeMortonHOT,
+                     tapas::SingleNodeHOT<3, tapas::key::Morton>,
                      tapas::threading::Serial> Tapas;
 
 #endif

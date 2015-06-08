@@ -48,26 +48,15 @@ static inline void FMM_P2M(Tapas::Cell &c, real_t theta) {
     tapas_kernel::M2M(c);
   }
   
-  Stderr e("FMM_P2M");
-  e.out() << Tapas::Key::Simplify(c.key()) << " (2) " << c.IsLeaf() << " ";
-  e.out() << "c.attr().R = " << std::fixed << std::setprecision(6) << c.attr().R << " ";
-
   for (int i = 0; i < 3; ++i) {
     c.attr().R = std::max(c.width(i), c.attr().R);
   }
 
   c.attr().R = c.attr().R / 2 * 1.00001; // see bounds2box func
   c.attr().R /= theta;
-  
-  e.out() << "c.width=[";
-  for (int i=0; i<3; i++) e.out() << c.width(i) << " ";
-  e.out() << "] ";
-  e.out() << "c.attr().R = " << c.attr().R << " ";
-  e.out() << std::endl;
 }
 
 static inline void FMM_L2P(Tapas::Cell &c) {
-  std::cerr << "FMM_L2P : " << Tapas::Key::Simplify(c.key()) << std::endl;
   if (c.nb() == 0) return;
   if (!c.IsRoot()) tapas_kernel::L2L(c);
   if (c.IsLeaf()) {
@@ -123,7 +112,8 @@ static inline void FMM_M2L(Tapas::Cell &Ci, Tapas::Cell &Cj, int mutual, int nsp
   asn(dX, Ci.center() - Cj.center());
   real_t R2 = norm(dX);
   vec3 Xperiodic = 0; // dummy; periodic not ported
-  
+
+#ifdef TAPAS_DEBUG
   {
     Stderr e("FMM_M2L");
     real_t R = (Ci.attr().R+Cj.attr().R) * (Ci.attr().R+Cj.attr().R);
@@ -134,6 +124,7 @@ static inline void FMM_M2L(Tapas::Cell &Ci, Tapas::Cell &Cj, int mutual, int nsp
             << "R=" << R << " "
             << std::endl;
   }
+#endif
   
   if (R2 > (Ci.attr().R+Cj.attr().R) * (Ci.attr().R+Cj.attr().R)) {                   // If distance is far enough
     //std::cerr << "M2L approx\n";

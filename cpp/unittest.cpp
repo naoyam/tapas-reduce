@@ -29,7 +29,7 @@ TEST(TestSort, TestSortByPermutations) {
   V<char> ans   {'0', '1', '2', '3', '4', '5'};
   V<int>  perms { 2,   3,   0,   4,   5,   1};
 
-  tapas::morton_common::SortByPermutations(perms, vals);
+  tapas::morton_hot::SortByPermutations(perms, vals);
   ASSERT_EQ(ans, vals);
 }
 

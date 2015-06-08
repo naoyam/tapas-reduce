@@ -5,6 +5,8 @@
 #include <vector>
 #include <algorithm>
 #include <utility>
+#include <list>
+#include <unordered_map>
 
 #ifdef CPP14
 # define CONSTEXPR constexpr
