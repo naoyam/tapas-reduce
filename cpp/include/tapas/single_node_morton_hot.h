@@ -159,7 +159,7 @@ std::vector<HelperNode<TSP>> CreateInitialNodes(const typename TSP::BT::type *p,
                                                 const Region<TSP> &r) {
     const constexpr int Dim = TSP::Dim;
     using SFC = typename TSP::SFC;
-    using KeyType = typename SFC::KeyType;
+    //using KeyType = typename SFC::KeyType;
     using FP = typename TSP::FP;
     using BT = typename TSP::BT;
     
@@ -458,7 +458,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                             index_t nb,
                             const Region<TSP> &r) {
     using SFC = typename TSP::SFC;
-    typedef typename TSP::FP FP;
+    //typedef typename TSP::FP FP;
     typedef typename TSP::BT BT;
     typedef typename TSP::BT_ATTR BodyAttrType;
     typedef typename BT::type BodyType;
@@ -541,8 +541,8 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
     const int Dim = TSP::Dim;
     using SFC = typename TSP::SFC;
     using KeyType = typename SFC::KeyType;
-    typedef typename TSP::FP FP;
-    typedef typename TSP::BT BT;
+    //typedef typename TSP::FP FP;
+    //typedef typename TSP::BT BT;
     
     TAPAS_LOG_INFO() << "Current depth: " << cur_depth << std::endl;
     if (c->nb() <= max_nb_) {

@@ -253,7 +253,7 @@ int main(int argc, char ** argv) {
       }
     }
 #endif
-
+    
 #ifdef EXAFMM_TAPAS_MPI
     int rank = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -333,6 +333,6 @@ int main(int argc, char ** argv) {
 #ifdef EXAFMM_TAPAS_MPI
   MPI_Finalize();
 #endif
-    
+  
   return 0;
 }
