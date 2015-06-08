@@ -36,7 +36,7 @@ static inline void FMM_P2M(Tapas::Cell &c, real_t theta) {
 #ifdef TAPAS_DEBUG
   {
     Stderr e("FMM_P2M");
-    e.out() << Tapas::Key::Simplify(c.key()) << " (1) " << c.IsLeaf() << " ";
+    e.out() << Tapas::SFC::Simplify(c.key()) << " (1) " << c.IsLeaf() << " ";
     e.out() << "c.attr().R = " << std::fixed << std::setprecision(6) << c.attr().R << " ";
     e.out() << std::endl;
   }
@@ -117,8 +117,8 @@ static inline void FMM_M2L(Tapas::Cell &Ci, Tapas::Cell &Cj, int mutual, int nsp
   {
     Stderr e("FMM_M2L");
     real_t R = (Ci.attr().R+Cj.attr().R) * (Ci.attr().R+Cj.attr().R);
-    e.out() << "Ci=" << Tapas::Key::Simplify(Ci.key()) << "(" << Ci.nb() << ") "
-            << "Cj=" << Tapas::Key::Simplify(Cj.key()) << "(" << Cj.nb() << ") "
+    e.out() << "Ci=" << Tapas::SFC::Simplify(Ci.key()) << "(" << Ci.nb() << ") "
+            << "Cj=" << Tapas::SFC::Simplify(Cj.key()) << "(" << Cj.nb() << ") "
             << "Ci.attr().R=" << std::fixed << std::setprecision(8) << Ci.attr().R << " "
             << "Cj.attr().R=" << std::fixed << std::setprecision(8) << Cj.attr().R << " "
             << "R=" << R << " "

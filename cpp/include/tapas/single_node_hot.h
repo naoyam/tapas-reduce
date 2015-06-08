@@ -569,7 +569,7 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
         c->ht()->insert(std::make_pair(child_key, child_cell));
         TAPAS_LOG_DEBUG() << "Particles: \n";
 #ifdef TAPAS_DEBUG    
-        tapas::debug::PrintBodies<Dim, FP, BT>(b+cur_offset, child_bn, std::cerr);
+        tapas::debug::PrintBodies<Dim, typename TSP::FP, typename TSP::BT>(b+cur_offset, child_bn, std::cerr);
 #endif    
         Refine(child_cell, hn, b, cur_depth+1, child_key);
 
@@ -699,7 +699,7 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
   static Cell *Partition(typename BT::type *b,
                          index_t nb, const Region &r,
                          int max_nb) {
-    single_node_hot::Partitioner<TSP> part(max_nb);
+  single_node_hot::Partitioner<TSP> part(max_nb);
     return part.Partition(b, nb, r);
   }
 };
