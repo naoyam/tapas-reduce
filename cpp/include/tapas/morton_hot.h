@@ -733,55 +733,16 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
  */
 template <class TSP>
 void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
-  if (cell.IsDummy()) {
-    return;
-  }
+  f(cell);
+}
 
-  int rank = -1;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  if (cell.is_local_) {
-    f(cell);
-
-    // Processes that needs the cell information can be identified by calculating the difference of sets
-    //   {parent's owners} - {it's owners}
-    
-    if (cell.key() != 0) { // if not root (the root cell is never remote)
-      // Owner processes of the remote cell can be obtained by
-      // by {parent's owners} - {the cell's owners}
-      std::vector<int> senders = cell.owners(); // Owner of the cells
-      std::vector<int> recvers = SetDiff(cell.parent().owners(), senders); // Requesters
-      std::vector<int> peers = SendRecvMapping(senders, recvers, rank);
-      
-      cell.SendCell(peers);
-    }
-  } else {
-    // root cell is never 'remote' because it is shared by all processes
-    assert(cell.key() != 0);
-    
-    // The cells is remote, which means the process must obtain cell information
-    // from a process(sender) that owns the cell.
-    
-    // Senders = Owner processes
-    std::vector<int> senders = cell.owners(); // Owner of the cells
-
-    // Receivers = {pcell's owners} - {the cell's owners}
-    // This process is a receiver of the current cell
-    std::vector<int> recvers = SetDiff(cell.parent().owners(), senders);
-
-    auto peers = SendRecvMapping(senders, recvers, rank);
-    assert(peers.size() == 1);
-    
-    cell.RecvCell(peers[0]); // the sender finishes applying f first, then send the cell info to this process.
-    usleep(100000);
-    if (SFC::Simplify(cell.key()) == "0461...7906") {
-      Stderr e("debug");
-      e.out() << cell.key() << " RecvCell finished." << std::endl;
-      e.out() << cell.key() << " time= " << (long)(MPI_Wtime()*1000)%100000/1000.0 << std::endl;
-      e.out() << cell.key() << " object address = " << &cell << std::endl;
-      e.out() << cell.key() << " :           M = " << cell.attr().M << std::endl;
-    }
-  }
+/**
+ * 2-parameter Map function over cells (apply user function to products of cells)
+ */
+template<class TSP>
+void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
+                    std::function<void(Cell<TSP>&, Cell<TSP>&)> f) {
+  f(c1, c2);
 }
 
 // A special-purpose struct to exchange cell information
@@ -885,104 +846,6 @@ void Cell<TSP>::ExchangeCell(Cell<TSP> &remote) {
   MPI_Waitall(reqs.size(), reqs.data(), stats.data());
   e.out() << "Waitall done." << std::endl;
   e.out() << std::endl;
-}
-
-/**
- * 2-parameter Map function over cells (apply user function to products of cells)
- */
-template<class TSP>
-void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
-                    std::function<void(Cell<TSP>&, Cell<TSP>&)> f) {
-  int rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  using TaskGroup = typename TSP::Threading::TaskGroup;
-
-  {
-    Stderr e("map2");
-    e.out() << "Map: "
-            << SFC::Simplify(c1.key()) << ", "
-            << SFC::Simplify(c2.key()) << " : "
-            << (c1.IsLocal() ? "local" : "remote") << ","
-            << (c2.IsLocal() ? "local" : "remote")
-            << std::endl;
-    ;
-  }
-
-  if (!c1.IsLocal() && !c2.IsLocal()) return;
-
-  TaskGroup tg;
-
-  if (c1.IsLocal()) {
-    // Send cell information to necessary processes
-    // recvers : processes that has c2 but not c1, and will require c1 information
-    // senders : processes that have c1 locally and can send c1 information to other processes.
-    // send_to : Assignment of the local process 
-    std::vector<int> recvers = SetDiff(c2.owners(), c1.owners());
-    std::vector<int> senders = c1.owners();
-    std::vector<int> send_to = SendRecvMapping(senders, recvers, rank);
-    {
-      Stderr e("map2");
-      e.out() << "c1 [" << SFC::Simplify(c1.key()) << "] is local. (I'm " << rank << ")" << std::endl;
-      e.out() << "c1.owners() = " << "[" << join(" ", c1.owners()) << "]" << std::endl;
-      e.out() << "c2.owners() = " << "[" << join(" ", c2.owners()) << "]" << std::endl;
-      e.out() << "recvers = " << "[" << join(" ", recvers) << "]" << std::endl;
-      e.out() << "senders = " << "[" << join(" ", senders) << "]" << std::endl;
-      e.out() << "send_to = " << "[" << join(" ", send_to) << "]" << std::endl;
-      e.out() << std::endl;
-    }
-    c1.SendCell(send_to);
-  }
-  
-  if (c2.IsLocal()) {
-    std::vector<int> recvers = SetDiff(c1.owners(), c2.owners());
-    std::vector<int> senders = c2.owners();
-    std::vector<int> send_to = SendRecvMapping(senders, recvers, rank);
-    {
-      Stderr e("map2");
-      e.out() << "c2 [" << SFC::Simplify(c2.key()) << "] is local. (I'm " << rank << ")" << std::endl;
-      e.out() << "c2.owners() = " << "[" << join(" ", c2.owners()) << "]" << std::endl;
-      e.out() << "c1.owners() = " << "[" << join(" ", c1.owners()) << "]" << std::endl;
-      e.out() << "recvers = "     << "[" << join(" ", recvers) << "]" << std::endl;
-      e.out() << "senders = "     << "[" << join(" ", senders) << "]" << std::endl;
-      e.out() << "send_to = "     << "[" << join(" ", send_to) << "]" << std::endl;
-      e.out() << std::endl;
-    }
-    c2.SendCell(send_to);
-  }
-  
-  if (!c1.IsLocal()) {
-    std::vector<int> recvers = SetDiff(c2.owners(), c1.owners());
-    std::vector<int> senders = c1.owners();
-    std::vector<int> recv_from = SendRecvMapping(senders, recvers, rank);
-    Stderr e("map2");
-    e.out() << "Requesting " << SFC::Simplify(c1.key()) << " to " << recv_from[0] << std::endl;
-      
-    c1.RecvCell(recv_from[0]);
-  }
-  
-  if (!c2.IsLocal()) {
-    std::vector<int> recvers = SetDiff(c1.owners(), c2.owners());
-    std::vector<int> senders = c2.owners();
-    std::vector<int> recv_from = SendRecvMapping(senders, recvers, rank);
-    
-    Stderr e("map2");
-    e.out() << "Requesting " << SFC::Simplify(c2.key()) << " to " << recv_from[0] << std::endl;
-    
-    c2.RecvCell(recv_from[0]);
-  }
-
-  //wait_tasks;
-  tg.wait();
-  
-  {
-    Stderr e("map2");
-    e.out() << "Map: "
-            << SFC::Simplify(c1.key()) << ", "
-            << SFC::Simplify(c2.key()) << " : "
-            << "done." << std::endl;
-  }
-  
-  f(c1, c2);
 }
 
 template <class TSP>

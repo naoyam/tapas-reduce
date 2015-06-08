@@ -322,13 +322,6 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2, std::function<void(Cell<TSP>&,
 }
 
 template <class TSP>
-void Cell<TSP>::Map(BodyIterator<Cell<TSP>> &b1, BodyIterator<Cell<TSP>> &b2,
-                    std::function<void(BodyIterator<Cell<TSP>>&, BodyIterator<Cell<TSP>>&)> f) {
-  f(b1, b2);
-}
-
-
-template <class TSP>
 bool Cell<TSP>::operator==(const Cell &c) const {
     return key_ == c.key_;
 }
