@@ -2,8 +2,8 @@
  * @file hot.h
  * @brief Implements MPI-based, SFC (Space filling curves)-based HOT (Hashed Octree) implementation of Tapas
  */
-#ifndef TAPAS_MORTON_HOT_
-#define TAPAS_MORTON_HOT_
+#ifndef TAPAS_HOT_
+#define TAPAS_HOT_
 
 #include "tapas/stdcbug.h"
 
@@ -43,7 +43,7 @@ namespace tapas {
 /**
  * @brief Provides MPI-based distributed SFC-based octree partitioning
  */
-namespace morton_hot {
+namespace hot {
 
 /**
  * @brief Remove redundunt elements in a std::vector. The vector must be sorted.
@@ -1868,22 +1868,22 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
     c->is_leaf_ = false;
 }
 
-} // namespace morton_hot
+} // namespace hot
 
 template <class TSP, class T2>
-ProductIterator<CellIterator<morton_hot::Cell<TSP>>, T2>
-Product(morton_hot::Cell<TSP> &c, T2 t2) {
+ProductIterator<CellIterator<hot::Cell<TSP>>, T2>
+Product(hot::Cell<TSP> &c, T2 t2) {
     TAPAS_LOG_DEBUG() << "Cell-X product\n";
-    typedef morton_hot::Cell<TSP> CellType;
+    typedef hot::Cell<TSP> CellType;
     typedef CellIterator<CellType> CellIterType;
     return ProductIterator<CellIterType, T2>(CellIterType(c), t2);
 }
 
 template <class T1, class TSP>
-ProductIterator<T1, CellIterator<morton_hot::Cell<TSP>>>
-                         Product(T1 t1, morton_hot::Cell<TSP> &c) {
+ProductIterator<T1, CellIterator<hot::Cell<TSP>>>
+                         Product(T1 t1, hot::Cell<TSP> &c) {
     TAPAS_LOG_DEBUG() << "X-Cell product\n";
-    typedef morton_hot::Cell<TSP> CellType;
+    typedef hot::Cell<TSP> CellType;
     typedef CellIterator<CellType> CellIterType;
     return ProductIterator<T1, CellIterType>(t1, CellIterType(c));
 }
@@ -1892,12 +1892,12 @@ ProductIterator<T1, CellIterator<morton_hot::Cell<TSP>>>
  * @brief Constructs a ProductIterator for dual tree traversal of two trees
  */
 template <class TSP>
-ProductIterator<CellIterator<morton_hot::Cell<TSP>>,
-                CellIterator<morton_hot::Cell<TSP>>>
-                         Product(morton_hot::Cell<TSP> &c1,
-                                 morton_hot::Cell<TSP> &c2) {
+ProductIterator<CellIterator<hot::Cell<TSP>>,
+                CellIterator<hot::Cell<TSP>>>
+                         Product(hot::Cell<TSP> &c1,
+                                 hot::Cell<TSP> &c2) {
     TAPAS_LOG_DEBUG() << "Cell-Cell product\n";
-    typedef morton_hot::Cell<TSP> CellType;
+    typedef hot::Cell<TSP> CellType;
     typedef CellIterator<CellType> CellIterType;
     return ProductIterator<CellIterType, CellIterType>(
         CellIterType(c1), CellIterType(c2));
@@ -1934,7 +1934,7 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, MortonHOT, Threading> {
   typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR, Threading> TSP; // Tapas static params
  public:
   typedef tapas::Region<TSP> Region;
-  typedef morton_hot::Cell<TSP> Cell;
+  typedef hot::Cell<TSP> Cell;
   typedef tapas::BodyIterator<Cell> BodyIterator;
   typedef tapas::sfc::Morton<DIM> SFC;
   
@@ -1945,7 +1945,7 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, MortonHOT, Threading> {
   static Cell *Partition(typename BT::type *b,
                          index_t nb, const Region &r,
                          int max_nb) {
-    morton_hot::Partitioner<TSP> part(max_nb);
+    hot::Partitioner<TSP> part(max_nb);
     return part.Partition(b, nb, r);
   }
 };
@@ -1970,7 +1970,7 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, HOT<DIM, tapas::sfc::Morton>,
                             typename MortonHOT::SFC> TSP; // Tapas static params
  public:
   typedef tapas::Region<TSP> Region;
-  typedef morton_hot::Cell<TSP> Cell;
+  typedef hot::Cell<TSP> Cell;
   typedef tapas::BodyIterator<Cell> BodyIterator;
 
   using SFC = typename TSP::SFC;
@@ -1982,11 +1982,11 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, HOT<DIM, tapas::sfc::Morton>,
   static Cell *Partition(typename BT::type *b,
                          index_t nb, const Region &r,
                          int max_nb) {
-    morton_hot::Partitioner<TSP> part(max_nb);
+    hot::Partitioner<TSP> part(max_nb);
     return part.Partition(b, nb, r);
   }
 };
 
 } // namespace tapas
 
-#endif // TAPAS_MORTON_HOT_
+#endif // TAPAS_HOT_

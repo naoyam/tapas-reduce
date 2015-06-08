@@ -7,7 +7,7 @@
 
 template<class T> using V = std::vector<T>;
 
-using tapas::morton_hot::SendRecvMapping;
+using tapas::hot::SendRecvMapping;
 
 #define DEF_STREAM_HELPER(TYPE)                                         \
   template <>                                                           \
@@ -29,7 +29,7 @@ TEST(TestSort, TestSortByPermutations) {
   V<char> ans   {'0', '1', '2', '3', '4', '5'};
   V<int>  perms { 2,   3,   0,   4,   5,   1};
 
-  tapas::morton_hot::SortByPermutations(perms, vals);
+  tapas::hot::SortByPermutations(perms, vals);
   ASSERT_EQ(ans, vals);
 }
 
@@ -151,7 +151,7 @@ TEST(TestMap, TestSendRecvMapping4) {
 }
 
 TEST(TestMap, TestSetDiff) {
-  using tapas::morton_hot::SetDiff;
+  using tapas::hot::SetDiff;
 
   {
     std::vector<int> a {1,2,3};
@@ -183,7 +183,7 @@ TEST(TestMap, TestSetDiff) {
 }
 
 TEST(TestMap, TestSetUnion) {
-  using tapas::morton_hot::SetUnion;
+  using tapas::hot::SetUnion;
   typedef std::vector<int> Vi;
 
   {

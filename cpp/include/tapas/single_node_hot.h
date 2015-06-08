@@ -35,7 +35,7 @@ namespace tapas {
 /**
  * @brief Provides SFC-based octree partitioning for shared memory single node
  */
-namespace single_node_morton_hot {
+namespace single_node_hot {
 
 template <class TSP>
 struct HelperNode {
@@ -584,19 +584,19 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
 } // namespace single_node_hot
 
 template <class TSP, class T2>
-ProductIterator<CellIterator<single_node_morton_hot::Cell<TSP>>, T2>
-Product(single_node_morton_hot::Cell<TSP> &c, T2 t2) {
+ProductIterator<CellIterator<single_node_hot::Cell<TSP>>, T2>
+Product(single_node_hot::Cell<TSP> &c, T2 t2) {
     TAPAS_LOG_DEBUG() << "Cell-X product\n";
-    typedef single_node_morton_hot::Cell<TSP> CellType;
+    typedef single_node_hot::Cell<TSP> CellType;
     typedef CellIterator<CellType> CellIterType;
     return ProductIterator<CellIterType, T2>(CellIterType(c), t2);
 }
 
 template <class T1, class TSP>
-ProductIterator<T1, CellIterator<single_node_morton_hot::Cell<TSP>>>
-                         Product(T1 t1, single_node_morton_hot::Cell<TSP> &c) {
+ProductIterator<T1, CellIterator<single_node_hot::Cell<TSP>>>
+                         Product(T1 t1, single_node_hot::Cell<TSP> &c) {
     TAPAS_LOG_DEBUG() << "X-Cell product\n";
-    typedef single_node_morton_hot::Cell<TSP> CellType;
+    typedef single_node_hot::Cell<TSP> CellType;
     typedef CellIterator<CellType> CellIterType;
     return ProductIterator<T1, CellIterType>(t1, CellIterType(c));
 }
@@ -605,12 +605,12 @@ ProductIterator<T1, CellIterator<single_node_morton_hot::Cell<TSP>>>
  * @brief Constructs a ProductIterator for dual tree traversal of two trees
  */ 
 template <class TSP>
-ProductIterator<CellIterator<single_node_morton_hot::Cell<TSP>>,
-                CellIterator<single_node_morton_hot::Cell<TSP>>>
-                         Product(single_node_morton_hot::Cell<TSP> &c1,
-                                 single_node_morton_hot::Cell<TSP> &c2) {
+ProductIterator<CellIterator<single_node_hot::Cell<TSP>>,
+                CellIterator<single_node_hot::Cell<TSP>>>
+                         Product(single_node_hot::Cell<TSP> &c1,
+                                 single_node_hot::Cell<TSP> &c2) {
     TAPAS_LOG_DEBUG() << "Cell-Cell product\n";
-    typedef single_node_morton_hot::Cell<TSP> CellType;
+    typedef single_node_hot::Cell<TSP> CellType;
     typedef CellIterator<CellType> CellIterType;
     return ProductIterator<CellIterType, CellIterType>(
         CellIterType(c1), CellIterType(c2));
@@ -652,7 +652,7 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
                             typename SingleNodeMortonHOT::SFC> TSP; // Tapas static params
  public:
   typedef tapas::Region<TSP> Region;  
-  typedef single_node_morton_hot::Cell<TSP> Cell;
+  typedef single_node_hot::Cell<TSP> Cell;
   //typedef tapas::BodyIterator<DIM, BT, BT_ATTR, Cell> BodyIterator;
   typedef tapas::BodyIterator<Cell> BodyIterator;  
 
@@ -663,7 +663,7 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
   static Cell *Partition(typename BT::type *b,
                          index_t nb, const Region &r,
                          int max_nb) {
-    single_node_morton_hot::Partitioner<TSP> part(max_nb);
+    single_node_hot::Partitioner<TSP> part(max_nb);
     return part.Partition(b, nb, r);
   }
 };
@@ -688,7 +688,7 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
                             typename SingleNodeMortonHOT::SFC> TSP; // Tapas static params
  public:
   typedef tapas::Region<TSP> Region;  
-  typedef single_node_morton_hot::Cell<TSP> Cell;
+  typedef single_node_hot::Cell<TSP> Cell;
   //typedef tapas::BodyIterator<DIM, BT, BT_ATTR, Cell> BodyIterator;
   typedef tapas::BodyIterator<Cell> BodyIterator;  
   
@@ -699,7 +699,7 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
   static Cell *Partition(typename BT::type *b,
                          index_t nb, const Region &r,
                          int max_nb) {
-    single_node_morton_hot::Partitioner<TSP> part(max_nb);
+    single_node_hot::Partitioner<TSP> part(max_nb);
     return part.Partition(b, nb, r);
   }
 };
