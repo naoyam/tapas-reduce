@@ -40,7 +40,7 @@ void dumpM(Tapas::Cell &root) {
   std::ofstream ofs(ss.str().c_str());
   std::function<void(Tapas::Cell&)> dump = [&](Tapas::Cell& cell) {
     mtx.lock();
-    ofs << std::setw(20) << std::right << Tapas::Key::Simplify(cell.key()) << " ";
+    ofs << std::setw(20) << std::right << Tapas::SFC::Simplify(cell.key()) << " ";
     ofs << std::setw(3) << cell.depth() << " ";
     ofs << cell.IsLeaf() << " ";
     ofs << cell.attr().M << std::endl;
@@ -65,7 +65,7 @@ void dumpL(Tapas::Cell &root) {
   std::ofstream ofs(ss.str().c_str());
   std::function<void(Tapas::Cell&)> dump = [&](Tapas::Cell& cell) {
     mtx.lock();
-    ofs << std::setw(20) << std::right << Tapas::Key::Simplify(cell.key()) << " ";
+    ofs << std::setw(20) << std::right << Tapas::SFC::Simplify(cell.key()) << " ";
     ofs << std::setw(3) << cell.depth() << " ";
     ofs << cell.IsLeaf() << " ";
     ofs << cell.attr().L << std::endl;
@@ -91,7 +91,7 @@ void dumpBodies(Tapas::Cell &root) {
   std::function<void(Tapas::Cell&)> dump = [&](Tapas::Cell& cell) {
     if (cell.IsLeaf()) {
       mtx.lock();
-      //ofs << std::setw(20) << std::right << Tapas::Key::Simplify(cell.key()) << " ";
+      //ofs << std::setw(20) << std::right << Tapas::SFC::Simplify(cell.key()) << " ";
       auto iter = cell.bodies();
       for (int bi=0; bi < cell.nb(); bi++, iter++) {
         ofs << iter->X << " ";

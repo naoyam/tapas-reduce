@@ -70,7 +70,7 @@ T __id(T v) { return v; }
 
 
 namespace tapas {
-namespace key {
+namespace sfc {
 
 /*
 Dim Bits Depth_bits Max_depth

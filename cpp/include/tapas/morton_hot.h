@@ -100,12 +100,12 @@ void SortByPermutations(std::vector<T1> &keys, std::vector<T2> &vals) {
  * @tparam Functor Functor type that retrieves morton key from a body type value.
  * @return returns std::pair of (pos, len)
  */
-template <class Key, class BT, class Iter, class Functor>
-std::pair<typename Key::KeyType, typename Key::KeyType>
-GetBodyRange(const typename Key::KeyType k,
+template <class SFC, class BT, class Iter, class Functor>
+std::pair<typename SFC::KeyType, typename SFC::KeyType>
+GetBodyRange(const typename SFC::KeyType k,
              Iter beg, Iter end,
              Functor get_key = __id<BT>) {
-  using KeyType = typename Key::KeyType;
+  using KeyType = typename SFC::KeyType;
   
   // When used in Refine(), a cells has sometimes no body.
   // In this special case, just returns (0, 0)
@@ -116,7 +116,7 @@ GetBodyRange(const typename Key::KeyType k,
   };
   
   auto fst = std::lower_bound(beg, end, k, less_than); // first node 
-  auto lst = std::lower_bound(fst, end, Key::GetNext(k), less_than); // last node
+  auto lst = std::lower_bound(fst, end, SFC::GetNext(k), less_than); // last node
   
   assert(lst <= end);
   
@@ -126,13 +126,13 @@ GetBodyRange(const typename Key::KeyType k,
 /**
  * @brief std::vector version of GetBodyRange
  */
-template<class Key, class T, class Functor>
-std::pair<typename Key::KeyType, typename Key::KeyType>
-GetBodyRange(const typename Key::KeyType k,
+template<class SFC, class T, class Functor>
+std::pair<typename SFC::KeyType, typename SFC::KeyType>
+GetBodyRange(const typename SFC::KeyType k,
              const std::vector<T> &hn,
              Functor get_key = __id<T>) {
   using Iter = typename std::vector<T>::const_iterator;
-  return GetBodyRange<Key, T, Iter, Functor>(k, hn.begin(), hn.end(), get_key);
+  return GetBodyRange<SFC, T, Iter, Functor>(k, hn.begin(), hn.end(), get_key);
 }
 
 /**
@@ -183,7 +183,7 @@ std::vector<T> SendRecvMapping(const std::vector<T> &S, // senders
 
 template <class TSP>
 struct HelperNode {
-  using KeyType = typename TSP::Key::KeyType;
+  using KeyType = typename TSP::SFC::KeyType;
   KeyType key;          //!< SFC key (Default: Morton)
   Vec<TSP::Dim, int> anchor; //!< SFC key-like vector without depth information
   index_t p_index;      //!< Index of the corresponding body
@@ -251,10 +251,10 @@ void SortBodies2(std::vector<typename TSP::BT::type> &bodies,
                  const std::vector<HelperNode<TSP>> &hn);
 
 template <class TSP>
-void CompleteRegion(typename TSP::Key x, typename TSP::Key y, typename TSP::KeyVector &s);
+void CompleteRegion(typename TSP::SFC x, typename TSP::SFC y, typename TSP::KeyVector &s);
 
 template <class TSP>
-index_t GetBodyNumber(const typename TSP::Key k, const HelperNode<TSP> *hn,
+index_t GetBodyNumber(const typename TSP::SFC k, const HelperNode<TSP> *hn,
                       index_t offset, index_t len);
 
 
@@ -267,8 +267,8 @@ class Cell: public tapas::BasicCell<TSP> {
   friend class BodyIterator<Cell>;
   
  public:
-  typedef typename TSP::Key Key;
-  typedef typename Key::KeyType KeyType;
+  typedef typename TSP::SFC SFC;
+  typedef typename SFC::KeyType KeyType;
   
   typedef std::unordered_map<KeyType, Cell*> CellHashTable;
   typedef typename TSP::ATTR attr_type;
@@ -333,7 +333,7 @@ class Cell: public tapas::BasicCell<TSP> {
     // Count number of bodies of this cell (including cells that are indirectly owned bodies)
     if (body_num == 0) {
       index_t beg, end;
-      Key::GetDescendantRange(key, leaf_keys_->begin(), leaf_keys->end(), beg, end);
+      SFC::GetDescendantRange(key, leaf_keys_->begin(), leaf_keys->end(), beg, end);
       int nb = 0;
       for (auto i=beg; i < end; i++) {
         nb += (*leaf_nb_)[i];
@@ -409,7 +409,7 @@ class Cell: public tapas::BasicCell<TSP> {
   const std::vector<int> &owners() const { return owners_; }
 
   int depth() const {
-    return Key::GetDepth(key_);
+    return SFC::GetDepth(key_);
   }
   
 #ifdef DEPRECATED
@@ -601,11 +601,11 @@ std::vector<HelperNode<TSP>> CreateInitialNodes(const typename TSP::BT::type *bo
     const int Dim = TSP::Dim;
     typedef typename TSP::FP FP;
     typedef typename TSP::BT BT;
-    typedef typename TSP::Key Key;
+    typedef typename TSP::SFC SFC;
     typedef HelperNode<TSP> HN;
 
     std::vector<HN> nodes(nb);
-    FP num_cell = 1 << Key::MAX_DEPTH; // maximum number of cells in one dimension
+    FP num_cell = 1 << SFC::MAX_DEPTH; // maximum number of cells in one dimension
     Vec<Dim, FP> pitch;           // possible minimum cell width
     for (int d = 0; d < Dim; ++d) {
       pitch[d] = (r.max()[d] - r.min()[d]) / num_cell;
@@ -627,7 +627,7 @@ std::vector<HelperNode<TSP>> CreateInitialNodes(const typename TSP::BT::type *bo
             node.anchor[d] = (int)(off[d]);
             // assume maximum boundary is inclusive, i.e., a particle can be
             // right at the maximum boundary.
-            if (node.anchor[d] == (1 << Key::MAX_DEPTH)) {
+            if (node.anchor[d] == (1 << SFC::MAX_DEPTH)) {
                 TAPAS_LOG_DEBUG() << "Particle located at max boundary." << std::endl;
                 node.anchor[d]--;
             }
@@ -635,7 +635,7 @@ std::vector<HelperNode<TSP>> CreateInitialNodes(const typename TSP::BT::type *bo
 #ifdef TAPAS_DEBUG
         TAPAS_ASSERT(node.anchor >= 0);
 # if 1
-        if (!(node.anchor < (1 << Key::MAX_DEPTH))) {
+        if (!(node.anchor < (1 << SFC::MAX_DEPTH))) {
             TAPAS_LOG_ERROR() << "Anchor, " << node.anchor
                               << ", exceeds the maximum depth." << std::endl
                               << "Particle at "
@@ -644,11 +644,11 @@ std::vector<HelperNode<TSP>> CreateInitialNodes(const typename TSP::BT::type *bo
             TAPAS_DIE();
         }
 # else
-        assert(node.anchor < (1 << Key::MAX_DEPTH));
+        assert(node.anchor < (1 << SFC::MAX_DEPTH));
 # endif
 #endif // TAPAS_DEBUG
 
-        node.key = Key::CalcFinestKey(node.anchor);
+        node.key = SFC::CalcFinestKey(node.anchor);
     }
 
     return nodes;
@@ -684,31 +684,31 @@ void SortBodies2(std::vector<typename TSP::BT::type> &bodies,
 
 
 
-template <int DIM, class Key, class T>
-void AppendChildren(typename Key::KeyType x, T &s) {
-  using KeyType = typename Key::KeyType;
+template <int DIM, class SFC, class T>
+void AppendChildren(typename SFC::KeyType x, T &s) {
+  using KeyType = typename SFC::KeyType;
   
-  int x_depth = Key::GetDepth(x);
+  int x_depth = SFC::GetDepth(x);
   int c_depth = x_depth + 1;
-  if (c_depth > Key::MAX_DEPTH) return;
-  x = Key::IncrementDepth(x, 1);
+  if (c_depth > SFC::MAX_DEPTH) return;
+  x = SFC::IncrementDepth(x, 1);
   for (int i = 0; i < (1 << DIM); ++i) {
     KeyType child_key = ((KeyType)i << ((KeyType::MAX_DEPTH - c_depth) * DIM +
-                                        Key::DEPTH_BIT_WIDTH));
+                                        SFC::DEPTH_BIT_WIDTH));
     s.push_back(x | child_key);
     TAPAS_LOG_DEBUG() << "Adding child " << (x | child_key) << std::endl;
   }
 }
 
 template <class TSP>
-void CompleteRegion(typename TSP::Key::KeyType x,
-                    typename TSP::Key::KeyType y,
-                    typename TSP::Key::KeyVector &s) {
-  typedef typename TSP::Key Key;
-  typedef typename Key::KeyType KeyType; // Using 'using' crashes LLVM3.5 so we stick to typedef
+void CompleteRegion(typename TSP::SFC::KeyType x,
+                    typename TSP::SFC::KeyType y,
+                    typename TSP::SFC::KeyVector &s) {
+  typedef typename TSP::SFC SFC;
+  typedef typename SFC::KeyType KeyType; // Using 'using' crashes LLVM3.5 so we stick to typedef
   
-  KeyType fa = Key::FinestAncestor(x, y);
-  typename Key::KeyList w;
+  KeyType fa = SFC::FinestAncestor(x, y);
+  typename SFC::KeyList w;
   
   AppendChildren<TSP::Dim, KeyType>(fa, w);
   tapas::PrintKeys(w, std::cout);
@@ -717,10 +717,10 @@ void CompleteRegion(typename TSP::Key::KeyType x,
     KeyType k = w.front();
     w.pop_front();
     TAPAS_LOG_DEBUG() << "visiting " << k << std::endl;
-    if ((k > x && k < y) && !Key::IsDescendant(k, y)) {
+    if ((k > x && k < y) && !SFC::IsDescendant(k, y)) {
       s.push_back(k);
       TAPAS_LOG_DEBUG() << "Adding " << k << " to output set" << std::endl;
-    } else if (Key::IsDescendant(k, x) || Key::IsDescendant(k, y)) {
+    } else if (SFC::IsDescendant(k, x) || SFC::IsDescendant(k, y)) {
       TAPAS_LOG_DEBUG() << "Adding children of " << k << " to work set" << std::endl;
       AppendChildren<TSP>(k, w);
     }
@@ -774,7 +774,7 @@ void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
     
     cell.RecvCell(peers[0]); // the sender finishes applying f first, then send the cell info to this process.
     usleep(100000);
-    if (Key::Simplify(cell.key()) == "0461...7906") {
+    if (SFC::Simplify(cell.key()) == "0461...7906") {
       Stderr e("debug");
       e.out() << cell.key() << " RecvCell finished." << std::endl;
       e.out() << cell.key() << " time= " << (long)(MPI_Wtime()*1000)%100000/1000.0 << std::endl;
@@ -787,7 +787,7 @@ void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
 // A special-purpose struct to exchange cell information
 template <class TSP>
 struct CellInfoBinder {
-  typename TSP::Key::KeyType key;
+  typename TSP::SFC::KeyType key;
   typename TSP::ATTR cell_attr;
   index_t num_bodies;
   bool is_leaf;
@@ -814,28 +814,28 @@ void Cell<TSP>::ExchangeCell(Cell<TSP> &remote) {
   std::vector<int> send_to = SendRecvMapping(local_owners, remote_owners, rank);
   std::vector<int> recv_from = SendRecvMapping(remote_owners, local_owners, rank);
 
-  if (Key::Simplify(this->key()) == "0345...0929") {
+  if (SFC::Simplify(this->key()) == "0345...0929") {
     e.out() << "*** I have 0345...0929" << std::endl;
   }
   
   int mpi_tag = Cell::GetMpiTag(this->key(), remote.key());
 
-  e.out() << "Exchanging cells " << Key::Simplify(this->key()) << " && " << Key::Simplify(remote.key()) << std::endl;
-  e.out() << Key::Simplify(this->key()) << "'s owners = ";
+  e.out() << "Exchanging cells " << SFC::Simplify(this->key()) << " && " << SFC::Simplify(remote.key()) << std::endl;
+  e.out() << SFC::Simplify(this->key()) << "'s owners = ";
   for (auto &&o : local_owners) e.out() << o << " ";
   e.out() << " (" << this->owners().size() << " elements)";
   e.out() << std::endl;
   
-  e.out() << Key::Simplify(remote.key()) << "'s owners = ";
+  e.out() << SFC::Simplify(remote.key()) << "'s owners = ";
   for (auto &&o : remote_owners) e.out() << o << " ";
   e.out() << std::endl;
   
   e.out() << "tag = " << mpi_tag << std::endl;
-  e.out() << "send " << Key::Simplify(this->key()) << " to = ";
+  e.out() << "send " << SFC::Simplify(this->key()) << " to = ";
   for (auto && i: send_to) e.out() << i << " ";
   e.out() << std::endl;
   
-  e.out() << "recv " << Key::Simplify(remote.key()) << " from = ";
+  e.out() << "recv " << SFC::Simplify(remote.key()) << " from = ";
   for (auto && i: recv_from) e.out() << i << " ";
   e.out() << std::endl;
     
@@ -853,7 +853,7 @@ void Cell<TSP>::ExchangeCell(Cell<TSP> &remote) {
   for (int i = 0; i < send_to.size(); i++) {
     // Send the local cell to the remote node(s) asynchornously
     Stderr stderr("send");
-    stderr.out() << "SendCell: cell=" << Key::Simplify(key_) << " "
+    stderr.out() << "SendCell: cell=" << SFC::Simplify(key_) << " "
                  << "I'm=" << rank << " "
                  << "dst=" << send_to[i] << " "
                  << "IsLeaf=" << send_data.is_leaf << " " 
@@ -900,8 +900,8 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
   {
     Stderr e("map2");
     e.out() << "Map: "
-            << Key::Simplify(c1.key()) << ", "
-            << Key::Simplify(c2.key()) << " : "
+            << SFC::Simplify(c1.key()) << ", "
+            << SFC::Simplify(c2.key()) << " : "
             << (c1.IsLocal() ? "local" : "remote") << ","
             << (c2.IsLocal() ? "local" : "remote")
             << std::endl;
@@ -922,7 +922,7 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
     std::vector<int> send_to = SendRecvMapping(senders, recvers, rank);
     {
       Stderr e("map2");
-      e.out() << "c1 [" << Key::Simplify(c1.key()) << "] is local. (I'm " << rank << ")" << std::endl;
+      e.out() << "c1 [" << SFC::Simplify(c1.key()) << "] is local. (I'm " << rank << ")" << std::endl;
       e.out() << "c1.owners() = " << "[" << join(" ", c1.owners()) << "]" << std::endl;
       e.out() << "c2.owners() = " << "[" << join(" ", c2.owners()) << "]" << std::endl;
       e.out() << "recvers = " << "[" << join(" ", recvers) << "]" << std::endl;
@@ -939,7 +939,7 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
     std::vector<int> send_to = SendRecvMapping(senders, recvers, rank);
     {
       Stderr e("map2");
-      e.out() << "c2 [" << Key::Simplify(c2.key()) << "] is local. (I'm " << rank << ")" << std::endl;
+      e.out() << "c2 [" << SFC::Simplify(c2.key()) << "] is local. (I'm " << rank << ")" << std::endl;
       e.out() << "c2.owners() = " << "[" << join(" ", c2.owners()) << "]" << std::endl;
       e.out() << "c1.owners() = " << "[" << join(" ", c1.owners()) << "]" << std::endl;
       e.out() << "recvers = "     << "[" << join(" ", recvers) << "]" << std::endl;
@@ -955,7 +955,7 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
     std::vector<int> senders = c1.owners();
     std::vector<int> recv_from = SendRecvMapping(senders, recvers, rank);
     Stderr e("map2");
-    e.out() << "Requesting " << Key::Simplify(c1.key()) << " to " << recv_from[0] << std::endl;
+    e.out() << "Requesting " << SFC::Simplify(c1.key()) << " to " << recv_from[0] << std::endl;
       
     c1.RecvCell(recv_from[0]);
   }
@@ -966,7 +966,7 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
     std::vector<int> recv_from = SendRecvMapping(senders, recvers, rank);
     
     Stderr e("map2");
-    e.out() << "Requesting " << Key::Simplify(c2.key()) << " to " << recv_from[0] << std::endl;
+    e.out() << "Requesting " << SFC::Simplify(c2.key()) << " to " << recv_from[0] << std::endl;
     
     c2.RecvCell(recv_from[0]);
   }
@@ -977,8 +977,8 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
   {
     Stderr e("map2");
     e.out() << "Map: "
-            << Key::Simplify(c1.key()) << ", "
-            << Key::Simplify(c2.key()) << " : "
+            << SFC::Simplify(c1.key()) << ", "
+            << SFC::Simplify(c2.key()) << " : "
             << "done." << std::endl;
   }
   
@@ -996,7 +996,7 @@ void Cell<TSP>::RecvCell(int pid) {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     Stderr stderr("recv");
-    stderr.out() << "RecvCell: cell=" << Key::Simplify(key_) << " "
+    stderr.out() << "RecvCell: cell=" << SFC::Simplify(key_) << " "
                  << "me=" << rank << " "
                  << "src=" << pid << " "
                  << "tag=" << std::setw(10) << mpi_tag_
@@ -1065,7 +1065,7 @@ void Cell<TSP>::RecvCell(int pid) {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     Stderr stderr("recv");
-    stderr.out() << "RecvCell: cell=" << Key::Simplify(key_) << " "
+    stderr.out() << "RecvCell: cell=" << SFC::Simplify(key_) << " "
                  << "me="     << rank << " "
                  << "src="    << pid << " "
                  << "tag="    << std::setw(10) << mpi_tag_ << " "
@@ -1143,7 +1143,7 @@ void Cell<TSP>::SendCell(std::vector<int> remote_pids) {
   for (size_t i = 0; i < remote_pids.size(); i++) {
     {
       Stderr stderr("send");
-      stderr.out() << "SendCell: cell=" << Key::Simplify(key_) << " "
+      stderr.out() << "SendCell: cell=" << SFC::Simplify(key_) << " "
                    << "I'm="    << rank << " "
                    << "dst="    << remote_pids[i] << " "
                    << "nb="     << num_bodies << " "
@@ -1190,7 +1190,7 @@ void Cell<TSP>::SendCell(std::vector<int> remote_pids) {
   
   for (size_t i = 0; i < remote_pids.size(); i++) {
     Stderr stderr("send");
-    stderr.out() << "SendCell: cell=" << Key::Simplify(key_) << " "
+    stderr.out() << "SendCell: cell=" << SFC::Simplify(key_) << " "
                  << "I'm="    << rank << " "
                  << "dst="    << remote_pids[i] << " "
                  << "IsLeaf=" << cellinfo->is_leaf << " " 
@@ -1207,7 +1207,7 @@ bool Cell<TSP>::operator==(const Cell &c) const {
 
 template <class TSP>
 bool Cell<TSP>::IsRoot() const {
-    return Key::GetDepth(key_) == 0;
+    return SFC::GetDepth(key_) == 0;
 }
 
 template <class TSP>
@@ -1234,7 +1234,7 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) const {
   }
 
 
-  KeyType child_key = Key::Child(key_, idx);
+  KeyType child_key = SFC::Child(key_, idx);
   Cell *c = Lookup(child_key);
   
   if (c == nullptr) {
@@ -1269,13 +1269,13 @@ Cell<TSP> &Cell<TSP>::parent() const {
         TAPAS_LOG_ERROR() << "Trying to access parent of the root cell." << std::endl;
         TAPAS_DIE();
     }
-    KeyType parent_key = Key::Parent(key_);
+    KeyType parent_key = SFC::Parent(key_);
     auto *c = Lookup(parent_key);
     if (c == nullptr) {
       TAPAS_LOG_ERROR() << "Parent (" << parent_key << ") of "
                         << "cell (" << key_ << ") not found.\n"
-                        << "Parent key = " << Key::Decode(parent_key) << "\n"
-                        << "Child key =  " << Key::Decode(key_)
+                        << "Parent key = " << SFC::Decode(parent_key) << "\n"
+                        << "Child key =  " << SFC::Decode(key_)
                         << std::endl;
       TAPAS_DIE();
     }
@@ -1314,8 +1314,8 @@ class Partitioner {
  private:
   const int max_nb_;
   using BodyType = typename TSP::BT::type;
-  using Key = typename TSP::Key;
-  using KeyType = typename Key::KeyType;
+  using SFC = typename TSP::SFC;
+  using KeyType = typename SFC::KeyType;
 
   public:
     Partitioner(unsigned max_nb): max_nb_(max_nb) {}
@@ -1346,16 +1346,16 @@ Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b, const Region
  * @brief Returns a std::vector of parent's children
  */
 template<class TSP>
-std::vector<typename TSP::Key::KeyType> GetChildren(typename TSP::Key::KeyType parent) {
-  using Key = typename TSP::Key;
+std::vector<typename TSP::SFC::KeyType> GetChildren(typename TSP::SFC::KeyType parent) {
+  using SFC = typename TSP::SFC;
   using KeyType = typename TSP::KeyType;
   
   std::vector<KeyType> ret;
   
-  KeyType child_key = Key::FirstChild(parent);
+  KeyType child_key = SFC::FirstChild(parent);
   for (int child_idx = 0; child_idx < (1 << TSP::Dim); child_idx++) {
     ret.push_back(child_key);
-    child_key = Key::GetNext(child_key);
+    child_key = SFC::GetNext(child_key);
   }
 
   return ret;
@@ -1370,12 +1370,12 @@ std::vector<typename TSP::Key::KeyType> GetChildren(typename TSP::Key::KeyType p
  * @param max_nb Criteria to split a cell
  */
 template<class TSP>
-std::vector<typename TSP::Key::KeyType>
-SplitLargeCellsOnce(const std::vector<typename TSP::Key::KeyType> &cell_keys,
+std::vector<typename TSP::SFC::KeyType>
+SplitLargeCellsOnce(const std::vector<typename TSP::SFC::KeyType> &cell_keys,
                     const std::vector<index_t> &nb,
                     int max_nb) {
-  using Key = typename TSP::Key;
-  using KeyType = typename Key::KeyType;
+  using SFC = typename TSP::SFC;
+  using KeyType = typename SFC::KeyType;
   
   std::vector<KeyType> ret; // new
 
@@ -1385,7 +1385,7 @@ SplitLargeCellsOnce(const std::vector<typename TSP::Key::KeyType> &cell_keys,
       ret.push_back(cell_keys[i]);
     } else {
       // Create 2^DIM children (8 in 3-dim)
-      auto children = Key::GetChildren(cell_keys[i]);
+      auto children = SFC::GetChildren(cell_keys[i]);
       for (auto ch : children) {
         ret.push_back(ch);
       }
@@ -1453,15 +1453,15 @@ Region<TSP> Cell<TSP>::CalcRegion(KeyType key, const Region<TSP> &region) {
   Stderr err("center");
 
   auto r = region;
-  int depth = Key::GetDepth(key);
-  KeyType key_body = Key::RemoveDepth(key);
+  int depth = SFC::GetDepth(key);
+  KeyType key_body = SFC::RemoveDepth(key);
   
-  err.out() << Key::Simplify(key) << " "
+  err.out() << SFC::Simplify(key) << " "
             << depth << " "
             << r << " --> ";
 
   for (int d = 0; d < depth; d++) {
-    int direction = (key_body >> (kDim * (TSP::Key::MAX_DEPTH - d - 1))) & kMask;
+    int direction = (key_body >> (kDim * (TSP::SFC::MAX_DEPTH - d - 1))) & kMask;
     r = r.PartitionBSP(direction);
     key >>= TSP::Dim;
     //err.out() << d << ":" << direction << " " << r << " ";
@@ -1479,17 +1479,17 @@ std::vector<int> Cell<TSP>::CalcOwnerProcsOfCell(KeyType key,
   // Find the range of leaf cells that are under the cell
   auto beg = std::begin(leaf_keys);
   auto end = std::end(leaf_keys);
-  KeyType key_next = Key::GetNext(key);
+  KeyType key_next = SFC::GetNext(key);
   index_t owner_beg = std::lower_bound(beg, end, key) - beg;
   index_t owner_end = std::lower_bound(beg, end, key_next) - beg;
 
-  Key::GetDescendantRange(key, beg, end, owner_beg, owner_end);
+  SFC::GetDescendantRange(key, beg, end, owner_beg, owner_end);
 
-  if (Key::Simplify(key) == "0230...3954") {
+  if (SFC::Simplify(key) == "0230...3954") {
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     std::stringstream ss;
-    ss << rank << " " << Key::Simplify(key) << " "
+    ss << rank << " " << SFC::Simplify(key) << " "
        << "owner_beg = " << owner_beg << ","
        << "owner_beg = " << owner_end << " ";
     for (auto i=owner_beg; i < owner_end; i++) {
@@ -1525,8 +1525,8 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   using BodyType = typename TSP::BT::type;
   using BodyAttrType = typename TSP::BT_ATTR;
   
-  using Key = typename TSP::Key;
-  using KeyType = typename Key::KeyType;
+  using SFC = typename TSP::SFC;
+  using KeyType = typename SFC::KeyType;
   
   typedef Cell<TSP> CellType;
   typedef HelperNode<TSP> HN;
@@ -1573,7 +1573,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     for (size_t i = 0; i < leaf_keys.size(); i++) {
       auto _key = [](const HN &hn) { return hn.key; };
       // Count process-local bodies belonging to the cell[i].
-      leaf_nb_local[i] = GetBodyRange<Key, HelperNode<TSP>>(leaf_keys[i],
+      leaf_nb_local[i] = GetBodyRange<SFC, HelperNode<TSP>>(leaf_keys[i],
                                                             hn,
                                                             _key).second;
     }
@@ -1583,7 +1583,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
         std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
         std::cerr << "hn.size() = " << hn.size() << ", ";
         for (auto n : hn) {
-          std::cerr << std::fixed << std::setw(6) << Key::RemoveDepth(n.key) << " ";
+          std::cerr << std::fixed << std::setw(6) << SFC::RemoveDepth(n.key) << " ";
         }
         std::cerr << std::endl;
 
@@ -1750,11 +1750,11 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   // Build a local tree in a bottom-up manner.
   for (auto i = leaf_beg; i < leaf_end; i++) {
     KeyType k = leaf_keys[i];
-    //KeyType kn = Key::GetNext(k);
+    //KeyType kn = SFC::GetNext(k);
 
     // Find bodies owned by the Cell whose key is k.
     index_t bbeg, bend;
-    Key::FindRangeByKey(recv_keys, k, bbeg, bend);
+    SFC::FindRangeByKey(recv_keys, k, bbeg, bend);
     
     // Create a leaf cell
     CellType *c = new CellType(k,               // key
@@ -1776,13 +1776,13 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
     // Create anscestors of the cell c (in a recursive upward way)
     while(1) {
-      k = Key::Parent(k);
-      int dp = Key::GetDepth(k);
+      k = SFC::Parent(k);
+      int dp = SFC::GetDepth(k);
 
       if (ht->count(k) == 0) {
         index_t bbeg, bend;
         //FindRangeByKey<TSP>(recv_keys, k, bbeg, bend);
-        Key::FindRangeByKey(leaf_keys, k, bbeg, bend);
+        SFC::FindRangeByKey(leaf_keys, k, bbeg, bend);
         int nb = 0;
         for (auto i = bbeg; i < bend; i++) {
           nb += leaf_nb_global[i];
@@ -1828,22 +1828,22 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       KeyType k = iter.first;
       Cell<TSP> *c = iter.second;
       if (c->IsLocal() && c->key() != 0) {
-        e.out() << Key::Simplify(k) << " "
-                << "d=" << Key::GetDepth(k) << " "
+        e.out() << SFC::Simplify(k) << " "
+                << "d=" << SFC::GetDepth(k) << " "
                 << "leaf=" << c->IsLeaf() << " "
                 << "owners=" << std::setw(2) << std::right << join(",", c->owners()) << " "
                 << "nb=" << std::setw(3) << c->nb() << " "
                 << "center=[" << c->center() << "] "
-                << "next_key=" << Key::Simplify(Key::GetNext(k)) << " "
-                << "parent=" << Key::Simplify(Key::Parent(k)) << " "
+                << "next_key=" << SFC::Simplify(SFC::GetNext(k)) << " "
+                << "parent=" << SFC::Simplify(SFC::Parent(k)) << " "
                 << std::endl;
         // Print bodies which belong to Cell c
         if (c->IsLeaf()) {
           index_t body_beg, body_end;
-          Key::FindRangeByKey(recv_keys, k, body_beg, body_end);
+          SFC::FindRangeByKey(recv_keys, k, body_beg, body_end);
           for (int i = body_beg; i < body_end; i++) {
             e.out() << "\t\t\t| "
-                    << Key::Simplify(recv_keys[i]) << ": "
+                    << SFC::Simplify(recv_keys[i]) << ": "
                     << (*recv_bodies)[i].X
                     << std::endl;
           }
@@ -1877,7 +1877,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
         isleaf[k] = true;
         
         do {
-          k = Key::Parent(k);
+          k = SFC::Parent(k);
           owners[k].insert(owner);
           isleaf[k] = false;
         } while(k != 0);
@@ -1893,14 +1893,14 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
         // Dump cell info
         std::stringstream level;
-        level << "[" << Key::GetDepth(k) << "]";
+        level << "[" << SFC::GetDepth(k) << "]";
 
         std::stringstream owned_by;
         owned_by << "(owned by ";
         for (auto &p : v) owned_by << p << " ";
         owned_by << ")";
 
-        ofs << "cell_" << k << " [label=\"" << Key::Simplify(k) << " " << level.str() << " " << owned_by.str() << "\"";
+        ofs << "cell_" << k << " [label=\"" << SFC::Simplify(k) << " " << level.str() << " " << owned_by.str() << "\"";
         if (isleaf[k]) {
           ofs << ", shape=box";
         }
@@ -1908,7 +1908,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
         // Print link to parent
         if (k != 0) {
-          ofs << "cell_" << k << " -> " << "cell_" << Key::Parent(k) << ";" << std::endl;
+          ofs << "cell_" << k << " -> " << "cell_" << SFC::Parent(k) << ";" << std::endl;
         }
       }
       ofs << "}" << std::endl;
@@ -1952,11 +1952,11 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
                               const std::vector<HelperNode<TSP>> &hn,
                               const typename TSP::BT::type *b,
                               int cur_depth,
-                              typename TSP::Key::KeyType cur_key) const {
+                              typename TSP::SFC::KeyType cur_key) const {
     const constexpr int Dim = TSP::Dim;
-    using Key = typename TSP::Key;
-    using KeyType = typename Key::KeyType;
-    //using KeyPair = typename Key::KeyPair;
+    using SFC = typename TSP::SFC;
+    using KeyType = typename SFC::KeyType;
+    //using KeyPair = typename SFC::KeyPair;
     //using FP  = typename TSP::FP;
     //using BT  = typename TSP::BT;
 
@@ -1965,11 +1965,11 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
         TAPAS_LOG_INFO() << "Small enough cell" << std::endl;
         return;
     }
-    if (cur_depth >= TSP::Key::MAX_DEPTH) {
+    if (cur_depth >= TSP::SFC::MAX_DEPTH) {
         TAPAS_LOG_INFO() << "Reached maximum depth" << std::endl;
         return;
     }
-    typename Key::KeyType child_key = Key::FirstChild(cur_key);
+    typename SFC::KeyType child_key = SFC::FirstChild(cur_key);
     index_t cur_offset = c->bid();
     index_t cur_len = c->nb();
     
@@ -1998,7 +1998,7 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
 #endif
 #endif
         Refine(child_cell, hn, b, cur_depth+1, child_key);
-        child_key = Key::GetNext(child_key);
+        child_key = SFC::GetNext(child_key);
         cur_offset = cur_offset + child_bn;
         cur_len = cur_len - child_bn;
     }
@@ -2044,11 +2044,11 @@ ProductIterator<CellIterator<morton_hot::Cell<TSP>>,
  * @brief A partitioning plugin class that provides SFC-curve based octree partitioning.
  */
 template<int _Dim,
-         template<int __Dim, class __KeyType> class _Key,
+         template<int __Dim, class __KeyType> class _SFC,
          class _KeyType = uint64_t>
 struct HOT {
-  using Key = _Key<_Dim, _KeyType>;
-  using KeyType = typename Key::KeyType;
+  using SFC = _SFC<_Dim, _KeyType>;
+  using KeyType = typename SFC::KeyType;
 };
 
 /**
@@ -2073,7 +2073,7 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, MortonHOT, Threading> {
   typedef tapas::Region<TSP> Region;
   typedef morton_hot::Cell<TSP> Cell;
   typedef tapas::BodyIterator<Cell> BodyIterator;
-  typedef tapas::key::Morton<DIM> Key;
+  typedef tapas::sfc::Morton<DIM> SFC;
   
   /**
    * @brief Partition and build an octree of the target space.
@@ -2097,20 +2097,20 @@ class MassiveThreads;
  */
 template <int DIM, class FP, class BT,
           class BT_ATTR, class CELL_ATTR>
-class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, HOT<DIM, tapas::key::Morton>,
+class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, HOT<DIM, tapas::sfc::Morton>,
             tapas::threading::MassiveThreads> {
   
-  typedef HOT<DIM, tapas::key::Morton> MortonHOT;
+  typedef HOT<DIM, tapas::sfc::Morton> MortonHOT;
   
   typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR,
                             tapas::threading::MassiveThreads,
-                            typename MortonHOT::Key> TSP; // Tapas static params
+                            typename MortonHOT::SFC> TSP; // Tapas static params
  public:
   typedef tapas::Region<TSP> Region;
   typedef morton_hot::Cell<TSP> Cell;
   typedef tapas::BodyIterator<Cell> BodyIterator;
 
-  using Key = typename TSP::Key;
+  using SFC = typename TSP::SFC;
   
   /**
    * @brief Partition and build an octree of the target space.
