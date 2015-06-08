@@ -18,7 +18,7 @@ typedef tapas::BodyInfo<Body, 0> BodyInfo;
 
 #ifdef EXAFMM_TAPAS_MPI
 // Build MPI-based distributed version
-#include "tapas/morton_hot.h" // Morton-key based partitioning with MPI
+#include "tapas/hot.h" // Morton-key based partitioning with MPI
 #include "tapas/threading/massivethreads.h"
 typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr,
                      tapas::HOT<3, tapas::sfc::Morton>,
@@ -26,7 +26,7 @@ typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr,
 #else
 
 // Build single-node version
-#include "tapas/single_node_morton_hot.h" // Morton-key based single node partitioning
+#include "tapas/single_node_hot.h" // Morton-key based single node partitioning
 typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr,
                      tapas::SingleNodeHOT<3, tapas::sfc::Morton>,
                      tapas::threading::Serial> Tapas;

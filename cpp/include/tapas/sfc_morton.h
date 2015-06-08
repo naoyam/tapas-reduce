@@ -1,5 +1,5 @@
-#ifndef _MORTON_KEY_H_
-#define _MORTON_KEY_H_
+#ifndef _SFC_MORTON_H_
+#define _SFC_MORTON_H_
 
 #include <cstdint>
 #include <vector>
@@ -393,5 +393,5 @@ class Morton {
 }
 
 
-#endif // _MORTON_KEY_H_
+#endif // _SFC_MORTON_H_
 

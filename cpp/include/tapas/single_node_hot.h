@@ -1,9 +1,9 @@
 /**
- * @file single_node_morton_hot.h
- * @brief Implements single node Morton-order HOT (Hashed Octree) implementation
+ * @file single_node_hot.h
+ * @brief Implements single node SFC-based HOT (Hashed Octree) implementation
  */
-#ifndef TAPAS_SINGLE_NODE_MORTON_HOT_
-#define TAPAS_SINGLE_NODE_MORTON_HOT_
+#ifndef TAPAS_SINGLE_NODE_HOT_
+#define TAPAS_SINGLE_NODE_HOT_
 
 #include "tapas/stdcbug.h"
 
@@ -28,19 +28,19 @@
 #include "tapas/debug_util.h"
 #include "tapas/iterator.h"
 //#include "tapas/morton_common.h"
-#include "tapas/morton_key.h"
+#include "tapas/sfc_morton.h"
 
 namespace tapas {
 
 /**
- * @brief Provides Morton-order octree partitioning for shared memory single node
+ * @brief Provides SFC-based octree partitioning for shared memory single node
  */
 namespace single_node_morton_hot {
 
 template <class TSP>
 struct HelperNode {
-  typename TSP::SFC::KeyType key;          //!< Morton key
-  Vec<TSP::Dim, int> anchor; //!< Morton-key like vector without depth information
+  typename TSP::SFC::KeyType key;          //!< SFC key
+  Vec<TSP::Dim, int> anchor; //!< SFC-key like vector without depth information
   index_t p_index;      //!< Index of the corresponding body
   index_t np;           //!< Number of particles in a node
 };
@@ -227,7 +227,7 @@ void SortBodies(const typename TSP::BT::type *b, typename TSP::BT::type *sorted,
  * @brief Returns the range of bodies from an array of T (body type) that belong to the cell specified by the given key. 
  * @tparam BT Body type. (might be replaced by Iter::value_type)
  * @tparam Iter Iterator type of the body array.
- * @tparam Functor Functor type that retrieves morton key from a body type value.
+ * @tparam Functor Functor type that retrieves key from a body type value.
  * @return returns std::pair of (pos, len)
  */
 template <class SFC, class BT, class Iter, class Functor>
@@ -438,7 +438,7 @@ Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b, const Region
 
 
 /**
- * @brief Partition the simulation space and build Morton-key based octree
+ * @brief Partition the simulation space and build SFC-based octree
  * @tparam TSP Tapas static params
  * @param b Array of particles
  * @param nb Length of nb
@@ -460,7 +460,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     BodyType *b_work = new BodyType[nb];
     std::vector<HelperNode<TSP>> hn = CreateInitialNodes<TSP>(b, nb, r);
 
-    // Sort the helper nodes using morton keys
+    // Sort the helper nodes using SFC keys
     auto key_comp = [](const HelperNode<TSP> &lhs, const HelperNode<TSP> &rhs) {
         return lhs.key < rhs.key;
     };
@@ -581,7 +581,7 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
     c->is_leaf_ = false;
 }
 
-} // namespace single_node_morton_hot
+} // namespace single_node_hot
 
 template <class TSP, class T2>
 ProductIterator<CellIterator<single_node_morton_hot::Cell<TSP>>, T2>
@@ -637,7 +637,7 @@ template <int DIM, class FP, class BT,
 class Tapas;
 
 /**
- * @brief Specialization of Tapas for HOT (single node Morton HOT) algorithm
+ * @brief Specialization of Tapas for HOT (single node HOT) algorithm
  */
 template <int DIM, class FP, class BT,
           class BT_ATTR, class CELL_ATTR, class Threading>
@@ -706,4 +706,4 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
 
 } // namespace tapas
 
-#endif // TAPAS_SINGLE_NODE_MORTON_HOT_
+#endif // TAPAS_SINGLE_NODE_HOT_

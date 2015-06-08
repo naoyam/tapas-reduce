@@ -3,7 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <tapas/map.h>
-#include <tapas/morton_hot.h>
+#include <tapas/hot.h>
 
 template<class T> using V = std::vector<T>;
 

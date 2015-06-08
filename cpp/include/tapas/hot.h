@@ -1,6 +1,6 @@
 /**
- * @file morton_hot.h
- * @brief Implements MPI-based, SFC (Space filling curves)-based HOT (Hashed Octree) implementation of Tapas's tree
+ * @file hot.h
+ * @brief Implements MPI-based, SFC (Space filling curves)-based HOT (Hashed Octree) implementation of Tapas
  */
 #ifndef TAPAS_MORTON_HOT_
 #define TAPAS_MORTON_HOT_
@@ -33,7 +33,7 @@
 #include "tapas/logging.h"
 #include "tapas/debug_util.h"
 #include "tapas/iterator.h"
-#include "tapas/morton_key.h"
+#include "tapas/sfc_morton.h"
 #include "tapas/threading/default.h"
 
 #define DEBUG_SENDRECV
