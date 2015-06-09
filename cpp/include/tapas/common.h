@@ -64,11 +64,10 @@ class Stderr {
     int tid=0;
 #endif
     std::stringstream ss;
-    ss << "stderr"
-       << "." << rank
-       << "." << tid
-       << "." << label
-       << ".txt";
+    ss << label << "."
+       << rank  << "."
+       << tid
+       << ".stderr.txt";
     fs_ = new std::ofstream(ss.str().c_str(), std::ios_base::app);
 #else
     fs_ = new std::stringstream();
