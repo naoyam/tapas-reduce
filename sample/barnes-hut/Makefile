@@ -11,6 +11,8 @@ ifeq ($(S),)
 S = 10
 endif
 
+#DEBUG := -DDUMP
+
 CXX += -DNB=$(NB) -DS=$(S)
 
 TAPAS_DIR = ../../cpp
@@ -18,7 +20,7 @@ TAPAS_DIR = ../../cpp
 all: bh
 
 bh.o: bh.cc
-	$(CXX) -DDUMP -O2 -c $^ -Wall -I$(TAPAS_DIR)/include
+	$(CXX) $(DEBUG) -O2 -c $^ -Wall -I$(TAPAS_DIR)/include
 
 bh: bh.o
 	$(CXX) $^ -o $@

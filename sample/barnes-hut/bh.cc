@@ -6,9 +6,9 @@
 #include <sys/time.h>
 
 #include "tapas.h"
-#include "tapas/single_node_morton_hot.h"
 
-#define DIM (3)
+//#define DIM (3)
+const constexpr int DIM = 3;
 typedef double real_t;
 
 struct float4 {
@@ -27,10 +27,20 @@ const real_t OPS = 20. * N * N * 1e-9;
 const real_t EPS2 = 1e-6;
 
 typedef tapas::BodyInfo<float4, 0> BodyInfo;
+
+#ifdef MPI
+#include "tapas/hot.h"
 typedef tapas::Tapas<DIM, real_t, BodyInfo,
                      float4, float4,
-                     tapas::SingleNodeMortonHOT,
+                     tapas::HOT<DIM, tapas::sfc::Morton>,
                      tapas::threading::Default> Tapas;
+#else
+#include "tapas/single_node_hot.h"
+typedef tapas::Tapas<DIM, real_t, BodyInfo,
+                     float4, float4,
+                     tapas::SingleNodeHOT<DIM, tapas::sfc::Morton>,
+                     tapas::threading::Default> Tapas;
+#endif
 
 double get_time() {
   struct timeval tv;
@@ -147,11 +157,13 @@ static void interact(Tapas::Cell &c1, Tapas::Cell &c2, real_t theta) {
   }
 }
 
+typedef tapas::Vec<DIM, real_t> Vec3;
+
 float4 *calc(float4 *p, size_t np) {
   // PartitionBSP is a function that partitions the given set of
   // particles by the binary space partitioning. The result is a
   // octree for 3D particles and a quadtree for 2D particles.
-  Tapas::Region r(Tapas::Vec3(0.0, 0.0, 0.0), Tapas::Vec3(1.0, 1.0, 1.0));
+  Tapas::Region r(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 1.0, 1.0));
   Tapas::Cell *root = Tapas::Partition(p, np, r, 1);
   tapas::Map(approximate, *root); // or, simply: approximate(*root);
   real_t theta = 0.5;
@@ -161,7 +173,7 @@ float4 *calc(float4 *p, size_t np) {
 }
 
 int main() {
-// ALLOCATE
+  // ALLOCATE
   float4 *sourceHost = new float4 [N];
   float4 *targetHost = new float4 [N];
   srand48(0);
