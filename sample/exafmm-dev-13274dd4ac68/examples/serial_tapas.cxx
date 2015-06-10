@@ -287,7 +287,8 @@ int main(int argc, char ** argv) {
     
     TAPAS_LOG_DEBUG() << "L2P done\n";
 
-    CopyBackResult(bodies, root->body_attrs(), args.numBodies);
+    CopyBackResult(bodies, root);
+    //CopyBackResult(bodies, root->body_attrs(), args.numBodies);
 #if 0
     {
       std::ofstream tapas_out("tapas_final.txt");
@@ -311,6 +312,29 @@ int main(int argc, char ** argv) {
     data.sampleBodies(bodies, numTargets);
     bodies2 = bodies;
     data.initTarget(bodies);
+
+#if 0
+    std::cerr << "bodies (before direct)= \n";
+    for (auto &b : bodies) {
+      std::cerr << b.TRG[0] << " " << b.X[0] << " " << b.X[1] << " " << b.X[2] << "\n";
+    }
+    std::cerr << "\n";
+#endif
+    
+    std::cerr << "bodies2 = \n";
+    for (auto &b : bodies2) {
+      std::cerr << b.TRG[0] << " " << b.X[0] << " " << b.X[1] << " " << b.X[2] << "\n";
+    }
+    std::cerr << "\n";
+
+#if 0
+    std::cerr << "jbodies = \n";
+    for (auto &b : jbodies) {
+      std::cerr << b.TRG[0] << " " << b.X[0] << " " << b.X[1] << " " << b.X[2] << "\n";
+    }
+    std::cerr << "\n";
+#endif
+    
     logger::startTimer("Total Direct");
     traversal.direct(bodies, jbodies, cycle);
     traversal.normalize(bodies);
@@ -319,6 +343,20 @@ int main(int argc, char ** argv) {
     double potNrm = verify.getNrmScalar(bodies);
     double accDif = verify.getDifVector(bodies, bodies2);
     double accNrm = verify.getNrmVector(bodies);
+
+#if 0
+    std::cerr << "bodies (after direct)= ";
+    for (auto &b : bodies) {
+      std::cerr << b.TRG[0] << " " << b.X[0] << " " << b.X[1] << " " << b.X[2] << "\n";
+    }
+    std::cerr << "\n";
+#endif
+    
+    std::cout << "potDif = " << potDif << std::endl;
+    std::cout << "potNrm = " << potDif << std::endl;
+    std::cout << "accDif = " << potDif << std::endl;
+    std::cout << "accNrm = " << potDif << std::endl;
+    
     logger::printTitle("FMM vs. direct");
     verify.print("Rel. L2 Error (pot)",std::sqrt(potDif/potNrm));
     verify.print("Rel. L2 Error (acc)",std::sqrt(accDif/accNrm));

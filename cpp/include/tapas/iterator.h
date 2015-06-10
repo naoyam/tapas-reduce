@@ -8,7 +8,7 @@ namespace tapas {
 
 template <class Cell>
 class BodyIterator {
-  const Cell &c_;
+  Cell &c_;
   index_t idx_;
  public:
   typedef Cell CellType;
@@ -16,12 +16,12 @@ class BodyIterator {
   typedef typename CellType::BodyAttrType attr_type;  
   
   int index() const { return idx_; } // for debugging
-  BodyIterator(const CellType &c)
+  BodyIterator(CellType &c)
       : c_(c), idx_(0) {}
   index_t size() const {
     return c_.nb();
   }
-  const BodyIterator &operator*() const {
+  BodyIterator &operator*() const {
     return *this;
   }
   BodyIterator &operator*() {
@@ -54,10 +54,10 @@ class BodyIterator {
   const CellType &cell() const {
     return c_;
   }
-  typename CellType::BT::type &operator++() {
+  const typename CellType::BT::type &operator++() {
     return c_.body(++idx_);
   }
-  typename CellType::BT::type &operator++(int) {
+  const typename CellType::BT::type &operator++(int) {
     return c_.body(idx_++);
   }
   bool operator==(const BodyIterator &x) const {
@@ -123,15 +123,15 @@ class CellIterator {
 
 template <class Cell>
 class SubCellIterator {
-  const Cell &c_;
+  Cell &c_;
   int idx_;
  public:
   typedef Cell CellType;
   typedef CellType value_type;
   typedef typename CellType::attr_type attr_type;
   
- SubCellIterator(const CellType &c): c_(c), idx_(0) {}
- SubCellIterator(const SubCellIterator& rhs) : c_(rhs.c_),idx_(rhs.idx_) {}
+  SubCellIterator(CellType &c): c_(c), idx_(0) {}
+  SubCellIterator(const SubCellIterator& rhs) : c_(rhs.c_),idx_(rhs.idx_) {}
   SubCellIterator& operator=(const SubCellIterator& rhs) {
     this->c_ = rhs.c_;
     this->idx_ = rhs.idx_;
@@ -145,7 +145,7 @@ class SubCellIterator {
       return 1 << CellType::Dim;
     }
   }
-  value_type &operator*() const {
+  value_type &operator*() {
     return c_.subcell(idx_);
   }
   value_type &operator++() {

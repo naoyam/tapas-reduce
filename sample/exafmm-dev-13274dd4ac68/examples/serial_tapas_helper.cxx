@@ -138,6 +138,20 @@ static inline void FMM_M2L(Tapas::Cell &Ci, Tapas::Cell &Cj, int mutual, int nsp
   }                                                           // End if for multipole acceptance
 }
 
+#if 1
+
+static inline void CopyBackResult(Bodies &bodies, Tapas::Cell *root) {
+  const Body *beg = &root->body(0);
+  int nb = root->nbodies();
+
+  bodies = Bodies(beg, beg + nb);
+  for (int i = 0; i < nb; i++) {
+    bodies[i].TRG = root->body_attrs()[i];
+  }
+}
+
+#else
+
 static inline void CopyBackResult(Bodies &body, const kvec4 *trg,
                                   int num_bodies) {
   // greedy ad-hoc copying
@@ -145,3 +159,4 @@ static inline void CopyBackResult(Bodies &body, const kvec4 *trg,
     body[i].TRG = trg[i];
   }
 }
+#endif

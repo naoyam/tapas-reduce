@@ -138,7 +138,7 @@ if (EXAFMM_ENABLE_MT)
 endif()
 
 #------------------------------------------------------------------
-# Tapas implementation of ExaFMM with MPI
+#Tapas implementation of ExaFMM with MPI
 #------------------------------------------------------------------
 # if(EXAFMM_ENABLE_MPI)
 #   add_executable(parallel_tapas
@@ -148,7 +148,7 @@ endif()
 #     ../kernels/${EXAFMM_EQUATION}${EXAFMM_BASIS}${EXAFMM_DEVICE}.cxx
 #     ../kernels/${EXAFMM_EQUATION}P2P${EXAFMM_DEVICE}.cxx
 #     )
-#   set_property(TARGET parallel_tapas APPEND_STRING PROPERTY COMPILE_FLAGS  "${MPI_CXX_COMPILE_FLAGS} -DTO_SERIAL ${SIMD_FLAG}")
+#   set_property(TARGET parallel_tapas APPEND_STRING PROPERTY COMPILE_FLAGS "${MPI_CXX_COMPILE_FLAGS} -DTO_SERIAL ${SIMD_FLAG}")
 #   set_property(TARGET parallel_tapas APPEND PROPERTY INCLUDE_DIRECTORIES "${MPI_CXX_INCLUDE_PATH}")
 #   set_property(TARGET parallel_tapas APPEND PROPERTY LINK_FLAGS          "${MPI_CXX_LINK_FLAGS}")
   

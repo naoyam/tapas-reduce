@@ -84,10 +84,10 @@ class Cell: public tapas::BasicCell<TSP> {
   typedef Cell<TSP> CellType;
   typedef BodyIterator<CellType> BodyIter;
   
-  
  protected:
   KeyType key_;
   HashTable *ht_;
+  int nb_; //!< number of local bodies of the process.
  public:
     Cell(const Region<TSP> &region,
          index_t bid, index_t nb, KeyType key,
@@ -95,7 +95,7 @@ class Cell: public tapas::BasicCell<TSP> {
          typename TSP::BT::type *bodies,
          typename TSP::BT_ATTR *body_attrs) :
             tapas::BasicCell<TSP>(region, bid, nb), key_(key),
-            ht_(ht), bodies_(bodies), body_attrs_(body_attrs),
+            ht_(ht), nb_(nb), bodies_(bodies), body_attrs_(body_attrs),
             is_leaf_(true) {}
     
   static void Map(Cell<TSP> &cell,
@@ -113,35 +113,59 @@ class Cell: public tapas::BasicCell<TSP> {
     bool IsRoot() const;
     bool IsLeaf() const;
     int nsubcells() const;
+    int nbodies() const { return nb_; }
     Cell &subcell(int idx) const;
     Cell &parent() const;
+  
 #ifdef DEPRECATED
     typename TSP::BT::type &particle(index_t idx) const {
         return body(idx);
     }
 #endif
-    typename TSP::BT::type &body(index_t idx) const;
-    BodyIterator<Cell> bodies() const;
+
+  // Accessor functions to bodies & body attributes
+  
+  /**
+   * \brief returns idx-th body in local memory
+   * In single node HOT, the set of bodies are equivalent to the bodies users first
+   * gave to tapas, but they might be re-ordered.
+   */
+  BodyType& body(index_t idx);
+  const BodyType& body(index_t idx) const;
+
+  /**
+   * \brief Returns an attribute of the idx-th local body.
+   */
+  BodyAttrType &body_attr(index_t idx);
+  const BodyAttrType &body_attr(index_t idx) const;
+  
+  BodyIterator<Cell> bodies();
+  
+  BodyAttrType *body_attrs();
+  const BodyAttrType *body_attrs() const;
+  
 #ifdef DEPRECATED
     typename TSP::BT_ATTR *particle_attrs() const {
         return body_attrs();
     }
 #endif
-    typename TSP::BT_ATTR *body_attrs() const;
-    SubCellIterator<Cell> subcells() const;
+  
+  SubCellIterator<Cell> subcells();
 
   int depth() const {
     return SFC::GetDepth(key_);
   }
   
-  protected:
-    typename TSP::BT_ATTR &body_attr(index_t idx) const;
+ protected:
     HashTable *ht() { return ht_; }
     Cell *Lookup(KeyType k) const;
     typename TSP::BT::type *bodies_;
     typename TSP::BT_ATTR *body_attrs_;
     bool is_leaf_;
     virtual void make_pure_virtual() const {}
+
+  const std::vector<BodyType>& LocalBodies() const;
+  const std::vector<BodyAttrType>& LocalBodyAttrs() const;
 }; // class Cell
 
 
@@ -381,28 +405,43 @@ Cell<TSP> &Cell<TSP>::parent() const {
 }
 
 template <class TSP>
-typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
-    return bodies_[this->bid_+idx];
+typename TSP::BT::type &Cell<TSP>::body(index_t idx) {
+  return bodies_[this->bid_+idx];
 }
 
 template <class TSP>
-typename TSP::BT_ATTR *Cell<TSP>::body_attrs() const {
-    return body_attrs_;
+const typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
+  return bodies_[this->bid_+idx];
 }
 
 template <class TSP>
-typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) const {
-    return body_attrs_[this->bid_+idx];
+typename TSP::BT_ATTR *Cell<TSP>::body_attrs() {
+  return body_attrs_;
 }
 
 template <class TSP>
-SubCellIterator<Cell<TSP>> Cell<TSP>::subcells() const {
-    return SubCellIterator<Cell>(*this);
+const typename TSP::BT_ATTR *Cell<TSP>::body_attrs() const {
+  return body_attrs_;
+}
+
+template <class TSP>
+typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) {
+  return body_attrs_[this->bid_+idx];
+}
+
+template <class TSP>
+const typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) const {
+  return body_attrs_[this->bid_+idx];
+}
+
+template <class TSP>
+SubCellIterator<Cell<TSP>> Cell<TSP>::subcells() {
+  return SubCellIterator<Cell>(*this);
 }
 
 
 template <class TSP>
-BodyIterator<Cell<TSP>> Cell<TSP>::bodies() const {
+BodyIterator<Cell<TSP>> Cell<TSP>::bodies() {
     return BodyIterator<Cell<TSP> >(*this);
 }
 
@@ -504,9 +543,10 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                   << "nb=" << std::setw(3) << c->nb() << " "
                   << "center=[" << c->center() << "] "
                   << "next_key=" << SFC::Simplify(SFC::GetNext(k)) << " "
-                  << "parent=" << SFC::Simplify(SFC::Parent(k)) 
+                  << "parent=" << SFC::Simplify(SFC::Parent(k))  << " "
                   << std::endl;
           // Print bodies which belong to Cell c
+#if 0
           if (c->IsLeaf()) {
             index_t body_beg, body_end;
             SFC::FindRangeByKey(recv_keys, k, body_beg, body_end);
@@ -517,6 +557,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                       << std::endl;
             }
           }
+#endif
         }
       }
     }

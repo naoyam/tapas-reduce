@@ -314,7 +314,7 @@ class Cell: public tapas::BasicCell<TSP> {
        VecPtr<BodyAttrType> local_body_attrs
        ) :
       tapas::BasicCell<TSP>(CalcRegion(key, region), body_beg, body_num),
-      key_(key), is_local_(is_local), is_dummy_(false), region_global_(region),
+      key_(key), is_local_(is_local), is_dummy_(false), region_global_(region), nb_(local_bodies->size()),
       ht_(ht), ht_mtx_(ht_mtx),
       leaf_keys_(leaf_keys),
       leaf_nb_(leaf_nb),
@@ -395,7 +395,7 @@ class Cell: public tapas::BasicCell<TSP> {
   /**
    * @brief Returns idx-th subcell.
    */
-  Cell &subcell(int idx) const;
+  Cell &subcell(int idx);
 
   /**
    * @brief Returns the parent cell if it's local.
@@ -417,15 +417,27 @@ class Cell: public tapas::BasicCell<TSP> {
         return body(idx);
     }
 #endif
-    typename TSP::BT::type &body(index_t idx) const;
-    BodyIterator<Cell> bodies() const;
+
+  // Accessor functions to bodies & body attributes
+  BodyType &body(index_t idx);
+  const BodyType &body(index_t idx) const;
+  
+  BodyAttrType &body_attr(index_t idx);
+  const BodyAttrType &body_attr(index_t idx) const;
+  
+  BodyAttrType *body_attrs();
+  const BodyAttrType *body_attrs() const;
+  
+  BodyIterator<Cell> bodies();
+
+  int nbodies() const { return nb_; }
+
 #ifdef DEPRECATED
     typename TSP::BT_ATTR *particle_attrs() const {
         return body_attrs();
     }
 #endif
-    typename TSP::BT_ATTR *body_attrs() const;
-    SubCellIterator<Cell> subcells() const;
+  SubCellIterator<Cell> subcells();
 
  protected:
   // member variables
@@ -434,6 +446,7 @@ class Cell: public tapas::BasicCell<TSP> {
   bool is_leaf_;
   bool is_dummy_; //!< A dummy cell is returned from Partition if no leaf cell is assigned to the process.
   Region<TSP> region_global_;
+  int nb_; //!< number of bodies in the local process (not bodies under this cell).
   
   std::shared_ptr<CellHashTable> ht_; //!< Hash table of KeyType -> Cell*
   std::shared_ptr<std::mutex>    ht_mtx_; //!< mutex to manipulate ht_
@@ -450,7 +463,6 @@ class Cell: public tapas::BasicCell<TSP> {
   // utility/accessor functions
   Cell *Lookup(KeyType k) const;
   CellHashTable *ht() { return ht_; }
-  typename TSP::BT_ATTR &body_attr(index_t idx) const;
   virtual void make_pure_virtual() const {}
   void RegisterCell(Cell<TSP> *c);
 
@@ -1085,12 +1097,12 @@ bool Cell<TSP>::IsLocal() const {
 
 template <class TSP>
 int Cell<TSP>::nsubcells() const {
-    if (IsLeaf()) return 0;
-    else return (1 << TSP::Dim);
+  if (IsLeaf()) return 0;
+  else return (1 << TSP::Dim);
 }
 
 template <class TSP>
-Cell<TSP> &Cell<TSP>::subcell(int idx) const {
+Cell<TSP> &Cell<TSP>::subcell(int idx) {
   if (IsLeaf()) {
     TAPAS_LOG_ERROR() << "Trying to access children of a leaf cell." << std::endl;
     TAPAS_DIE();
@@ -1146,30 +1158,47 @@ Cell<TSP> &Cell<TSP>::parent() const {
 }
 
 template <class TSP>
-typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
+typename TSP::BT::type &Cell<TSP>::body(index_t idx) {
   assert(idx < this->nb());
   return local_bodies_->at(this->bid() + idx);
 }
 
 template <class TSP>
-typename TSP::BT_ATTR *Cell<TSP>::body_attrs() const {
+const typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
+  assert(idx < this->nb());
+  return local_bodies_->at(this->bid() + idx);
+}
+
+template <class TSP>
+typename TSP::BT_ATTR *Cell<TSP>::body_attrs() {
   return local_body_attrs_->data();
 }
 
 template <class TSP>
-typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) const {
+const typename TSP::BT_ATTR *Cell<TSP>::body_attrs() const {
+  return local_body_attrs_->data();
+}
+
+template <class TSP>
+typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) {
   assert(idx < this->nb());
   return local_body_attrs_->at(this->bid() + idx);
 }
 
 template <class TSP>
-SubCellIterator<Cell<TSP>> Cell<TSP>::subcells() const {
-    return SubCellIterator<Cell>(*this);
+const typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) const {
+  assert(idx < this->nb());
+  return local_body_attrs_->at(this->bid() + idx);
 }
 
 template <class TSP>
-BodyIterator<Cell<TSP>> Cell<TSP>::bodies() const {
-    return BodyIterator<Cell<TSP> >(*this);
+SubCellIterator<Cell<TSP>> Cell<TSP>::subcells() {
+  return SubCellIterator<Cell>(*this);
+}
+
+template <class TSP>
+BodyIterator<Cell<TSP>> Cell<TSP>::bodies() {
+  return BodyIterator<Cell<TSP> >(*this);
 }
 
 template <class TSP> // Tapas static params
@@ -1635,8 +1664,6 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     (*ht)[k] = c;
     assert(c->IsLocal() && c->IsLeaf());
 
-    Stderr e("check0001");
-
     // Create anscestors of the cell c (in a recursive upward way)
     while(1) {
       k = SFC::Parent(k);
@@ -1649,11 +1676,6 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
         int nb = 0;
         for (auto i = bbeg; i < bend; i++) {
           nb += leaf_nb_global[i];
-        }
-        
-        if (k == 1) {
-          e.out() << "key=" << k << std::endl;
-          e.out() << "nb = " << nb << std::endl;
         }
         
         // Create interior cellls (anscestors)
@@ -1701,6 +1723,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                 << "parent=" << SFC::Simplify(SFC::Parent(k)) << " "
                 << std::endl;
         // Print bodies which belong to Cell c
+#if 0
         if (c->IsLeaf()) {
           index_t body_beg, body_end;
           SFC::FindRangeByKey(recv_keys, k, body_beg, body_end);
@@ -1711,6 +1734,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                     << std::endl;
           }
         }
+#endif
       }
     }
   }
@@ -1781,33 +1805,6 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   
   // return the root cell (root key is always 0)
   return (*ht)[0];
-
-  //-------------
-
-#if 0
-  BodyType *b_work = new BodyType[num_bodies];
-
-  // Sort particles to the same order of hn
-  SortBodies<TSP>(b, b_work, hn.data(), hn.size());
-
-  std::memcpy(b, b_work, sizeof(BodyType) * num_bodies);
-  //BodyAttrType *attrs = new BodyAttrType[nb];
-  BodyAttrType *attrs = (BodyAttrType*)calloc(num_bodies, sizeof(BodyAttrType));
-
-  KeyType root_key = 0;
-  auto getkey = [] (const HelperNode<TSP> &hn) { return hn.key; }
-  auto kp = GetBodyRange<KeyType, HelprNode<TSP>>(root_key, hn, getkey);
-  assert(kp.first == 0 && kp.second == num_bodies); // it is root cell, which owns all bodies.
-  TAPAS_LOG_DEBUG() << "Root range: offset: " << kp.first << ", "
-                    << "length: " << kp.second << "\n";
-
-  auto *ht = new typename CellType::CellHashTable();
-  auto *root = new CellType(r, 0, num_bodies, root_key, ht, b, attrs);
-  ht->insert(std::make_pair(root_key, root));
-  Refine(root, hn, b, 0, 0);
-
-  return root;
-#endif
 }
 
 template <class TSP>
