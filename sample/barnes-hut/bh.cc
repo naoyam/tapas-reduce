@@ -101,7 +101,10 @@ static void ComputeForce(Tapas::BodyIterator &p1,
 }
 
 static void approximate(Tapas::Cell &c) {
+#ifdef DUMP
   std::cerr << "Approximate: " << c.key() << std::endl;
+#endif
+
   if (c.nb() == 0) {
     c.attr().w = 0.0;
 #if 0
@@ -109,10 +112,16 @@ static void approximate(Tapas::Cell &c) {
     c.attr().y = 0.0;
     c.attr().z = 0.0;
 #endif
+
+#ifdef DUMP
     std::cerr << "Empty" << std::endl;
+#endif
+
   } else if (c.nb() == 1) {
     c.attr() = c.body(0);
+#ifdef DUMP
     std::cerr << "One particle" << std::endl;
+#endif
   } else {
     tapas::Map(approximate, c.subcells());
     float4 center = {0.0, 0.0, 0.0, 0.0};
@@ -212,8 +221,8 @@ int main() {
     pd += (targetHost[i].w - targetTapas[i].w) * (targetHost[i].w - targetTapas[i].w);
     pn += targetHost[i].w * targetHost[i].w;
     fd += (targetHost[i].x - targetTapas[i].x) * (targetHost[i].x - targetTapas[i].x)
-        + (targetHost[i].y - targetTapas[i].y) * (targetHost[i].y - targetTapas[i].y)
-        + (targetHost[i].z - targetTapas[i].z) * (targetHost[i].z - targetTapas[i].z);
+          + (targetHost[i].y - targetTapas[i].y) * (targetHost[i].y - targetTapas[i].y)
+          + (targetHost[i].z - targetTapas[i].z) * (targetHost[i].z - targetTapas[i].z);
     fn += targetHost[i].x * targetHost[i].x + targetHost[i].y * targetHost[i].y + targetHost[i].z * targetHost[i].z;
   }
   std::cout << std::scientific << "P ERR  : " << sqrtf(pd/pn) << std::endl;
