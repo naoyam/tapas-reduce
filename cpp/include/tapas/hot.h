@@ -46,6 +46,23 @@ namespace tapas {
  */
 namespace hot {
 
+#if 0
+/**
+ * \brief Struct to hold shared data among Cells
+ * Never accessed by users directly. Only held by Cells using shared_ptr.
+ */
+template<class TSP, class SFC>
+struct HotData {
+  using KeyType = typename SFC::KeyType;
+  
+  std::shared_ptr<CellHashTable> ht_;
+  std::shared_ptr<std::mutex> ht_mtx_;
+  Region<TSP> region_;
+  std::shared_ptr<std::vector<KeType>> leaf_keys;
+  std::shared_ptr<std::vector<
+};
+#endif
+
 /**
  * @brief Remove redundunt elements in a std::vector. The vector must be sorted.
  * 
@@ -487,6 +504,8 @@ static FP distR2(const T &p, const T &q) {
   return dx * dx + dy * dy + dz * dz;
 }
 
+#ifdef TAPAS_BH
+
 template<class TSP, class SetType>
 void TraverseLET(typename Cell<TSP>::BodyType &p,
                  Cell<TSP> &cell,
@@ -528,7 +547,7 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
   if (cell.IsLeaf()) {
   } else {
     for (auto &chk : child_keys) {
-      auto ctr = Cell<TSP>::SFC::GetCenter(k, r.min(), r.max());
+      //auto ctr = Cell<TSP>::SFC::GetCenter(k, r.min(), r.max());
       
       //FP d2 = distR2<FP>(c2.attr(), p1);
     }
@@ -554,6 +573,8 @@ void ExchangeLET(Cell<TSP> &root) {
     TraverseLET<TSP, KeySet>(b, root, list_geo, list_attr, list_body);
   }
 }
+
+#endif // TAPAS_BH
 
 // MPI-related utilities and wrappers
 // TODO: wrap them as a pluggable policy/traits class
@@ -754,7 +775,10 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
  */
 template <class TSP>
 void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
-  ExchangeLET<TSP>(cell);
+#ifdef TAPAS_BH
+  //ExchangeLET<TSP>(cell);
+#endif
+  
   f(cell);
 }
 
@@ -915,6 +939,26 @@ class Partitioner {
                 int cur_depth,
                 KeyType cur_key) const;
 }; // class Partitioner
+
+/**
+ * \brief Create a list of keys where i-th element is the first key of process i.
+ */
+template<class KeyType>
+std::vector<KeyType> ProcHeadKeys(std::vector<KeyType> leaf_keys,
+                                  std::vector<int> &leaf_owners,
+                                  int num_proc) {
+  std::vector<KeyType> head_list(num_proc);
+  
+  // NOTE: Process 0's first key is always 0
+  //TAPAS_ASSERT(Key::RemoveDepth(leaf_keys[0]) == (KeyType)0);
+  
+  int pos = 0;
+  for (int p = 0; p < num_proc; p++) {
+    head_list[p] = leaf_keys[pos];
+    while(leaf_owners[pos] <= p) pos++;
+  }
+  return head_list;
+}
 
 /**
  * @brief Overloaded version of Partitioner::Partition
@@ -1197,6 +1241,8 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   // so that each process has roughly equal number of bodies.
   // Split the morton-ordred curve and assign cells to processes
   std::vector<int> leaf_owners = SplitKeysSimple(leaf_nb_global, size);
+
+  std::vector<KeyType> proc_head_keys = ProcHeadKeys<KeyType>(leaf_keys, leaf_owners, (int)size);
 
   // Exchange bodies using MPI_Alltoallv
   std::vector<int> send_counts(size, 0); // number of bodies that this process sends to others
