@@ -46,7 +46,9 @@ namespace tapas {
  */
 namespace hot {
 
-#if 0
+// fwd decl
+template<class TSP> class Cell;
+
 /**
  * \brief Struct to hold shared data among Cells
  * Never accessed by users directly. Only held by Cells using shared_ptr.
@@ -54,14 +56,17 @@ namespace hot {
 template<class TSP, class SFC>
 struct HotData {
   using KeyType = typename SFC::KeyType;
+  using CellType = Cell<TSP>;
+  using CellHashTable = typename std::unordered_map<KeyType, CellType*>;
   
-  std::shared_ptr<CellHashTable> ht_;
-  std::shared_ptr<std::mutex> ht_mtx_;
-  Region<TSP> region_;
-  std::shared_ptr<std::vector<KeType>> leaf_keys;
-  std::shared_ptr<std::vector<
+  CellHashTable ht_;
+  std::mutex ht_mtx_;
+  Region<TSP> region_; //!< global bouding box
+
+  HotData() { }
+  HotData(const HotData<TSP, SFC>& rhs) = delete; // no copy
+  HotData(HotData<TSP, SFC>&& rhs) = delete; // no move
 };
-#endif
 
 /**
  * @brief Remove redundunt elements in a std::vector. The vector must be sorted.
@@ -235,8 +240,8 @@ template <class TSP> // TapasStaticParams
 class Cell: public tapas::BasicCell<TSP> {
   friend class Partitioner<TSP>;
   friend class BodyIterator<Cell>;
-  
- public:
+
+ public: // public type usings
   static const constexpr int Dim = TSP::Dim;
   typedef typename TSP::SFC SFC;
   typedef typename SFC::KeyType KeyType;
@@ -250,6 +255,9 @@ class Cell: public tapas::BasicCell<TSP> {
 
   using FP = typename TSP::FP;
 
+ private: // private type usings
+  using Data = HotData<TSP, SFC>;
+  
  public:
   
   template<class T>
@@ -276,9 +284,7 @@ class Cell: public tapas::BasicCell<TSP> {
   Cell(KeyType key,
        bool is_local,
        index_t body_beg, index_t body_num,
-       std::shared_ptr<CellHashTable> ht,
-       std::shared_ptr<std::mutex> ht_mtx,
-       const Region<TSP> &region,
+       std::shared_ptr<Data> data,
        VecPtr<KeyType>  leaf_keys,       // Keys of all (local and remote) leaf cells
        VecPtr<index_t>  leaf_nb,
        VecPtr<int>      leaf_owners,     // Process IDs that own i-th leaf cell.
@@ -286,9 +292,8 @@ class Cell: public tapas::BasicCell<TSP> {
        VecPtr<KeyType>  local_body_keys, // Keys of local_bodies
        VecPtr<BodyAttrType> local_body_attrs
        ) :
-      tapas::BasicCell<TSP>(CalcRegion(key, region), body_beg, body_num),
-      key_(key), is_local_(is_local), is_dummy_(false), region_global_(region), nb_(local_bodies->size()),
-      ht_(ht), ht_mtx_(ht_mtx),
+      tapas::BasicCell<TSP>(CalcRegion(key, data->region_), body_beg, body_num),
+      key_(key), is_local_(is_local), is_dummy_(false), data_(data), nb_(local_bodies->size()),
       leaf_keys_(leaf_keys),
       leaf_nb_(leaf_nb),
       leaf_owners_(leaf_owners),
@@ -316,9 +321,8 @@ class Cell: public tapas::BasicCell<TSP> {
   }
 
   // Create a dummy root node
-  Cell(std::shared_ptr<CellHashTable> ht, std::shared_ptr<std::mutex> ht_mtx, const Region<TSP> &r) :
-      tapas::BasicCell<TSP>(r, 0, 0),
-      key_(0), is_local_(false), is_leaf_(false), is_dummy_(true), ht_(ht), ht_mtx_(ht_mtx),
+  Cell(std::shared_ptr<Data> data) : tapas::BasicCell<TSP>(data->region_, 0, 0),
+      key_(0), is_local_(false), is_leaf_(false), is_dummy_(true), data_(data),
       mpi_tag_(0)
   {
   }
@@ -412,15 +416,18 @@ class Cell: public tapas::BasicCell<TSP> {
 #endif
   SubCellIterator<Cell> subcells();
 
-  const Region<TSP> &region() const { return region_global_; }
+  const Region<TSP> &region() const { return data_->region_; }
 
  protected:
+  // --------------------------------------------------------------------
   // member variables
+  // --------------------------------------------------------------------
   KeyType key_; //!< Key of the cell
   bool is_local_;
   bool is_leaf_;
   bool is_dummy_; //!< A dummy cell is returned from Partition if no leaf cell is assigned to the process.
-  Region<TSP> region_global_;
+  std::shared_ptr<Data> data_;
+
   int nb_; //!< number of bodies in the local process (not bodies under this cell).
   
   std::shared_ptr<CellHashTable> ht_; //!< Hash table of KeyType -> Cell*
@@ -793,7 +800,7 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
 
 template <class TSP>
 bool Cell<TSP>::operator==(const Cell &c) const {
-    return key_ == c.key_;
+  return key_ == c.key_;
 }
 
 template <class TSP>
@@ -834,10 +841,10 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) {
     if (c == nullptr) {
       // leaf if if key is contained in leaf_keys_
 
-      c = new Cell(child_key, false, 0, 0, ht_, ht_mtx_, region_global_,
+      c = new Cell(child_key, false, 0, 0, data_,
                    leaf_keys_, leaf_nb_, leaf_owners_,
                    local_bodies_, local_body_keys_, local_body_attrs_);
-      (*ht_)[child_key] = c;
+      data_->ht_[child_key] = c;
     }
   }
   
@@ -846,12 +853,13 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) {
 
 template <class TSP>
 Cell<TSP> *Cell<TSP>::Lookup(KeyType k) const {
-    auto i = ht_->find(k);
-    if (i != ht_->end()) {
-        return i->second;
-    } else {
-        return nullptr;
-    }
+  auto &ht = data_->ht_;
+  auto i = ht.find(k);
+  if (i != ht.end()) {
+    return i->second;
+  } else {
+    return nullptr;
+  }
 }
 
 template <class TSP>
@@ -1069,8 +1077,8 @@ void Cell<TSP>::CalcOwnerProcesses() {
 
 template<class TSP>
 void Cell<TSP>::RegisterCell(Cell<TSP> *c) {
-  std::lock_guard<std::mutex> lock(*ht_mtx_);
-  (*ht_)[c->key()] = c;
+  std::lock_guard<std::mutex> lock(data_->ht_mtx_);
+  data_->ht_[c->key()] = c;
 }
 
 template <class TSP>
@@ -1158,11 +1166,15 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   
   typedef Cell<TSP> CellType;
   typedef HelperNode<TSP> HN;
+  using Data = typename CellType::Data;
+
+  auto data = std::make_shared<Data>();
   
-  auto r = ExchangeRegion(reg);
+  // Calculate the global bouding box by MPI_Allreduce
+  data->region_ = ExchangeRegion(reg);
 
   // Sort local bodies using SFC  keys
-  std::vector<HN> hn = CreateInitialNodes<TSP>(b, num_bodies, r);
+  std::vector<HN> hn = CreateInitialNodes<TSP>(b, num_bodies, data->region_);
   std::sort(hn.begin(), hn.end(),
             [](const HN &lhs, const HN &rhs) { return lhs.key < rhs.key; });
 
@@ -1356,10 +1368,6 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       DumpToFile(*(recv_bodies.get()), recv_keys, ss.str().c_str(), append_mode);
     });
 
-  // CellHashTable (which is std::unordered_map<KeyType, CellType*>
-  auto ht = std::make_shared<typename CellType::CellHashTable>();
-  auto ht_mtx = std::make_shared<std::mutex>();
-
   // construct a local tree from cells which belong to this process.
   auto leaf_beg = std::lower_bound(std::begin(leaf_owners), std::end(leaf_owners), rank) - std::begin(leaf_owners);
   auto leaf_end = std::upper_bound(std::begin(leaf_owners), std::end(leaf_owners), rank) - std::begin(leaf_owners);
@@ -1391,15 +1399,14 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                                true,            // is_local
                                bbeg,            // body index
                                bend - bbeg,     // #bodies
-                               ht, ht_mtx,      // CellHashTable & its mutex
-                               r,               // Region region
+                               data,
                                leaf_keys2,
                                leaf_nb_global2,
                                leaf_owners2,
                                recv_bodies,     // local bodies
                                local_body_keys, // local body keys
                                local_body_attrs);     // body attrs
-    (*ht)[k] = c;
+    data->ht_[k] = c;
     assert(c->IsLocal() && c->IsLeaf());
 
     // Create anscestors of the cell c (in a recursive upward way)
@@ -1407,7 +1414,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       k = SFC::Parent(k);
       int dp = SFC::GetDepth(k);
 
-      if (ht->count(k) == 0) {
+      if (data->ht_.count(k) == 0) {
         index_t bbeg, bend;
         //FindRangeByKey<TSP>(recv_keys, k, bbeg, bend);
         SFC::FindRangeByKey(leaf_keys, k, bbeg, bend);
@@ -1417,20 +1424,20 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
         }
         
         // Create interior cellls (anscestors)
-        // Note: if a cell is non-leaf, then bbeg (body begin index) is not correct.
-        //       This is because bodies are help only by a process that owns the corresponding leaf cells.
-        CellType *c = new CellType(k,                 // key
-                                   true,              // is_local
-                                   0, nb,             // start index of bodies and numBodies. read the note above
-                                   ht, ht_mtx,        // CellHashTable
-                                   r,                 // Region region
+        // Note:
+        // If a cell is non-leaf, then bbeg (body begin index) is not correct.
+        // This is because bodies are help only by a process that owns the corresponding leaf cells.
+        CellType *c = new CellType(k,     // key
+                                   true,  // is_local
+                                   0, nb, // Read the note above
+                                   data,
                                    leaf_keys2,
                                    leaf_nb_global2,
                                    leaf_owners2,
                                    recv_bodies,       // local bodies
                                    local_body_keys,   // local body keys
                                    local_body_attrs); // body attrs
-        (*ht)[k] = c;
+        data->ht_[k] = c;
         interior_cells.push_back(c);
         assert(c->IsLocal() && !c->IsLeaf());
       } else {
@@ -1447,7 +1454,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   // Dump all (local) cells to a file
   {
     Stderr e("cells");
-    for (auto&& iter : (*ht)) {
+    for (auto&& iter : data->ht_) {
       KeyType k = iter.first;
       Cell<TSP> *c = iter.second;
       if (c->IsLocal() && c->key() != 0) {
@@ -1478,10 +1485,11 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   }
 #endif // TAPAS_DEBUG
   
-  if ((*ht)[0] == nullptr) {
+  if (data->ht_[0] == nullptr) {
+    // 0 : root key 
     // Create a dummy cell if ht[0] is nullptr, which means the local process
     // was assigned no leaf cell (but need to return a root cell).
-    (*ht)[0] = new CellType(ht, ht_mtx, r);
+    data->ht_[0] = new CellType(data);
   }
 
 #ifdef TAPAS_DEBUG
@@ -1542,7 +1550,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 #endif
   
   // return the root cell (root key is always 0)
-  return (*ht)[0];
+  return data->ht_[0];
 }
 
 template <class TSP>
