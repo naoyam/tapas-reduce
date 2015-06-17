@@ -63,6 +63,9 @@ struct HotData {
   std::mutex ht_mtx_;
   Region<TSP> region_; //!< global bouding box
 
+  int mpi_rank;
+  int mpi_size;
+
   HotData() { }
   HotData(const HotData<TSP, SFC>& rhs) = delete; // no copy
   HotData(HotData<TSP, SFC>&& rhs) = delete; // no move
@@ -1169,7 +1172,12 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   using Data = typename CellType::Data;
 
   auto data = std::make_shared<Data>();
-  
+
+  MPI_Comm_rank(MPI_COMM_WORLD, &data->mpi_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &data->mpi_size);
+  int mpi_rank = data->mpi_rank;
+  int mpi_size = data->mpi_size;
+
   // Calculate the global bouding box by MPI_Allreduce
   data->region_ = ExchangeRegion(reg);
 
@@ -1193,12 +1201,6 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   std::vector<KeyType> leaf_keys;      // Keys of leaf cells (global)
   std::vector<index_t> leaf_nb_local;  // Number of local bodies in leaf cell[i] (all global cells)
   std::vector<index_t> leaf_nb_global; // Number of global bodies in leaf cell[i] (all global cells)
-
-  // MPI rank and size
-  // TOOD: to be replaced by an appropriate abstraction of communication component.
-  int rank, size;
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
   // Start from a root cell and refine it recursively until all cells have at most
   leaf_keys.push_back(0);
@@ -1252,13 +1254,15 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   // distribute the morton-ordered leaf cells over processes
   // so that each process has roughly equal number of bodies.
   // Split the morton-ordred curve and assign cells to processes
-  std::vector<int> leaf_owners = SplitKeysSimple(leaf_nb_global, size);
+  std::vector<int> leaf_owners = SplitKeysSimple(leaf_nb_global, mpi_size);
 
-  std::vector<KeyType> proc_head_keys = ProcHeadKeys<KeyType>(leaf_keys, leaf_owners, (int)size);
+  std::vector<KeyType> proc_head_keys = ProcHeadKeys<KeyType>(leaf_keys,
+                                                              leaf_owners,
+                                                              mpi_size);
 
   // Exchange bodies using MPI_Alltoallv
-  std::vector<int> send_counts(size, 0); // number of bodies that this process sends to others
-  std::vector<int> recv_counts(size, 0); // number of bodies that this process receives from others
+  std::vector<int> send_counts(mpi_size, 0); // number of bodies that this process sends to others
+  std::vector<int> recv_counts(mpi_size, 0); // number of bodies that this process receives from others
   
   // count bodies to be sent to process 'proc' in cell ci
   // note that send_count and recv_count are multiplied by sizeof(BodyType) so that
@@ -1299,10 +1303,10 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   }
 
   // Calculate send displacements, which is prefix sum of send_bytes_bodies
-  std::vector<int> send_disp_bodies(size, 0);
-  std::vector<int> send_disp_keys(size, 0);
+  std::vector<int> send_disp_bodies(mpi_size, 0);
+  std::vector<int> send_disp_keys(mpi_size, 0);
 
-  for (int p = 0; p < size; p++) {
+  for (int p = 0; p < mpi_size; p++) {
     // p : process id (i.e. rank in MPI)
     if (p == 0) {
       send_disp_bodies[p] = 0;
@@ -1332,8 +1336,8 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   std::vector<KeyType> recv_keys(num_bodies_recv);
 
   // Calculate recv displacement, which is prefix sum of recv_bytes_bodies and recv_bytes_keys
-  std::vector<int> recv_disp_bodies(size, 0);
-  std::vector<int> recv_disp_keys(size, 0);
+  std::vector<int> recv_disp_bodies(mpi_size, 0);
+  std::vector<int> recv_disp_keys(mpi_size, 0);
   for (size_t pi = 0; pi < recv_counts.size(); pi++) {
     if (pi == 0) {
       recv_disp_bodies[pi] = 0;
@@ -1369,8 +1373,10 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     });
 
   // construct a local tree from cells which belong to this process.
-  auto leaf_beg = std::lower_bound(std::begin(leaf_owners), std::end(leaf_owners), rank) - std::begin(leaf_owners);
-  auto leaf_end = std::upper_bound(std::begin(leaf_owners), std::end(leaf_owners), rank) - std::begin(leaf_owners);
+  auto leaf_beg = std::lower_bound(std::begin(leaf_owners), std::end(leaf_owners), mpi_rank)
+                  - std::begin(leaf_owners);
+  auto leaf_end = std::upper_bound(std::begin(leaf_owners), std::end(leaf_owners), mpi_rank)
+                  - std::begin(leaf_owners);
 
   // heap copy of vectors (shared by Cells)
   auto leaf_owners2     = std::make_shared<std::vector<int>>(leaf_owners);
