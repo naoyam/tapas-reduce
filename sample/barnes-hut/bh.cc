@@ -28,7 +28,7 @@ const real_t EPS2 = 1e-6;
 
 typedef tapas::BodyInfo<float4, 0> BodyInfo;
 
-#ifdef MPI
+#ifdef BH_USE_MPI
 #include "tapas/hot.h"
 typedef tapas::Tapas<DIM, real_t, BodyInfo,
                      float4, float4,
