@@ -58,13 +58,22 @@ struct HotData {
   using KeyType = typename SFC::KeyType;
   using CellType = Cell<TSP>;
   using CellHashTable = typename std::unordered_map<KeyType, CellType*>;
+  using BodyType = typename TSP::BT::type;
+  using BodyAttrType = typename TSP::BT_ATTR;
   
   CellHashTable ht_;
-  std::mutex ht_mtx_;
+  std::mutex ht_mtx_;  //!< mutex to protect ht_
   Region<TSP> region_; //!< global bouding box
 
   int mpi_rank;
   int mpi_size;
+
+  std::vector<KeyType> leaf_keys_; //!< SFC keys of (all) leaves
+  std::vector<index_t> leaf_nb_;   //!< Number of bodies in each cell
+  std::vector<int>     leaf_owners_; //!< Owner process of leaf[i]
+  std::vector<BodyType> local_bodies_; //!< Bodies that belong to the local process
+  std::vector<KeyType>  local_body_keys_; //!< SFC keys of local bodies
+  std::vector<BodyAttrType> local_body_attrs_; //!< Local body attributes
 
   HotData() { }
   HotData(const HotData<TSP, SFC>& rhs) = delete; // no copy
@@ -275,49 +284,32 @@ class Cell: public tapas::BasicCell<TSP> {
    *                 local_bodies and local_body_keys that the cell owns. 
    *                 Otherwise, 0
    * @param body_num If is_leaf is true, the number of bodies the cell owns.
-   * @param ht Hashtable.
-   * @param region A Region object.
-   * @param leaf_keys array of space filling keys of leaf cells
-   * @param leaf_nb array of body numbers of leaf cells
-   * @param leaf_owners Process ID (i.e. rank if in MPI) that cells belong to
-   * @param local_bodies Array of bodies that the local process owns.
-   * @param local_body_keys Keys of local bodies
-   * @param local_body_attrs Array of BodyAttrType corresponding to local_body_keys
    */
   Cell(KeyType key,
        bool is_local,
        index_t body_beg, index_t body_num,
-       std::shared_ptr<Data> data,
-       VecPtr<KeyType>  leaf_keys,       // Keys of all (local and remote) leaf cells
-       VecPtr<index_t>  leaf_nb,
-       VecPtr<int>      leaf_owners,     // Process IDs that own i-th leaf cell.
-       VecPtr<BodyType> local_bodies,    // Bodies which this process owns
-       VecPtr<KeyType>  local_body_keys, // Keys of local_bodies
-       VecPtr<BodyAttrType> local_body_attrs
-       ) :
+       std::shared_ptr<Data> data) :
       tapas::BasicCell<TSP>(CalcRegion(key, data->region_), body_beg, body_num),
-      key_(key), is_local_(is_local), is_dummy_(false), data_(data), nb_(local_bodies->size()),
-      leaf_keys_(leaf_keys),
-      leaf_nb_(leaf_nb),
-      leaf_owners_(leaf_owners),
-      local_bodies_(local_bodies),
-      local_body_keys_(local_body_keys),
-      local_body_attrs_(local_body_attrs),
+      key_(key), is_local_(is_local), is_dummy_(false), data_(data),
+      nb_(data->local_bodies_.size()),
       owners_(),
       mpi_tag_(GetMpiTag(key))
   {
     CalcOwnerProcesses();
 
     // Check if I'm a leaf
-    is_leaf_ = find(leaf_keys_->begin(), leaf_keys_->end(), key) != leaf_keys_->end();
+    is_leaf_ = find(data_->leaf_keys_.begin(),
+                    data_->leaf_keys_.end(), key) != data_->leaf_keys_.end();
 
     // Count number of bodies of this cell (including cells that are indirectly owned bodies)
     if (body_num == 0) {
       index_t beg, end;
-      SFC::GetDescendantRange(key, leaf_keys_->begin(), leaf_keys->end(), beg, end);
+      SFC::GetDescendantRange(key, data_->leaf_keys_.begin(), data_->leaf_keys_.end(), beg, end);
+
+      // [beg, end) is the range of cells that belong to the cell
       int nb = 0;
       for (auto i=beg; i < end; i++) {
-        nb += (*leaf_nb_)[i];
+        nb += data_->leaf_nb_[i];
       }
       this->nb_ = nb;
     }
@@ -436,12 +428,6 @@ class Cell: public tapas::BasicCell<TSP> {
   std::shared_ptr<CellHashTable> ht_; //!< Hash table of KeyType -> Cell*
   std::shared_ptr<std::mutex>    ht_mtx_; //!< mutex to manipulate ht_
 
-  VecPtr<KeyType>  leaf_keys_;
-  VecPtr<index_t>  leaf_nb_;
-  VecPtr<int>      leaf_owners_;
-  VecPtr<BodyType> local_bodies_;
-  VecPtr<KeyType>  local_body_keys_;
-  VecPtr<BodyAttrType> local_body_attrs_;
   std::vector<int> owners_; //<! Processes that have this cell locally.
   const int mpi_tag_;
   
@@ -844,9 +830,7 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) {
     if (c == nullptr) {
       // leaf if if key is contained in leaf_keys_
 
-      c = new Cell(child_key, false, 0, 0, data_,
-                   leaf_keys_, leaf_nb_, leaf_owners_,
-                   local_bodies_, local_body_keys_, local_body_attrs_);
+      c = new Cell(child_key, false, 0, 0, data_);
       data_->ht_[child_key] = c;
     }
   }
@@ -887,35 +871,35 @@ Cell<TSP> &Cell<TSP>::parent() const {
 template <class TSP>
 typename TSP::BT::type &Cell<TSP>::body(index_t idx) {
   assert(idx < this->nb());
-  return local_bodies_->at(this->bid() + idx);
+  return data_->local_bodies_[this->bid() + idx];
 }
 
 template <class TSP>
 const typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
   assert(idx < this->nb());
-  return local_bodies_->at(this->bid() + idx);
+  return data_->local_bodies_[this->bid() + idx];
 }
 
 template <class TSP>
 typename TSP::BT_ATTR *Cell<TSP>::body_attrs() {
-  return local_body_attrs_->data();
+  return data_->local_body_attrs_.data();
 }
 
 template <class TSP>
 const typename TSP::BT_ATTR *Cell<TSP>::body_attrs() const {
-  return local_body_attrs_->data();
+  return data_->local_body_attrs_.data();
 }
 
 template <class TSP>
 typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) {
   assert(idx < this->nb());
-  return local_body_attrs_->at(this->bid() + idx);
+  return data_->local_body_attrs_[this->bid() + idx];
 }
 
 template <class TSP>
 const typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) const {
-  assert(idx < this->nb());
-  return local_body_attrs_->at(this->bid() + idx);
+  TAPAS_ASSERT(idx < this->nb());
+  return data_->local_body_attrs_[this->bid() + idx];
 }
 
 template <class TSP>
@@ -1075,7 +1059,7 @@ size_t sum(const T& c) {
  */
 template <class TSP>
 void Cell<TSP>::CalcOwnerProcesses() {
-  this->owners_ = CalcOwnerProcsOfCell(key_, *leaf_keys_, *leaf_owners_);
+  this->owners_ = CalcOwnerProcsOfCell(key_, data_->leaf_keys_, data_->leaf_owners_);
 }
 
 template<class TSP>
@@ -1198,9 +1182,12 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       DumpToFile(bodies, keys, "init_bodies.dat", append_mode);
     });
 
-  std::vector<KeyType> leaf_keys;      // Keys of leaf cells (global)
-  std::vector<index_t> leaf_nb_local;  // Number of local bodies in leaf cell[i] (all global cells)
-  std::vector<index_t> leaf_nb_global; // Number of global bodies in leaf cell[i] (all global cells)
+  // shortcuts to HotData members:
+  auto &leaf_keys = data->leaf_keys_;     // Keys of leaf cells (global)
+  auto &leaf_nb_global = data->leaf_nb_;  // Number of local bodies (global)
+
+  // Number of local bodies (Allreduce()ed to leaf_nb_global)
+  std::vector<index_t> leaf_nb_local;
 
   // Start from a root cell and refine it recursively until all cells have at most
   leaf_keys.push_back(0);
@@ -1254,7 +1241,8 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   // distribute the morton-ordered leaf cells over processes
   // so that each process has roughly equal number of bodies.
   // Split the morton-ordred curve and assign cells to processes
-  std::vector<int> leaf_owners = SplitKeysSimple(leaf_nb_global, mpi_size);
+  auto &leaf_owners = data->leaf_owners_;
+  leaf_owners = SplitKeysSimple(leaf_nb_global, mpi_size);
 
   std::vector<KeyType> proc_head_keys = ProcHeadKeys<KeyType>(leaf_keys,
                                                               leaf_owners,
@@ -1328,12 +1316,20 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     }
   }
 
-  // Prepare recv_bodies (array of received body, which will be used in actual computation)
-  // and recv_keys (array of keys corresponding to recv_bodies)
-  // recv_bodies will be held by cells and continuously used after this function.
+  // Prepare local_bodies (array of received body, which will be used in local computation)
+  // and local_body_keys (array of keys corresponding to local_bodies)
+  // local_bodies will be held by cells and continuously used after this function.
   int num_bodies_recv = sum(recv_counts); // note: recv_count is in bytes.
-  auto recv_bodies = std::make_shared<std::vector<BodyType>>(num_bodies_recv);
-  std::vector<KeyType> recv_keys(num_bodies_recv);
+  auto &local_bodies = data->local_bodies_;
+  auto &local_body_keys = data->local_body_keys_;
+  auto &local_body_attrs = data->local_body_attrs_;
+
+  local_bodies.resize(num_bodies_recv);
+  local_body_keys.resize(num_bodies_recv);
+  local_body_attrs.resize(num_bodies_recv);
+  
+  bzero(reinterpret_cast<void*>(local_body_attrs.data()),
+        sizeof(BodyAttrType) * local_body_attrs.size());
 
   // Calculate recv displacement, which is prefix sum of recv_bytes_bodies and recv_bytes_keys
   std::vector<int> recv_disp_bodies(mpi_size, 0);
@@ -1350,17 +1346,17 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   
   // Call MPI_Alltoallv() for bodies
   MPI_Alltoallv(send_bodies.data(),  send_bytes_bodies.data(), send_disp_bodies.data(), MPI_BYTE,
-                recv_bodies->data(), recv_bytes_bodies.data(), recv_disp_bodies.data(), MPI_BYTE,
+                local_bodies.data(), recv_bytes_bodies.data(), recv_disp_bodies.data(), MPI_BYTE,
                 MPI_COMM_WORLD);
 
   // Call MPI_Alltoallv() for body keys
   MPI_Alltoallv(send_keys.data(), send_bytes_keys.data(), send_disp_keys.data(), MPI_BYTE,
-                recv_keys.data(), recv_bytes_keys.data(), recv_disp_keys.data(), MPI_BYTE,
+                local_body_keys.data(), recv_bytes_keys.data(), recv_disp_keys.data(), MPI_BYTE,
                 MPI_COMM_WORLD);
 
   // Now we have all bodies & keys transferred to their owner processes.
   // Sort the bodies locally using their keys.
-  SortByPermutations(recv_keys, *recv_bodies);
+  SortByPermutations(local_body_keys, local_bodies);
 
   // Dump local bodies into a file named exch_bodies.dat
   // All processes dump bodies in the file in a coordinated way. init_bodies.dat and
@@ -1369,7 +1365,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       std::stringstream ss;
       ss << "exch_bodies." << size << ".dat";
       bool append_mode = (rank > 0);
-      DumpToFile(*(recv_bodies.get()), recv_keys, ss.str().c_str(), append_mode);
+      DumpToFile(local_bodies, local_body_keys, ss.str().c_str(), append_mode);
     });
 
   // construct a local tree from cells which belong to this process.
@@ -1377,16 +1373,6 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                   - std::begin(leaf_owners);
   auto leaf_end = std::upper_bound(std::begin(leaf_owners), std::end(leaf_owners), mpi_rank)
                   - std::begin(leaf_owners);
-
-  // heap copy of vectors (shared by Cells)
-  auto leaf_owners2     = std::make_shared<std::vector<int>>(leaf_owners);
-  auto leaf_keys2       = std::make_shared<std::vector<KeyType>>(leaf_keys);
-  auto leaf_nb_global2  = std::make_shared<std::vector<index_t>>(leaf_nb_global);
-  auto local_body_keys  = std::make_shared<std::vector<KeyType>>(recv_keys);
-  auto local_body_attrs = std::make_shared<std::vector<BodyAttrType>>(num_bodies_recv);
-
-  bzero(reinterpret_cast<void*>(&local_body_attrs->at(0)),
-        sizeof(BodyAttrType) * local_body_attrs->size());
 
   std::vector<Cell<TSP>*> interior_cells;
   Stderr e("partition");
@@ -1398,20 +1384,14 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
     // Find bodies owned by the Cell whose key is k.
     index_t bbeg, bend;
-    SFC::FindRangeByKey(recv_keys, k, bbeg, bend);
+    SFC::FindRangeByKey(local_body_keys, k, bbeg, bend);
     
     // Create a leaf cell
     CellType *c = new CellType(k,               // key
                                true,            // is_local
                                bbeg,            // body index
                                bend - bbeg,     // #bodies
-                               data,
-                               leaf_keys2,
-                               leaf_nb_global2,
-                               leaf_owners2,
-                               recv_bodies,     // local bodies
-                               local_body_keys, // local body keys
-                               local_body_attrs);     // body attrs
+                               data);
     data->ht_[k] = c;
     assert(c->IsLocal() && c->IsLeaf());
 
@@ -1422,7 +1402,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
       if (data->ht_.count(k) == 0) {
         index_t bbeg, bend;
-        //FindRangeByKey<TSP>(recv_keys, k, bbeg, bend);
+        //FindRangeByKey<TSP>(local_body_keys, k, bbeg, bend);
         SFC::FindRangeByKey(leaf_keys, k, bbeg, bend);
         int nb = 0;
         for (auto i = bbeg; i < bend; i++) {
@@ -1436,13 +1416,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
         CellType *c = new CellType(k,     // key
                                    true,  // is_local
                                    0, nb, // Read the note above
-                                   data,
-                                   leaf_keys2,
-                                   leaf_nb_global2,
-                                   leaf_owners2,
-                                   recv_bodies,       // local bodies
-                                   local_body_keys,   // local body keys
-                                   local_body_attrs); // body attrs
+                                   data);
         data->ht_[k] = c;
         interior_cells.push_back(c);
         assert(c->IsLocal() && !c->IsLeaf());
@@ -1477,11 +1451,11 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 #if 0
         if (c->IsLeaf()) {
           index_t body_beg, body_end;
-          SFC::FindRangeByKey(recv_keys, k, body_beg, body_end);
+          SFC::FindRangeByKey(local_body_keys, k, body_beg, body_end);
           for (int i = body_beg; i < body_end; i++) {
             e.out() << "\t\t\t| "
-                    << SFC::Simplify(recv_keys[i]) << ": "
-                    << (*recv_bodies)[i].X
+                    << SFC::Simplify(local_body_keys[i]) << ": "
+                    << local_bodies[i].X
                     << std::endl;
           }
         }
@@ -1508,9 +1482,9 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       // Space filling curve key -> owners
       auto owners = std::unordered_map<KeyType, std::unordered_set<int>>();
       auto isleaf = std::unordered_map<KeyType, bool>();
-      for (size_t i = 0; i < leaf_owners2->size(); i++) {
+      for (size_t i = 0; i < leaf_owners.size(); i++) {
         KeyType k = leaf_keys[i];
-        int owner = leaf_owners2->at(i);
+        int owner = leaf_owners[i];
         
         owners[k].insert(owner);
         isleaf[k] = true;
