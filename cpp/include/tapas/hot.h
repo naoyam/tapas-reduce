@@ -253,6 +253,9 @@ class Cell: public tapas::BasicCell<TSP> {
   friend class Partitioner<TSP>;
   friend class BodyIterator<Cell>;
 
+  //========================================================
+  // Typedefs 
+  //========================================================
  public: // public type usings
   static const constexpr int Dim = TSP::Dim;
   typedef typename TSP::SFC SFC;
@@ -275,6 +278,10 @@ class Cell: public tapas::BasicCell<TSP> {
   template<class T>
   using VecPtr = std::shared_ptr<std::vector<T>>;
 
+  //========================================================
+  // Member functions
+  //========================================================
+
   /**
    * @brief Constructor of Cell class
    * @param key Key of the cell
@@ -291,12 +298,8 @@ class Cell: public tapas::BasicCell<TSP> {
        std::shared_ptr<Data> data) :
       tapas::BasicCell<TSP>(CalcRegion(key, data->region_), body_beg, body_num),
       key_(key), is_local_(is_local), is_dummy_(false), data_(data),
-      nb_(data->local_bodies_.size()),
-      owners_(),
-      mpi_tag_(GetMpiTag(key))
+      nb_(data->local_bodies_.size())
   {
-    CalcOwnerProcesses();
-
     // Check if I'm a leaf
     is_leaf_ = find(data_->leaf_keys_.begin(),
                     data_->leaf_keys_.end(), key) != data_->leaf_keys_.end();
@@ -317,8 +320,7 @@ class Cell: public tapas::BasicCell<TSP> {
 
   // Create a dummy root node
   Cell(std::shared_ptr<Data> data) : tapas::BasicCell<TSP>(data->region_, 0, 0),
-      key_(0), is_local_(false), is_leaf_(false), is_dummy_(true), data_(data),
-      mpi_tag_(0)
+      key_(0), is_local_(false), is_leaf_(false), is_dummy_(true), data_(data)
   {
   }
   
@@ -378,8 +380,6 @@ class Cell: public tapas::BasicCell<TSP> {
    */
   Cell &parent() const;
 
-  const std::vector<int> &owners() const { return owners_; }
-
   int depth() const {
     return SFC::GetDepth(key_);
   }
@@ -414,9 +414,17 @@ class Cell: public tapas::BasicCell<TSP> {
   const Region<TSP> &region() const { return data_->region_; }
 
  protected:
-  // --------------------------------------------------------------------
+  // utility/accessor functions
+  Cell *Lookup(KeyType k) const;
+  CellHashTable *ht() { return ht_; }
+  virtual void make_pure_virtual() const {}
+  void RegisterCell(Cell<TSP> *c);
+
+  static Region<TSP> CalcRegion(KeyType, const Region<TSP>& r);
+  //========================================================
   // member variables
-  // --------------------------------------------------------------------
+  //========================================================
+ protected:
   KeyType key_; //!< Key of the cell
   bool is_local_;
   bool is_leaf_;
@@ -427,65 +435,6 @@ class Cell: public tapas::BasicCell<TSP> {
   
   std::shared_ptr<CellHashTable> ht_; //!< Hash table of KeyType -> Cell*
   std::shared_ptr<std::mutex>    ht_mtx_; //!< mutex to manipulate ht_
-
-  std::vector<int> owners_; //<! Processes that have this cell locally.
-  const int mpi_tag_;
-  
-  // utility/accessor functions
-  Cell *Lookup(KeyType k) const;
-  CellHashTable *ht() { return ht_; }
-  virtual void make_pure_virtual() const {}
-  void RegisterCell(Cell<TSP> *c);
-
-  static std::vector<int> CalcOwnerProcsOfCell(KeyType key,
-                                               const std::vector<KeyType> &leaf_keys,
-                                               const std::vector<int> &leaf_owners);
-  void CalcOwnerProcesses();
-  static Region<TSP> CalcRegion(KeyType, const Region<TSP>& r);
-  
-  /**
-   *
-   */
-  static int GetMpiTag(KeyType key) {
-    // int max_tag = std::numeric_limits<int>::max();
-    void *v;
-    int flag;
-    MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &v, &flag);
-    assert(flag);
-
-    int max_tag = *(int*)v;
-    int val = 1;
-    for (size_t i = 0; i < sizeof(KeyType); i++) {
-      val = (val + (key & 0xFF)) * 37 % max_tag;
-      key >>= 8;
-    }
-
-    return val;
-  }
-  
-  /**
-   * MPI tag is used when two cells are exchanged between processes.
-   */
-  static int GetMpiTag(KeyType k1, KeyType k2) {
-    // int max_tag = std::numeric_limits<int>::max();
-    void *v;
-    int flag;
-    MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &v, &flag);
-    assert(flag);
-
-    if (k1 > k2) std::swap(k1, k2);
-
-    int max_tag = *(int*)v;
-    int val = 1;
-    for (int i = 0; i < sizeof(KeyType); i++) {
-      val = (val + (k1 & 0xFF)) * 37 % max_tag;
-      val = (val + (k2 & 0xFF)) * 37 % max_tag;
-      k1 >>= 8;
-      k2 >>= 8;
-    }
-
-    return val;
-  }
 }; // class Cell
 
 template<class T>
@@ -1054,14 +1003,6 @@ size_t sum(const T& c) {
 }
 
 
-/**
- * @brief Calculate which processes own the cell.
- */
-template <class TSP>
-void Cell<TSP>::CalcOwnerProcesses() {
-  this->owners_ = CalcOwnerProcsOfCell(key_, data_->leaf_keys_, data_->leaf_owners_);
-}
-
 template<class TSP>
 void Cell<TSP>::RegisterCell(Cell<TSP> *c) {
   std::lock_guard<std::mutex> lock(data_->ht_mtx_);
@@ -1094,40 +1035,6 @@ Region<TSP> Cell<TSP>::CalcRegion(KeyType key, const Region<TSP> &region) {
   
   return r;
 }
-
-template <class TSP>
-std::vector<int> Cell<TSP>::CalcOwnerProcsOfCell(KeyType key,
-                                                 const std::vector<KeyType> &leaf_keys,
-                                                 const std::vector<int> &leaf_owners) {
-  // Find the range of leaf cells that are under the cell
-  auto beg = std::begin(leaf_keys);
-  auto end = std::end(leaf_keys);
-  KeyType key_next = SFC::GetNext(key);
-  index_t owner_beg = std::lower_bound(beg, end, key) - beg;
-  index_t owner_end = std::lower_bound(beg, end, key_next) - beg;
-
-  SFC::GetDescendantRange(key, beg, end, owner_beg, owner_end);
-
-  if (SFC::Simplify(key) == "0230...3954") {
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    std::stringstream ss;
-    ss << rank << " " << SFC::Simplify(key) << " "
-       << "owner_beg = " << owner_beg << ","
-       << "owner_beg = " << owner_end << " ";
-    for (auto i=owner_beg; i < owner_end; i++) {
-      ss << leaf_owners[i] << " ";
-    }
-    ss << "  leaf_keys.size() = " << leaf_keys.size();
-    std::cerr << ss.str() << std::endl;
-  }
-
-  // Since each process builds a local tree in a bottom-up way,
-  // if a process P ownes any of leaf cells uncer the cell, P owns the cell.
-  return uniq<int>(std::begin(leaf_owners) + owner_beg,
-                   std::begin(leaf_owners) + owner_end);
-}
-
 
 /**
  * @brief Partition the simulation space and build SFC key based octree
@@ -1441,7 +1348,6 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
         e.out() << SFC::Simplify(k) << " "
                 << "d=" << SFC::GetDepth(k) << " "
                 << "leaf=" << c->IsLeaf() << " "
-                << "owners=" << std::setw(2) << std::right << join(",", c->owners()) << " "
                 << "nb=" << std::setw(3) << c->nb() << " "
                 << "center=[" << c->center() << "] "
                 << "next_key=" << SFC::Simplify(SFC::GetNext(k)) << " "
