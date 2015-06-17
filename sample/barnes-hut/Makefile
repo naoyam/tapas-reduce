@@ -1,5 +1,5 @@
 CXX = clang++
-MPICXX = mpicxx -cxx=clang++ -DBH_USE_MPI
+MPICXX = mpicxx -cxx=clang++ -DUSE_MPI
 #CXX = clang++ -std=c++11 -fcolor-diagnostics 
 #CXX = g++ -std=c++11
 
@@ -16,7 +16,9 @@ endif
 #DEBUG := -DDUMP
 LOG_FLAGS := -DTAPAS_LOG_LEVEL=1
 
-CXX += -DNB=$(NB) -DS=$(S)
+CXXFLAGS += -DNB=$(NB) -DS=$(S)
+
+CXXFLAGS += -DTAPAS_BH # temporary cxxflag for Tapas Barnes-Hut implementation.
 
 TAPAS_DIR = ../../cpp
 
@@ -35,4 +37,4 @@ bh_mpi: bh_mpi.o
 	$(MPICXX) $^ -o $@
 
 clean:
-	$(RM) -f *.o bh
+	$(RM) -f *.o bh bh_mpi

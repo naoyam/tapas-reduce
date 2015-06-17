@@ -5,6 +5,10 @@
 #include <fstream>
 #include <sys/time.h>
 
+#ifdef USE_MPI
+# include <mpi.h>
+#endif
+
 #include "tapas.h"
 
 //#define DIM (3)
@@ -28,7 +32,7 @@ const real_t EPS2 = 1e-6;
 
 typedef tapas::BodyInfo<float4, 0> BodyInfo;
 
-#ifdef BH_USE_MPI
+#ifdef USE_MPI
 #include "tapas/hot.h"
 typedef tapas::Tapas<DIM, real_t, BodyInfo,
                      float4, float4,
@@ -181,7 +185,13 @@ float4 *calc(float4 *p, size_t np) {
   return out;
 }
 
-int main() {
+int main(int argc, char **argv) {
+#ifdef USE_MPI
+  int provided, required = MPI_THREAD_MULTIPLE;
+  MPI_Init_thread(&argc, &argv, required, &provided);
+  assert(provided >= required);
+#endif
+  
   // ALLOCATE
   float4 *sourceHost = new float4 [N];
   float4 *targetHost = new float4 [N];
@@ -232,4 +242,8 @@ int main() {
   delete[] sourceHost;
   delete[] targetHost;
   //delete[] targetTapas;
+
+#ifdef USE_MPI
+  MPI_Finalize();
+#endif
 }
