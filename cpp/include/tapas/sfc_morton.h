@@ -2,11 +2,14 @@
 #define _SFC_MORTON_H_
 
 #include <cstdint>
+#include <string>
 #include <vector>
 #include <algorithm>
 #include <utility>
 #include <list>
 #include <unordered_map>
+
+#include "tapas/vec.h"
 
 #ifdef CPP14
 # define CONSTEXPR constexpr
@@ -142,7 +145,7 @@ class Morton {
   typedef std::unordered_set<KeyType> KeySet;
   typedef std::pair<KeyType, KeyType> KeyPair;
   
-  static const int Dim = _Dim;
+  static const constexpr int Dim = _Dim;
 
   /**
    * Returns the best depth bits for the given Dim and KeyType
@@ -386,6 +389,32 @@ class Morton {
     std::string s = ss.str();
     s.replace(s.begin()+W, s.end()-W, "...");
     return s;
+  }
+
+  /**
+   * \brief Returns direction (0/1) of the dim-th dimension on the depth-th level.
+   * In octree's space decomposition, each dimension is divided into two region on each level.
+   * This function returns 0 if the cell of key k resides in the smaller half of dim-th dimension, 1 otherwise.
+   * Ex. 
+   * In 2-dimensional space, let key = 00-01-11-10
+   * GetDirOnDepth(k, 0, 1) => 0  ; dimension 0(X), depth 1
+   *              (k, 0, 2) => 1  ; dimension 0(X), depth 2
+   *              (k, 1, 3) => 1  ; dimension 1(Y), depth 3
+   *
+   * In Morton key, on each level, directions are ordered in a straightforward way.
+   * i.e. '001' means the first dimension is 0, the second dimension is 0, and the last 
+   * dimension is 1 in 3-dimensional space.
+   *
+   * NOTE: the root cell is at depth 0, thus the argument must be > 0.
+   */
+  static inline
+  int GetDirOnDepth(KeyType k, int dim, int depth) {
+    TAPAS_ASSERT(dim < Dim);
+    TAPAS_ASSERT(0 < depth && depth <= GetDepth(k));
+
+    // dim-bits direction on depth d
+    int dir = RemoveDepth(k) >> ((MAX_DEPTH - depth) * Dim);
+    return (dir >> (Dim - dim - 1)) & 1;
   }
 };
 

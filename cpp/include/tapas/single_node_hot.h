@@ -515,7 +515,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     KeyType root_key = 0;
     auto get_key = [](const HelperNode<TSP>& hn) { return hn.key; };
     auto kp = GetBodyRange<SFC, HelperNode<TSP>>(root_key, hn, get_key);
-    assert(kp.first == 0 && kp.second == nb);
+    assert(kp.first == (KeyType)0 && kp.second == (KeyType)nb);
     
     auto *ht = new typename CellType::HashTable();
     auto *root = new CellType(r, 0, nb, root_key, ht, b, attrs);

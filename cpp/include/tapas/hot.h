@@ -9,6 +9,7 @@
 
 #include <cstdlib>
 #include <cstring>
+
 #include <algorithm>
 #include <memory>
 #include <numeric>
@@ -134,53 +135,6 @@ GetBodyRange(const typename SFC::KeyType k,
   using Iter = typename std::vector<T>::const_iterator;
   return GetBodyRange<SFC, T, Iter, Functor>(k, hn.begin(), hn.end(), get_key);
 }
-
-/**
- * @brief Find a (one-to-one or one-to-many) mapping F :: S -> R and returns F(x).
- *
- */
-template <class T>
-std::vector<T> SendRecvMapping(const std::vector<T> &S, // senders
-                               const std::vector<T> &R, // receives
-                               const T& x) {
-  if (S.size() == 0 || R.size() == 0) {
-    return std::vector<T>();
-  }
-
-  int s = S.size();
-  int r = R.size();
-  int n = (r-1) / s + 1; // receivers per senders
-  auto pos = std::find(std::begin(S), std::end(S), x);
-
-  if (pos != std::end(S)) {
-    // x is a sender
-    int i = pos - std::begin(S);
-    if (s >= r) {
-      if (i < r) {
-        return std::vector<T>(1, R[i]);
-      } else {
-        return std::vector<T>();
-      }
-    } else {
-      if (n*i >= r) {
-        return std::vector<T>();
-      } else {
-        int beg = n * i;
-        int end = std::min(n * (i+1), r);
-        return std::vector<T>(&R[beg], &R[end]);
-      }
-    }
-  } else {
-    // x is a receiver
-    int i = std::find(std::begin(R), std::end(R), x) - std::begin(R);
-    if (s >= r) {
-      return std::vector<int>(1, S[i]);
-    } else {
-      return std::vector<int>(1, S[i/n]);
-    }
-  }
-}
-
 template <class TSP>
 struct HelperNode {
   using KeyType = typename TSP::SFC::KeyType;
@@ -208,6 +162,8 @@ void BarrierExec(F func) {
 
 template<class T1, class T2>
 static void Dump(const T1 &bodies, const T2 &keys, std::ostream & strm) {
+#if 0
+  // Tentatively disabled for BH. b.X[] is ExaFMM-specific member variables.
   for (size_t i = 0; i < bodies.size(); i++) {
     auto &b = bodies[i];
     strm << std::scientific << std::showpos << b.X[0] << " "
@@ -216,6 +172,7 @@ static void Dump(const T1 &bodies, const T2 &keys, std::ostream & strm) {
          << std::fixed << std::setw(10) << keys[i]
          << std::endl;
   }
+#endif
 }
 
 template<class T1, class T2>
@@ -247,10 +204,6 @@ void SortBodies(const typename TSP::BT::type *b, typename TSP::BT::type *sorted,
                 tapas::index_t nb);
 
 template <class TSP>
-void SortBodies2(std::vector<typename TSP::BT::type> &bodies,
-                 const std::vector<HelperNode<TSP>> &hn);
-
-template <class TSP>
 void CompleteRegion(typename TSP::SFC x, typename TSP::SFC y, typename TSP::KeyVector &s);
 
 template <class TSP>
@@ -267,6 +220,7 @@ class Cell: public tapas::BasicCell<TSP> {
   friend class BodyIterator<Cell>;
   
  public:
+  static const constexpr int Dim = TSP::Dim;
   typedef typename TSP::SFC SFC;
   typedef typename SFC::KeyType KeyType;
   
@@ -276,6 +230,8 @@ class Cell: public tapas::BasicCell<TSP> {
   typedef typename TSP::BT_ATTR BodyAttrType;
   typedef BodyIterator<Cell> BodyIter;
   typedef typename TSP::Threading Threading;
+
+  using FP = typename TSP::FP;
 
  public:
   
@@ -439,6 +395,8 @@ class Cell: public tapas::BasicCell<TSP> {
 #endif
   SubCellIterator<Cell> subcells();
 
+  const Region<TSP> &region() const { return region_global_; }
+
  protected:
   // member variables
   KeyType key_; //!< Key of the cell
@@ -472,11 +430,6 @@ class Cell: public tapas::BasicCell<TSP> {
   void CalcOwnerProcesses();
   static Region<TSP> CalcRegion(KeyType, const Region<TSP>& r);
   
-  // Map-related stuff
-  void RecvCell(int pid);
-  void SendCell(const std::vector<int> pids);
-  void ExchangeCell(Cell<TSP> &remote_cell);
-
   /**
    *
    */
@@ -522,8 +475,85 @@ class Cell: public tapas::BasicCell<TSP> {
   }
 }; // class Cell
 
+template<class T>
+using uset = std::unordered_set<T>;
 
+// Copied from bh.cc
+template<typename FP, typename T>
+static FP distR2(const T &p, const T &q) {
+  FP dx = q.x - p.x;
+  FP dy = q.y - p.y;
+  FP dz = q.z - p.z;
+  return dx * dx + dy * dy + dz * dz;
+}
 
+template<class TSP, class SetType>
+void TraverseLET(typename Cell<TSP>::BodyType &p,
+                 Cell<TSP> &cell,
+                 SetType &list_geo, SetType &list_attr, SetType &list_body) {
+  using KeyType = typename Cell<TSP>::KeyType;
+  using FP = typename TSP::FP;
+  
+  // Maximum depth of the tree.
+  // For now, we use the theoretical maximum depth of the tree from the space filling curves,
+  // but we can use the actual maximum depth obtained by using MPI_Allreduce.
+  const constexpr int max_depth = Cell<TSP>::SFC::MAX_DEPTH;
+
+  if (cell.depth() >= max_depth) {
+    return;
+  }
+  
+  KeyType k = cell.key();
+  Region<TSP> r = cell.region(); // bounding box of the whole domain
+  auto child_keys = Cell<TSP>::SFC::GetChildren(k);
+
+  auto comp = [&](KeyType k1, KeyType k2) {
+    // auto c1 = SFC::GetCenter<Vec>(k1, r.min(), r.max());
+    // auto c2 = SFC::GetCenter<Vec>(k2, r.min(), r.max());
+
+    // FP d1 = (p.x - c1[0]) * (p.x - c1[0]) +
+    //         (p.y - c1[1]) * (p.y - c1[1]) +
+    //         (p.z - c1[2]) * (p.z - c1[2]);
+    
+    // FP d2 = (p.x - c2[0]) * (p.x - c2[0]) +
+    //         (p.y - c2[1]) * (p.y - c2[1]) +
+    //         (p.z - c2[2]) * (p.z - c2[2]);
+    // return d1 < d2;
+    return 0;
+  };
+
+  // Sort children according to their distance from p
+  std::sort(std::begin(child_keys), std::end(child_keys), comp);
+
+  if (cell.IsLeaf()) {
+  } else {
+    for (auto &chk : child_keys) {
+      auto ctr = Cell<TSP>::SFC::GetCenter(k, r.min(), r.max());
+      
+      //FP d2 = distR2<FP>(c2.attr(), p1);
+    }
+  }
+         
+  return;
+}
+
+template<class TSP>
+void ExchangeLET(Cell<TSP> &root) {
+  using BodyType = typename Cell<TSP>::BodyType;
+  using KeyType = typename Cell<TSP>::KeyType;
+  using KeySet = typename Cell<TSP>::SFC::KeySet;
+  
+  KeySet list_geo;  // cells of which geometry (coordinates) are to be transfered.
+  KeySet list_attr; // cells of which attributes are to be transfered.
+  KeySet list_body; // cells of which bodies are to be transfered
+
+  list_attr.insert(root.key());
+  
+  for (int bi = 0; bi < root.nbodies(); bi++) {
+    BodyType &b = root.body(bi);
+    TraverseLET<TSP, KeySet>(b, root, list_geo, list_attr, list_body);
+  }
+}
 
 // MPI-related utilities and wrappers
 // TODO: wrap them as a pluggable policy/traits class
@@ -675,27 +705,6 @@ void SortBodies(const typename TSP::BT::type *b, typename TSP::BT::type *sorted,
     }
 }
 
-/**
- * \brief Sort bodies according to already-sorted HelperNodes.
- * 
- * let p = hn[i].p_index. p indicates that p-th body in bodies should be at i-th after sorting.
- * hn is already sorted according to their space filling keys.
- */
-template <class TSP>
-void SortBodies2(std::vector<typename TSP::BT::type> &bodies,
-                 const std::vector<HelperNode<TSP>> &hn) {
-  assert(bodies.size() == hn.size());
-  index_t nb = bodies.size();
-  for (index_t i = 0; i < nb; i++) {
-    index_t bi = hn[i].p_index;
-    if (bi > i) {
-      std::swap(bodies[i], bodies[bi]);
-    }
-  }
-}
-
-
-
 template <int DIM, class SFC, class T>
 void AppendChildren(typename SFC::KeyType x, T &s) {
   using KeyType = typename SFC::KeyType;
@@ -717,7 +726,7 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
                     typename TSP::SFC::KeyType y,
                     typename TSP::SFC::KeyVector &s) {
   typedef typename TSP::SFC SFC;
-  typedef typename SFC::KeyType KeyType; // Using 'using' crashes LLVM3.5 so we stick to typedef
+  typedef typename SFC::KeyType KeyType;
   
   KeyType fa = SFC::FinestAncestor(x, y);
   typename SFC::KeyList w;
@@ -745,6 +754,7 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
  */
 template <class TSP>
 void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
+  ExchangeLET<TSP>(cell);
   f(cell);
 }
 
@@ -755,324 +765,6 @@ template<class TSP>
 void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
                     std::function<void(Cell<TSP>&, Cell<TSP>&)> f) {
   f(c1, c2);
-}
-
-// A special-purpose struct to exchange cell information
-template <class TSP>
-struct CellInfoBinder {
-  typename TSP::SFC::KeyType key;
-  typename TSP::ATTR cell_attr;
-  index_t num_bodies;
-  bool is_leaf;
-  int check;
-};
-
-/**
- * @brief Exchange cell information between the local process and a remote process
- * 
- * Exchange *this cell, which is local, and the remote cell.
- */
-template<class TSP>
-void Cell<TSP>::ExchangeCell(Cell<TSP> &remote) {
-  assert(this->IsLocal() && !remote.IsLocal());
-  int rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  
-  Stderr e("exchangecell");
-
-  std::vector<int> local_owners = this->owners();
-  std::vector<int> remote_owners = remote.owners();
-  
-  // this process sends *this cell to some remote processes
-  std::vector<int> send_to = SendRecvMapping(local_owners, remote_owners, rank);
-  std::vector<int> recv_from = SendRecvMapping(remote_owners, local_owners, rank);
-
-  if (SFC::Simplify(this->key()) == "0345...0929") {
-    e.out() << "*** I have 0345...0929" << std::endl;
-  }
-  
-  int mpi_tag = Cell::GetMpiTag(this->key(), remote.key());
-
-  e.out() << "Exchanging cells " << SFC::Simplify(this->key()) << " && " << SFC::Simplify(remote.key()) << std::endl;
-  e.out() << SFC::Simplify(this->key()) << "'s owners = ";
-  for (auto &&o : local_owners) e.out() << o << " ";
-  e.out() << " (" << this->owners().size() << " elements)";
-  e.out() << std::endl;
-  
-  e.out() << SFC::Simplify(remote.key()) << "'s owners = ";
-  for (auto &&o : remote_owners) e.out() << o << " ";
-  e.out() << std::endl;
-  
-  e.out() << "tag = " << mpi_tag << std::endl;
-  e.out() << "send " << SFC::Simplify(this->key()) << " to = ";
-  for (auto && i: send_to) e.out() << i << " ";
-  e.out() << std::endl;
-  
-  e.out() << "recv " << SFC::Simplify(remote.key()) << " from = ";
-  for (auto && i: recv_from) e.out() << i << " ";
-  e.out() << std::endl;
-    
-  CellInfoBinder<TSP> send_data = {
-    key_,
-    this->attr(),
-    this->nb(),
-    this->IsLeaf(),
-    rand() // check
-  };
-  
-  std::vector<MPI_Status>  stats(send_to.size());
-  std::vector<MPI_Request> reqs(send_to.size());
-
-  for (int i = 0; i < send_to.size(); i++) {
-    // Send the local cell to the remote node(s) asynchornously
-    Stderr stderr("send");
-    stderr.out() << "SendCell: cell=" << SFC::Simplify(key_) << " "
-                 << "I'm=" << rank << " "
-                 << "dst=" << send_to[i] << " "
-                 << "IsLeaf=" << send_data.is_leaf << " " 
-                 << "check=" << send_data.check << " "
-                 << "tag=" << mpi_tag_ << " "
-                 << std::endl;
-    MPI_Isend(&send_data, sizeof(send_data), MPI_BYTE, send_to[i], mpi_tag, MPI_COMM_WORLD, &reqs[i]);
-  }
-
-  e.out() << "Isend done" << std::endl;
-
-  // Receive data from one of the owners fo the remote cell
-  CellInfoBinder<TSP> recv_data;
-  MPI_Status recv_stat;
-  int ret = MPI_Recv(&recv_data, sizeof(recv_data), MPI_BYTE, recv_from[0], mpi_tag, MPI_COMM_WORLD, &recv_stat);
-  assert(ret == MPI_SUCCESS);
-  
-  if (recv_data.key != remote.key()) {
-    std::cerr << "tag = " << mpi_tag << std::endl;
-    assert(recv_data.key == remote.key());
-  }
-
-  remote.attr_    = recv_data.cell_attr;
-  remote.nb_      = recv_data.num_bodies;
-  remote.is_leaf_ = recv_data.is_leaf;
-
-  e.out() << "Recv done." << std::endl;
-
-  MPI_Waitall(reqs.size(), reqs.data(), stats.data());
-  e.out() << "Waitall done." << std::endl;
-  e.out() << std::endl;
-}
-
-template <class TSP>
-void Cell<TSP>::RecvCell(int pid) {
-  // Receive Cell/BodyAttr info from the process(pid).
-  //   Cell attributes
-  //   Bodies (if the cell is a leaf)
-  //   Body Attributes (if the cell is a leaf)
-  
-  {
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    Stderr stderr("recv");
-    stderr.out() << "RecvCell: cell=" << SFC::Simplify(key_) << " "
-                 << "me=" << rank << " "
-                 << "src=" << pid << " "
-                 << "tag=" << std::setw(10) << mpi_tag_
-                 << std::endl;
-  }
-  
-  // First, request CellAttr data. On sender side (in SendCell)
-  // note that this MPI_recv() call is handled by MPI_Isend in SendCell() in proc pid.
-
-  // First, call MPI_Probe to get the message size.
-  MPI_Status stat;
-  int ret = MPI_Probe(pid, mpi_tag_, MPI_COMM_WORLD, &stat);
-  assert(ret == MPI_SUCCESS);
-
-  int bytes; // received size in bytes
-  MPI_Get_count(&stat, MPI_BYTE, &bytes);
-
-  auto *data = new char[bytes];
-
-  // Receive cell data with MPI_Recv.
-  // If the threading system supports preemptive context switching, use the plain MPI_recv.
-  // Otherwise, we explicitly yield a control to other tasks using Th::yield().
-  using Th = typename TSP::Threading;
-  if (Th::Preemptive) {
-    MPI_Recv(data, bytes, MPI_BYTE, pid, mpi_tag_, MPI_COMM_WORLD, &stat);
-  } else {
-    MPI_Request req;
-    int done = 0;
-    MPI_Irecv(data, bytes, MPI_BYTE, pid, mpi_tag_, MPI_COMM_WORLD, &req);
-    while (true) {
-      MPI_Test(&req, &done, &stat);
-      if (done) break;
-      Th::yield();
-    }
-  }
-  
-  TAPAS_ASSERT(ret == MPI_SUCCESS);
-
-  // Three information is packed into bytes.
-  // See SendCell() about details
-  index_t len_cellinfo = sizeof(CellInfoBinder<TSP>);
-  auto *cellinfo = reinterpret_cast<CellInfoBinder<TSP>*>(data);
-
-  TAPAS_ASSERT(cellinfo->key == key_);
-  TAPAS_ASSERT(cellinfo->is_leaf == IsLeaf());
-  
-  //assert(stat.MPI_ERROR == MPI_SUCCESS);
-  this->attr()   = cellinfo->cell_attr;
-  this->nb_      = cellinfo->num_bodies;
-  this->is_leaf_ = cellinfo->is_leaf;
-
-  index_t num_bodies = this->nb_;
-  index_t len_bodies = IsLeaf() ? sizeof(BodyType) * num_bodies : 0;
-
-  if (IsLeaf()) {
-    auto *bodies = reinterpret_cast<BodyType*>(data + len_cellinfo);
-    auto *attrs = reinterpret_cast<BodyAttrType*>(data + len_cellinfo + len_bodies);
-
-    // Set the bodies
-    this->bid_ = 0;
-    this->local_bodies_ = VecPtr<BodyType>(new std::vector<BodyType>(bodies, bodies + this->nb_));
-    this->local_body_attrs_ = VecPtr<BodyAttrType>(new std::vector<BodyAttrType>(attrs, attrs + this->nb_));
-  }
-  
-  {
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    Stderr stderr("recv");
-    stderr.out() << "RecvCell: cell=" << SFC::Simplify(key_) << " "
-                 << "me="     << rank << " "
-                 << "src="    << pid << " "
-                 << "tag="    << std::setw(10) << mpi_tag_ << " "
-                 << "IsLeaf=" << cellinfo->is_leaf << " "
-                 << "check="  << cellinfo->check << " "
-                 << "R="      << this->attr().R << " "
-                 << "done "
-                 << std::endl;
-  }
-}
-
-template <class TSP>
-void Cell<TSP>::SendCell(std::vector<int> remote_pids) {
-  typedef typename TSP::BT::type BodyType;
-  
-  // This function does not take a reference because may be called in an independent thread (task)
-  // and the original vector might be destroyed.
-  if (remote_pids.size() == 0) {
-    return;
-  }
-
-  // Send cell attributes and bodies (if the cell is leaf) to the remote pids.
-  // To send both of cell attrs and bodies, array of binder is used.
-  int rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-  // note that this->nb() is the total number of bodies in the cell, even if the cell is not leaf
-  index_t num_bodies = this->nb();
-
-  // length of total data to be sent.
-  // the data is allocated as an array of CellInfoBinder<TSP>.
-  // len is the minimal length that can accomodate cell attributes and bodies.
-  index_t len_cellinfo = sizeof(CellInfoBinder<TSP>);
-  index_t len_bodies = IsLeaf() ? sizeof(BodyType)     * num_bodies : 0;
-  index_t len_attrs  = IsLeaf() ? sizeof(BodyAttrType) * num_bodies : 0;
-
-  index_t len = len_cellinfo + len_bodies + len_attrs;
-  {
-    Stderr e("send");
-    e.out() << "len = " << len << std::endl;
-    e.out() << "len_cellinfo = " << len_cellinfo << std::endl;
-    e.out() << "len_bodies = " << len_bodies << std::endl;
-    e.out() << "len_attrs = " << len_attrs << std::endl;
-  }
-  char *data = new char[len];
-
-  auto *cellinfo = reinterpret_cast<CellInfoBinder<TSP>*>(data);
-  auto *bodies = reinterpret_cast<BodyType*>(data + len_cellinfo);
-  auto *attrs = reinterpret_cast<BodyAttrType*>(data + len_cellinfo + len_bodies);
-
-  // Copy cell info
-  cellinfo->key = key_;
-  cellinfo->cell_attr = this->attr();
-  cellinfo->num_bodies = num_bodies;
-  cellinfo->is_leaf = this->IsLeaf(); 
-  cellinfo->check = rand(); // for debugging. to be deleted.
-
-  index_t bid = this->bid();
-
-  if (cellinfo->is_leaf) {
-    // Copy body info if the cell is a leaf
-    for (int bi = 0; bi < num_bodies; bi++) {
-      bodies[bi] = local_bodies_->at(bi + bid);
-    }
-
-    // Copy body attributes
-    for (int bi = 0; bi < num_bodies; bi++) {
-      attrs[bi] = local_body_attrs_->at(bi + bid);
-    }
-  }
-
-  auto *reqs = new MPI_Request[remote_pids.size()];
-  auto *stats = new MPI_Status[remote_pids.size()];
-  
-  for (size_t i = 0; i < remote_pids.size(); i++) {
-    {
-      Stderr stderr("send");
-      stderr.out() << "SendCell: cell=" << SFC::Simplify(key_) << " "
-                   << "I'm="    << rank << " "
-                   << "dst="    << remote_pids[i] << " "
-                   << "nb="     << num_bodies << " "
-                   << "sizeof(CellInfoBinder)=" << sizeof(CellInfoBinder<TSP>) << " "
-                   << "sizeof(BodyType)=" << sizeof(BodyType) << " "
-                   << "sizeof(BodyType)*" << num_bodies << "=" << sizeof(BodyType) * num_bodies << " "
-                   << "len="  << len << " "
-                   << "IsLeaf=" << cellinfo->is_leaf << " "
-                   << "check="  << cellinfo->check << " "
-                   << "tag="    << mpi_tag_ << " "
-                   << std::endl;
-    }
-    MPI_Isend(data, len, MPI_BYTE, remote_pids[i], mpi_tag_, MPI_COMM_WORLD, &reqs[i]);
-  }
-
-  // Completes the Isend request asynchronously.
-  // If the threading runtime is non-preemptive, 
-  using Th = typename TSP::Threading;
-  if (Th::Preemptive) {
-    // If the threading system supports preemptive context switching,
-    // use the plain Waitall for efficiency.
-    MPI_Waitall(remote_pids.size(), reqs, stats);
-    delete[] stats;
-    delete[] reqs;
-    delete[] data;
-  } else {
-    // Otherwise, we need to use Threading::yiled() to explicitly yield a control to other tasks
-    // while blocked in MPI_Testall.
-    Th::run( [=]() {
-        int flag = 0;
-        while(true) {
-          MPI_Testall(remote_pids.size(), reqs, &flag, stats);
-          if (flag) {
-            break;
-          } else {
-            TSP::Threading::yield();
-          }
-        }
-        delete[] stats;
-        delete[] reqs;
-        delete[] data;
-      });
-  }
-  
-  for (size_t i = 0; i < remote_pids.size(); i++) {
-    Stderr stderr("send");
-    stderr.out() << "SendCell: cell=" << SFC::Simplify(key_) << " "
-                 << "I'm="    << rank << " "
-                 << "dst="    << remote_pids[i] << " "
-                 << "IsLeaf=" << cellinfo->is_leaf << " " 
-                 << "check="  << cellinfo->check << " "
-                 << "tag="    << mpi_tag_ << " "
-                 << "done"    << std::endl;
-  }
 }
 
 template <class TSP>
@@ -1756,7 +1448,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       // Space filling curve key -> owners
       auto owners = std::unordered_map<KeyType, std::unordered_set<int>>();
       auto isleaf = std::unordered_map<KeyType, bool>();
-      for (int i = 0; i < leaf_owners2->size(); i++) {
+      for (size_t i = 0; i < leaf_owners2->size(); i++) {
         KeyType k = leaf_keys[i];
         int owner = leaf_owners2->at(i);
         
@@ -1912,6 +1604,17 @@ struct HOT {
 };
 
 /**
+ * @brief Find owner process from a head-key list.
+ * The argument head_list contains SFC keys that are the first keys of processes.
+ * head_list[P] is the first SFC key belonging to process P.
+ */
+template<class TSP>
+int FindOwnerProcess(const std::vector<typename TSP::KeyType> &head_list,
+                     typename TSP::KeyType key) {
+  return std::upper_bound(head_list.begin(), head_list.end(), key) - 1;
+}
+
+/**
  * @brief Advance decleration of a dummy class to achieve template specialization.
  */
 template <int DIM, class FP, class BT,
@@ -1956,14 +1659,12 @@ class MassiveThreads;
  * @brief Specialization of Tapas for HOT (Morton HOT) algorithm
  */
 template <int DIM, class FP, class BT,
-          class BT_ATTR, class CELL_ATTR>
-class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, HOT<DIM, tapas::sfc::Morton>,
-            tapas::threading::MassiveThreads> {
+          class BT_ATTR, class CELL_ATTR, class Threading>
+class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, HOT<DIM, tapas::sfc::Morton>, Threading> {
   
   typedef HOT<DIM, tapas::sfc::Morton> MortonHOT;
   
-  typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR,
-                            tapas::threading::MassiveThreads,
+  typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR, Threading,
                             typename MortonHOT::SFC> TSP; // Tapas static params
  public:
   typedef tapas::Region<TSP> Region;
