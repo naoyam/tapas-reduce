@@ -1011,27 +1011,23 @@ void Cell<TSP>::RegisterCell(Cell<TSP> *c) {
 
 template <class TSP>
 Region<TSP> Cell<TSP>::CalcRegion(KeyType key, const Region<TSP> &region) {
+  if (key == 0) return region;
+  
   const int kDim = TSP::Dim;
-  const int kMask = (1 << TSP::Dim) - 1;
   
-  Stderr err("center");
-
   auto r = region;
-  int depth = SFC::GetDepth(key);
-  KeyType key_body = SFC::RemoveDepth(key);
-  
-  err.out() << SFC::Simplify(key) << " "
-            << depth << " "
-            << r << " --> ";
+  const int kDepth = SFC::GetDepth(key);
 
-  for (int d = 0; d < depth; d++) {
-    int direction = (key_body >> (kDim * (TSP::SFC::MAX_DEPTH - d - 1))) & kMask;
-    r = r.PartitionBSP(direction);
-    key >>= TSP::Dim;
-    //err.out() << d << ":" << direction << " " << r << " ";
+  for (int dep = 1; dep <= kDepth; dep++) {
+    for (int dim = 0; dim < kDim; dim++) {
+      FP center = r.min(dim) + r.width(dim) / 2;
+      if (SFC::GetDirOnDepth(key, dim, dep) == 1) {
+        r.min(dim) = center;
+      } else {
+        r.max(dim) = center;
+      }
+    }
   }
-  
-  err.out() << r << std::endl;
   
   return r;
 }

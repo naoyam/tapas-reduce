@@ -409,12 +409,12 @@ class Morton {
    */
   static inline
   int GetDirOnDepth(KeyType k, int dim, int depth) {
-    TAPAS_ASSERT(dim < Dim);
+    TAPAS_ASSERT(dim <= Dim);
     TAPAS_ASSERT(0 < depth && depth <= GetDepth(k));
 
     // dim-bits direction on depth d
     int dir = RemoveDepth(k) >> ((MAX_DEPTH - depth) * Dim);
-    return (dir >> (Dim - dim - 1)) & 1;
+    return (dir >> dim) & 1;
   }
 };
 

@@ -103,7 +103,7 @@ TEST(TestMorton, TestGetDirOnDepth) {
   using K = tapas::sfc::Morton<Dim, uint64_t>;
   using KeyType = K::KeyType;
 
-  // xyz
+  // zyx
   // 000 = 0
   // 001 = 1
   // 010 = 2
@@ -127,7 +127,7 @@ TEST(TestMorton, TestGetDirOnDepth) {
   std::cout << ((K::RemoveDepth(k) >> (K::MAX_DEPTH - 1) * Dim) & 7) << std::endl;
   // Check X-dim
   ASSERT_EQ(1, K::GetDirOnDepth(k, 0, 1));
-  ASSERT_EQ(0, K::GetDirOnDepth(k, 0, 2));
+  ASSERT_EQ(1, K::GetDirOnDepth(k, 0, 2));
   ASSERT_EQ(0, K::GetDirOnDepth(k, 0, 3));
 
   // Check Y-dim
@@ -135,9 +135,9 @@ TEST(TestMorton, TestGetDirOnDepth) {
   ASSERT_EQ(1, K::GetDirOnDepth(k, 1, 2));
   ASSERT_EQ(1, K::GetDirOnDepth(k, 1, 3));
 
-  // Check X-dim
+  // Check Z-dim
   ASSERT_EQ(1, K::GetDirOnDepth(k, 2, 1));
-  ASSERT_EQ(1, K::GetDirOnDepth(k, 2, 2));
+  ASSERT_EQ(0, K::GetDirOnDepth(k, 2, 2));
   ASSERT_EQ(0, K::GetDirOnDepth(k, 2, 3));
 }
 
