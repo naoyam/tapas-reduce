@@ -257,9 +257,13 @@ class Morton {
 #ifdef TAPAS_DEBUG
     KeyType t = RemoveDepth(k);
     t = t & ~(~((KeyType)0) << (Dim * (MaxDepth() - GetDepth(k))));
-    assert(t == 0);
+    if (t != 0) {
+      std::cerr << "Max depth = " << MAX_DEPTH << std::endl;
+      std::cerr << Decode(k) << std::endl;
+      assert(t == 0);
+    }
 #endif
-    TAPAS_ASSERT(GetDepth(k) < MaxDepth());
+    TAPAS_ASSERT(GetDepth(k) <= MaxDepth());
     return IncrementDepth(k, 1);
   }
 
@@ -278,12 +282,13 @@ class Morton {
   std::vector<KeyType> GetChildren(KeyType parent) {
     std::vector<KeyType> ret;
   
-    KeyType child_key = FirstChild(parent);
+    //KeyType child_key = FirstChild(parent);
     int nchild = (1 << Dim);
     
     for (int child_idx = 0; child_idx < nchild; child_idx++) {
-      ret.push_back(child_key);
-      child_key = GetNext(child_key);
+      ret.push_back(Child(parent, child_idx));
+      //ret.push_back(child_key);
+      //child_key = GetNext(child_key);
     }
 
     return ret;

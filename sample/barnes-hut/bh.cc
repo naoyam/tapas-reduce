@@ -186,23 +186,28 @@ float4 *calc(float4 *p, size_t np) {
 }
 
 int main(int argc, char **argv) {
+  int rank = 0; // MPI rank
+  int size = 1; // MPI size
+  
 #ifdef USE_MPI
   int provided, required = MPI_THREAD_MULTIPLE;
   MPI_Init_thread(&argc, &argv, required, &provided);
   assert(provided >= required);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
 #endif
   
   // ALLOCATE
   float4 *sourceHost = new float4 [N];
   float4 *targetHost = new float4 [N];
-  srand48(0);
+  srand48(rank);
   for( int i=0; i<N; i++ ) {
     sourceHost[i].x = drand48();
     sourceHost[i].y = drand48();
     sourceHost[i].z = drand48();
     sourceHost[i].w = drand48() / N;
   }
-  std::cout << std::scientific << "N      : " << N << std::endl;
+  std::cout << std::scientific << "N      : " << (N*size) << std::endl;
 
   float4 *targetTapas = calc(sourceHost, N);
 

@@ -67,6 +67,7 @@ struct HotData {
 
   int mpi_rank;
   int mpi_size;
+  int max_depth_; //!< Actual maximum depth of the tree
 
   std::vector<KeyType> leaf_keys_; //!< SFC keys of (all) leaves
   std::vector<index_t> leaf_nb_;   //!< Number of bodies in each cell
@@ -74,7 +75,7 @@ struct HotData {
   std::vector<BodyType> local_bodies_; //!< Bodies that belong to the local process
   std::vector<KeyType>  local_body_keys_; //!< SFC keys of local bodies
   std::vector<BodyAttrType> local_body_attrs_; //!< Local body attributes
-
+  
   HotData() { }
   HotData(const HotData<TSP, SFC>& rhs) = delete; // no copy
   HotData(HotData<TSP, SFC>&& rhs) = delete; // no move
@@ -269,18 +270,16 @@ class Cell: public tapas::BasicCell<TSP> {
   typedef typename TSP::Threading Threading;
 
   using FP = typename TSP::FP;
-
- private: // private type usings
+  
   using Data = HotData<TSP, SFC>;
-  
- public:
-  
+
   template<class T>
   using VecPtr = std::shared_ptr<std::vector<T>>;
 
   //========================================================
-  // Member functions
+  // Constructors
   //========================================================
+ public:
 
   /**
    * @brief Constructor of Cell class
@@ -324,6 +323,11 @@ class Cell: public tapas::BasicCell<TSP> {
   {
   }
   
+  //========================================================
+  // Member functions
+  //========================================================
+
+ public:
   KeyType key() const { return key_; }
   
   bool operator==(const Cell &c) const;
@@ -383,11 +387,13 @@ class Cell: public tapas::BasicCell<TSP> {
   int depth() const {
     return SFC::GetDepth(key_);
   }
+
+  Data &data() { return *data_; }
   
 #ifdef DEPRECATED
-    typename TSP::BT::type &particle(index_t idx) const {
-        return body(idx);
-    }
+  typename TSP::BT::type &particle(index_t idx) const {
+    return body(idx);
+  }
 #endif
 
   // Accessor functions to bodies & body attributes
@@ -404,6 +410,9 @@ class Cell: public tapas::BasicCell<TSP> {
 
   int nbodies() const { return nb_; }
 
+  static Region<TSP>  CalcRegion(KeyType, const Region<TSP>& r);
+  static tapas::Vec<Dim, FP> CalcCenter(KeyType, const Region<TSP>& r);
+  
 #ifdef DEPRECATED
     typename TSP::BT_ATTR *particle_attrs() const {
         return body_attrs();
@@ -420,9 +429,8 @@ class Cell: public tapas::BasicCell<TSP> {
   virtual void make_pure_virtual() const {}
   void RegisterCell(Cell<TSP> *c);
 
-  static Region<TSP> CalcRegion(KeyType, const Region<TSP>& r);
   //========================================================
-  // member variables
+  // Member variables
   //========================================================
  protected:
   KeyType key_; //!< Key of the cell
@@ -440,64 +448,90 @@ class Cell: public tapas::BasicCell<TSP> {
 template<class T>
 using uset = std::unordered_set<T>;
 
-// Copied from bh.cc
-template<typename FP, typename T>
-static FP distR2(const T &p, const T &q) {
-  FP dx = q.x - p.x;
-  FP dy = q.y - p.y;
-  FP dz = q.z - p.z;
-  return dx * dx + dy * dy + dz * dz;
-}
-
 #ifdef TAPAS_BH
 
 template<class TSP, class SetType>
 void TraverseLET(typename Cell<TSP>::BodyType &p,
-                 Cell<TSP> &cell,
-                 SetType &list_geo, SetType &list_attr, SetType &list_body) {
-  using KeyType = typename Cell<TSP>::KeyType;
+                 typename Cell<TSP>::KeyType key,
+                 typename Cell<TSP>::Data &data,
+                 SetType &list_attr, SetType &list_body) {
+  using CellType = Cell<TSP>;
   using FP = typename TSP::FP;
+  using SFC = typename Cell<TSP>::SFC;
+  using KeyType = typename Cell<TSP>::KeyType;
   
+  const constexpr double theta = 0.5;
+
+  auto &r = data.region_;
+  auto &ht = data.ht_;
+
   // Maximum depth of the tree.
+  // FIXME:
   // For now, we use the theoretical maximum depth of the tree from the space filling curves,
   // but we can use the actual maximum depth obtained by using MPI_Allreduce.
-  const constexpr int max_depth = Cell<TSP>::SFC::MAX_DEPTH;
+  const int max_depth = data.max_depth_;
 
-  if (cell.depth() >= max_depth) {
+  bool is_local = ht.count(key) != 0;
+  bool is_local_leaf = is_local && ht[key]->IsLeaf();
+  bool is_remote_leaf = !is_local && SFC::GetDepth(key) >= max_depth;
+
+  if (is_local_leaf) {
+    return;
+  } 
+  else if (is_remote_leaf) {
+    list_attr.insert(key);
+    list_body.insert(key);
     return;
   }
-  
-  KeyType k = cell.key();
-  Region<TSP> r = cell.region(); // bounding box of the whole domain
-  auto child_keys = Cell<TSP>::SFC::GetChildren(k);
 
-  auto comp = [&](KeyType k1, KeyType k2) {
-    // auto c1 = SFC::GetCenter<Vec>(k1, r.min(), r.max());
-    // auto c2 = SFC::GetCenter<Vec>(k2, r.min(), r.max());
-
-    // FP d1 = (p.x - c1[0]) * (p.x - c1[0]) +
-    //         (p.y - c1[1]) * (p.y - c1[1]) +
-    //         (p.z - c1[2]) * (p.z - c1[2]);
+  TAPAS_ASSERT(SFC::GetDepth(key) <= SFC::MAX_DEPTH);
     
-    // FP d2 = (p.x - c2[0]) * (p.x - c2[0]) +
-    //         (p.y - c2[1]) * (p.y - c2[1]) +
-    //         (p.z - c2[2]) * (p.z - c2[2]);
-    // return d1 < d2;
-    return 0;
+  auto child_keys = SFC::GetChildren(key);
+
+  // distance function, which returns distance from p
+  auto distR2 = [&p](const Vec<TSP::Dim, FP> &v) -> FP {
+    FP dx = p.x - v[0];
+    FP dy = p.y - v[1];
+    FP dz = p.z - v[2];
+    return dx * dx + dy * dy + dz * dz;
+  };
+
+  // compare function to sort cells by their distance from p
+  auto comp = [&p, &r, &distR2](KeyType k1, KeyType k2) {
+    auto ctr1 = CellType::CalcCenter(k1, r);
+    auto ctr2 = CellType::CalcCenter(k2, r);
+
+    FP d1 = distR2(ctr1);
+    FP d2 = distR2(ctr2);
+
+    return d1 < d2;
   };
 
   // Sort children according to their distance from p
   std::sort(std::begin(child_keys), std::end(child_keys), comp);
 
-  if (cell.IsLeaf()) {
-  } else {
-    for (auto &chk : child_keys) {
-      //auto ctr = Cell<TSP>::SFC::GetCenter(k, r.min(), r.max());
-      
-      //FP d2 = distR2<FP>(c2.attr(), p1);
+  for (size_t i = 0; i < child_keys.size(); i++) {
+    KeyType ckey = child_keys[i];
+    auto ctr = CellType::CalcCenter(ckey, r);
+
+    FP s = CellType::CalcRegion(ckey, r).width(0); // width
+    FP d = std::sqrt(distR2(ctr));
+
+    if (s/d > theta) { // if the cell(ckey) is far enough
+      TraverseLET<TSP, SetType>(p, ckey, data, list_attr, list_body);
+    } else {
+      for (size_t j = i; j < child_keys.size(); j++) {
+        if (!is_local) list_attr.insert(ckey);
+      }
+      break;
     }
   }
-         
+
+  // if (data.mpi_size > 1) {
+  //   MPI_Finalize();
+  //   exit(0);
+  // }
+  
   return;
 }
 
@@ -507,16 +541,48 @@ void ExchangeLET(Cell<TSP> &root) {
   using KeyType = typename Cell<TSP>::KeyType;
   using KeySet = typename Cell<TSP>::SFC::KeySet;
   
-  KeySet list_geo;  // cells of which geometry (coordinates) are to be transfered.
   KeySet list_attr; // cells of which attributes are to be transfered.
   KeySet list_body; // cells of which bodies are to be transfered
 
   list_attr.insert(root.key());
-  
+
   for (int bi = 0; bi < root.nbodies(); bi++) {
     BodyType &b = root.body(bi);
-    TraverseLET<TSP, KeySet>(b, root, list_geo, list_attr, list_body);
+    TraverseLET<TSP, KeySet>(b, root.key(), root.data(), list_attr, list_body);
   }
+
+  BarrierExec([&](int rank, int) {
+      std::cerr << "rank " << rank << "  root.nbodies() = " << root.nbodies() << std::endl;
+      std::cout << "rank " << rank << "  list_attr.size() = " << list_attr.size() << std::endl;
+      std::cout << "rank " << rank << "  list_body.size() = " << list_body.size() << std::endl;
+    });
+
+  const auto &ht = root.data().ht_;
+  
+  // We have complete lists of necessary cell to traverse.
+  // Local cells don't need to be transfered.
+  // FIXME: here we calculate difference of sets ({necessary cells} - {local cells})
+  // in a naive way.
+  auto orig_list_attr = list_attr;
+  list_attr.clear();
+  for (auto &v : orig_list_attr) {
+    if (ht.count(v) == 0) {
+      list_attr.insert(v);
+    }
+  }
+
+  auto orig_list_body = list_body;
+  for (auto &v : orig_list_body) {
+    if (ht.count(v) == 0) {
+      list_body.insert(v);
+    }
+  }
+
+  BarrierExec([&](int rank, int) {
+      std::cout << "rank " << rank << "  Local cells are filtered out" << std::endl;
+      std::cout << "rank " << rank << "  list_attr.size() = " << list_attr.size() << std::endl;
+      std::cout << "rank " << rank << "  list_body.size() = " << list_body.size() << std::endl;
+    });
 }
 
 #endif // TAPAS_BH
@@ -721,7 +787,10 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
 template <class TSP>
 void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
 #ifdef TAPAS_BH
-  //ExchangeLET<TSP>(cell);
+  if (cell.key() == 0) {
+    std::cerr << "********** Map **********" << std::endl;
+    ExchangeLET<TSP>(cell);
+  }
 #endif
   
   f(cell);
@@ -743,12 +812,12 @@ bool Cell<TSP>::operator==(const Cell &c) const {
 
 template <class TSP>
 bool Cell<TSP>::IsRoot() const {
-    return SFC::GetDepth(key_) == 0;
+  return SFC::GetDepth(key_) == 0;
 }
 
 template <class TSP>
 bool Cell<TSP>::IsLeaf() const {
-    return is_leaf_;
+  return is_leaf_;
 }
 
 template <class TSP>
@@ -769,21 +838,15 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) {
     TAPAS_DIE();
   }
 
-
   KeyType child_key = SFC::Child(key_, idx);
   Cell *c = Lookup(child_key);
-  
-  if (c == nullptr) {
-    std::lock_guard<std::mutex> lock(*ht_mtx_);
-    c = Lookup(child_key);
-    if (c == nullptr) {
-      // leaf if if key is contained in leaf_keys_
 
-      c = new Cell(child_key, false, 0, 0, data_);
-      data_->ht_[child_key] = c;
-    }
+  if (c == nullptr) {
+    TAPAS_LOG_ERROR() << "In MPI rank " << data_->mpi_rank << ": " 
+                      << "Cell not found for key " << SFC::Decode(child_key) << std::endl;
+    TAPAS_ASSERT(c != nullptr);
   }
-  
+
   return *c;
 }
 
@@ -819,7 +882,7 @@ Cell<TSP> &Cell<TSP>::parent() const {
 
 template <class TSP>
 typename TSP::BT::type &Cell<TSP>::body(index_t idx) {
-  assert(idx < this->nb());
+  TAPAS_ASSERT(idx < this->nb());
   return data_->local_bodies_[this->bid() + idx];
 }
 
@@ -945,7 +1008,7 @@ template<class TSP>
 std::vector<typename TSP::SFC::KeyType>
 SplitLargeCellsOnce(const std::vector<typename TSP::SFC::KeyType> &cell_keys,
                     const std::vector<index_t> &nb,
-                    int max_nb) {
+                    int max_nb, int *max_depth) {
   using SFC = typename TSP::SFC;
   using KeyType = typename SFC::KeyType;
   
@@ -957,7 +1020,16 @@ SplitLargeCellsOnce(const std::vector<typename TSP::SFC::KeyType> &cell_keys,
       ret.push_back(cell_keys[i]);
     } else {
       // Create 2^DIM children (8 in 3-dim)
+      if (SFC::GetDepth(cell_keys[i]) >= SFC::MAX_DEPTH) {
+        TAPAS_LOG_ERROR()
+            << "Error: Reached maximum depth of octree. "
+            << "Maybe some particles have the exact same coordinates?" << std::endl;
+        MPI_Finalize();
+        exit(-1);
+      }
+      
       auto children = SFC::GetChildren(cell_keys[i]);
+      *max_depth = std::max(*max_depth, SFC::GetDepth(children[0]));
       for (auto ch : children) {
         ret.push_back(ch);
       }
@@ -1032,6 +1104,12 @@ Region<TSP> Cell<TSP>::CalcRegion(KeyType key, const Region<TSP> &region) {
   return r;
 }
 
+template <class TSP>
+Vec<Cell<TSP>::Dim, typename TSP::FP> Cell<TSP>::CalcCenter(KeyType key, const Region<TSP> &region) {
+  auto r = CalcRegion(key, region);
+  return r.min() + r.width() / 2;
+}
+
 /**
  * @brief Partition the simulation space and build SFC key based octree
  * @tparam TSP Tapas static params
@@ -1059,6 +1137,8 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   using Data = typename CellType::Data;
 
   auto data = std::make_shared<Data>();
+
+  int max_depth = 0;
 
   MPI_Comm_rank(MPI_COMM_WORLD, &data->mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &data->mpi_size);
@@ -1110,21 +1190,21 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                                                             _key).second;
     }
     
-#if 0
-    BarrierExec([&] (int rank, int size) {
-        std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
-        std::cerr << "hn.size() = " << hn.size() << ", ";
-        for (auto n : hn) {
-          std::cerr << std::fixed << std::setw(6) << SFC::RemoveDepth(n.key) << " ";
-        }
-        std::cerr << std::endl;
+#if 1
+    BarrierExec([&] (int rank, int) {
+        // std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
+        // std::cerr << "hn.size() = " << hn.size() << ", ";
+        // for (auto n : hn) {
+        //   std::cerr << std::fixed << std::setw(6) << SFC::RemoveDepth(n.key) << " ";
+        // }
+        // std::cerr << std::endl;
 
-        std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
-        std::cerr << "leaf_nb_local.size() = " << leaf_nb_local.size() << ", ";
+        std::cerr << "leaf_nb_local.size() = " << leaf_nb_local.size() << ", [";
         for (auto nb : leaf_nb_local) {
           std::cerr << std::fixed << std::setw(3) << nb << " ";
         }
-        std::cerr << std::endl;
+        std::cerr << "]" << std::endl;
+        std::cerr.clear();
       });
 #endif
 
@@ -1132,14 +1212,41 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     MPI_Allreduce(leaf_nb_local, leaf_nb_global, MPI_SUM, MPI_COMM_WORLD);
 
     long max_nb = *std::max_element(leaf_nb_global.begin(), leaf_nb_global.end());
+    long total_nb = 0;
+    for (auto nb : leaf_nb_global) {
+      total_nb += nb;
+    }
+    
+    BarrierExec([&] (int rank, int) {
+        if (rank == 0) {
+          std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
+          std::cerr << "leaf_nb_global.size() = " << leaf_nb_global.size() << ", [";
+          for (auto nb : leaf_nb_global) {
+            std::cerr << std::fixed << std::setw(3) << nb << " ";
+          }
+          std::cerr << "]" << std::endl;
+          std::cerr << "Total nb = " << total_nb << std::endl;
+          std::cerr << "rank " << rank << " " << "max_nb = " << max_nb << " "
+                    << "(the limit is " << max_nb_ << ")" << std::endl;
+          std::cerr << std::endl;
+        }
+      });
     
     if (max_nb <= max_nb_) {    // Finished. all cells have at most max_nb_ bodies.
       break;
     } else {
       // Find cells that have more than max_nb_ bodies and split them.
-      leaf_keys = SplitLargeCellsOnce<TSP>(leaf_keys, leaf_nb_global, max_nb_);
+      leaf_keys = SplitLargeCellsOnce<TSP>(leaf_keys, leaf_nb_global, max_nb_, &max_depth);
     }
   } // end of while(1) loop
+  
+  ::MPI_Allreduce(&max_depth, &max_depth, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  data->max_depth_ = max_depth;
+
+  if (data->mpi_rank == 0) {
+    // debug
+    std::cerr << "Max depth = " << max_depth << std::endl;
+  }
 
   // distribute the morton-ordered leaf cells over processes
   // so that each process has roughly equal number of bodies.
@@ -1162,14 +1269,14 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     int proc = leaf_owners[ci];
     send_counts[proc] += leaf_nb_local[ci];
   }
-
+  
   MPI_Alltoall(send_counts.data(), 1, MPI_INT,
                recv_counts.data(), 1, MPI_INT,
                MPI_COMM_WORLD);
-
+  
   std::vector<int> send_bytes_bodies(send_counts);
   std::vector<int> send_bytes_keys(send_counts);
-
+  
   std::vector<int> recv_bytes_bodies(recv_counts);
   std::vector<int> recv_bytes_keys(recv_counts);
 
