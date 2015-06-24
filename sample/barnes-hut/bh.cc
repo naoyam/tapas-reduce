@@ -196,25 +196,50 @@ int main(int argc, char **argv) {
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 #endif
-  
+
   // ALLOCATE
+  // NOTE: Total number of particles is N * size (weak scaling)
+  int N_total = N * size;
   float4 *sourceHost = new float4 [N];
   float4 *targetHost = new float4 [N];
-  srand48(rank);
-  for( int i=0; i<N; i++ ) {
-    sourceHost[i].x = drand48();
-    sourceHost[i].y = drand48();
-    sourceHost[i].z = drand48();
-    sourceHost[i].w = drand48() / N;
+  srand48(0);
+  
+  for (int i = 0; i < N_total; i++) {
+    double x = drand48();
+    double y = drand48();
+    double z = drand48();
+    double w = drand48() / N_total;
+    
+    if (N*rank <= i && i < N*(rank+1)) {
+      int j = i % N;
+      sourceHost[j].x = x;
+      sourceHost[j].y = y;
+      sourceHost[j].z = z;
+      sourceHost[j].w = w;
+    }
   }
-  std::cout << std::scientific << "N      : " << (N*size) << std::endl;
+  std::cout << std::scientific << "N      : " << N_total << std::endl;
 
+  for (int p = 0; p < size; p++) {
+    if (p == rank) {
+      for (int i = 0; i < N; i++) {
+        std::cout << sourceHost[i].x << " "
+                  << sourceHost[i].y << " "
+                  << sourceHost[i].z << " "
+                  << sourceHost[i].w << std::endl;
+      }
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+  MPI_Finalize();
+  exit(0);
+  
   float4 *targetTapas = calc(sourceHost, N);
 
   double tic = get_time();
   P2P(targetHost,sourceHost,N,N,EPS2);
   double toc = get_time();
-
+  
 #ifdef DUMP
   std::ofstream ref_out("bh_ref.txt");
   std::ofstream tapas_out("bh_tapas.txt");
@@ -222,26 +247,30 @@ int main(int argc, char **argv) {
 
   std::cout << std::scientific << "No SSE : " << toc-tic << " s : " << OPS / (toc-tic) << " GFlops" << std::endl;
 
-// COMPARE RESULTS
-  real_t pd = 0, pn = 0, fd = 0, fn = 0;
-  for( int i=0; i<N; i++ ) {
+  // COMPARE RESULTS
+  if (size == 1) {
+    real_t pd = 0, pn = 0, fd = 0, fn = 0;
+    for( int i=0; i<N; i++ ) {
 #ifdef DUMP
-    ref_out << targetHost[i].x << " " << targetHost[i].y << " "
-            << targetHost[i].z << " " << targetHost[i].w << std::endl;
-    tapas_out << targetTapas[i].x << " " << targetTapas[i].y << " "
-              << targetTapas[i].z << " " << targetTapas[i].w << std::endl;
+      ref_out << targetHost[i].x << " " << targetHost[i].y << " "
+              << targetHost[i].z << " " << targetHost[i].w << std::endl;
+      tapas_out << targetTapas[i].x << " " << targetTapas[i].y << " "
+                << targetTapas[i].z << " " << targetTapas[i].w << std::endl;
 #endif
-    targetHost[i].w -= sourceHost[i].w / sqrtf(EPS2);
-    targetTapas[i].w -= sourceHost[i].w / sqrtf(EPS2);
-    pd += (targetHost[i].w - targetTapas[i].w) * (targetHost[i].w - targetTapas[i].w);
-    pn += targetHost[i].w * targetHost[i].w;
-    fd += (targetHost[i].x - targetTapas[i].x) * (targetHost[i].x - targetTapas[i].x)
-          + (targetHost[i].y - targetTapas[i].y) * (targetHost[i].y - targetTapas[i].y)
-          + (targetHost[i].z - targetTapas[i].z) * (targetHost[i].z - targetTapas[i].z);
-    fn += targetHost[i].x * targetHost[i].x + targetHost[i].y * targetHost[i].y + targetHost[i].z * targetHost[i].z;
+      targetHost[i].w -= sourceHost[i].w / sqrtf(EPS2);
+      targetTapas[i].w -= sourceHost[i].w / sqrtf(EPS2);
+      pd += (targetHost[i].w - targetTapas[i].w) * (targetHost[i].w - targetTapas[i].w);
+      pn += targetHost[i].w * targetHost[i].w;
+      fd += (targetHost[i].x - targetTapas[i].x) * (targetHost[i].x - targetTapas[i].x)
+            + (targetHost[i].y - targetTapas[i].y) * (targetHost[i].y - targetTapas[i].y)
+            + (targetHost[i].z - targetTapas[i].z) * (targetHost[i].z - targetTapas[i].z);
+      fn += targetHost[i].x * targetHost[i].x + targetHost[i].y * targetHost[i].y + targetHost[i].z * targetHost[i].z;
+    }
+    std::cout << std::scientific << "P ERR  : " << sqrtf(pd/pn) << std::endl;
+    std::cout << std::scientific << "F ERR  : " << sqrtf(fd/fn) << std::endl;
+  } else {
+    std::cout << "Skipping result check" << std::endl;
   }
-  std::cout << std::scientific << "P ERR  : " << sqrtf(pd/pn) << std::endl;
-  std::cout << std::scientific << "F ERR  : " << sqrtf(fd/fn) << std::endl;
 
 // DEALLOCATE
   delete[] sourceHost;
