@@ -220,20 +220,6 @@ int main(int argc, char **argv) {
   }
   std::cout << std::scientific << "N      : " << N_total << std::endl;
 
-  for (int p = 0; p < size; p++) {
-    if (p == rank) {
-      for (int i = 0; i < N; i++) {
-        std::cout << sourceHost[i].x << " "
-                  << sourceHost[i].y << " "
-                  << sourceHost[i].z << " "
-                  << sourceHost[i].w << std::endl;
-      }
-    }
-    MPI_Barrier(MPI_COMM_WORLD);
-  }
-  MPI_Finalize();
-  exit(0);
-  
   float4 *targetTapas = calc(sourceHost, N);
 
   double tic = get_time();
