@@ -1153,18 +1153,6 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   std::sort(hn.begin(), hn.end(),
             [](const HN &lhs, const HN &rhs) { return lhs.key < rhs.key; });
 
-  BarrierExec([&](int rank, int size) {
-      std::vector<BodyType> bodies;
-      std::vector<KeyType> keys;
-
-      for(const auto& n : hn) {
-        keys.push_back(n.key);
-        bodies.push_back(b[n.p_index]);
-      }
-      bool append_mode = (rank > 0); // Previously existing file is truncated by rank 0
-      DumpToFile(bodies, keys, "init_bodies.dat", append_mode);
-    });
-
   // shortcuts to HotData members:
   auto &leaf_keys = data->leaf_keys_;     // Keys of leaf cells (global)
   auto &leaf_nb_global = data->leaf_nb_;  // Number of local bodies (global)
