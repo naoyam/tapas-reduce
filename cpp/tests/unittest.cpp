@@ -23,13 +23,15 @@ DEF_STREAM_HELPER(char)
 
 #include "test_morton_key.cpp"
 
-TEST(TestSort, TestSortByPermutations) {
-  V<char> vals  {'2', '3', '0', '4', '5', '1'};
-  V<char> ans   {'0', '1', '2', '3', '4', '5'};
-  V<int>  perms { 2,   3,   0,   4,   5,   1};
+TEST(TestAlgorithm, TestSortByPermutations) {
+  V<char> vals {'2', '3', '0', '4', '5', '1'};
+  V<int>  keys { 2,   3,   0,   4,   5,   1};
+  V<char> ans_vals  {'0', '1', '2', '3', '4', '5'};
+  V<int>  ans_keys  { 0,   1,   2,   3,   4,   5 };
 
-  tapas::hot::SortByPermutations(perms, vals);
-  ASSERT_EQ(ans, vals);
+  tapas::hot::SortByKeys(keys, vals);
+  ASSERT_EQ(ans_vals, vals);
+  ASSERT_EQ(ans_keys, keys);
 }
 
 TEST(TestMap, TestSetUnion) {

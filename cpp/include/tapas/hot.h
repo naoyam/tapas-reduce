@@ -46,6 +46,22 @@ namespace tapas {
  */
 namespace hot {
 
+// MPI-related utilities and wrappers
+// TODO: wrap them as a pluggable policy/traits class
+template<class T> struct MPI_DatatypeTraits {};
+
+#define DEF_MPI_DATATYPE(__ctype, __mpitype) \
+  template<> struct MPI_DatatypeTraits<__ctype>  { static MPI_Datatype type() { return __mpitype; } };
+
+DEF_MPI_DATATYPE(int,    MPI_INT);
+DEF_MPI_DATATYPE(long,   MPI_LONG);
+DEF_MPI_DATATYPE(long long, MPI_LONG_LONG);
+DEF_MPI_DATATYPE(unsigned int,    MPI_UNSIGNED);
+DEF_MPI_DATATYPE(unsigned long,   MPI_UNSIGNED_LONG);
+DEF_MPI_DATATYPE(unsigned long long,   MPI_UNSIGNED_LONG_LONG);
+DEF_MPI_DATATYPE(float,  MPI_FLOAT);
+DEF_MPI_DATATYPE(double, MPI_DOUBLE);
+
 // fwd decl
 template<class TSP> class Cell;
 
@@ -62,11 +78,12 @@ struct HotData {
   using BodyAttrType = typename TSP::BT_ATTR;
   
   CellHashTable ht_;
+  CellHashTable ht_let_;
   std::mutex ht_mtx_;  //!< mutex to protect ht_
   Region<TSP> region_; //!< global bouding box
 
-  int mpi_rank;
-  int mpi_size;
+  int mpi_rank_;
+  int mpi_size_;
   int max_depth_; //!< Actual maximum depth of the tree
 
   std::vector<KeyType> leaf_keys_; //!< SFC keys of (all) leaves
@@ -75,6 +92,8 @@ struct HotData {
   std::vector<BodyType> local_bodies_; //!< Bodies that belong to the local process
   std::vector<KeyType>  local_body_keys_; //!< SFC keys of local bodies
   std::vector<BodyAttrType> local_body_attrs_; //!< Local body attributes
+
+  std::vector<KeyType> proc_first_keys_; //!< first SFC key of each process
   
   HotData() { }
   HotData(const HotData<TSP, SFC>& rhs) = delete; // no copy
@@ -94,17 +113,14 @@ std::vector<T> uniq(Iterator beg, Iterator end) {
 }
 
 /**
- * @brief Sort values using permutations (assuming T1 is an integral type), 
- *        so that vals[i] should be at perms[i]-th position in the resulting vector.
- *        Both of keys and vals are sorted.
+ * @brief Sort vals using keys (assuming T1 is comparable). Both of keys and vals are sorted.
  *
- * @param perms Permutations, where vals[i] should be at perms[i]-th in the resulting vector.
+ * @param keys keys
  * @param vals Values to be sorted.
  *
- * FIXME: the doc comment above is stale.
  */
 template<class T1, class T2>
-void SortByPermutations(std::vector<T1> &keys, std::vector<T2> &vals) {
+void SortByKeys(std::vector<T1> &keys, std::vector<T2> &vals) {
   assert(keys.size() == vals.size());
 
   auto len = keys.size();
@@ -125,8 +141,9 @@ void SortByPermutations(std::vector<T1> &keys, std::vector<T2> &vals) {
     vals2[i] = vals[idx];
     keys2[i] = keys[idx];
   }
-  vals = vals2;
+  
   keys = keys2;
+  vals = vals2;
 }
 
 /**
@@ -249,10 +266,14 @@ index_t GetBodyNumber(const typename TSP::SFC k, const HelperNode<TSP> *hn,
 template <class TSP>
 class Partitioner;
 
+template<class TSP>
+void ExchangeLET(Cell<TSP> &);
+
 template <class TSP> // TapasStaticParams
 class Cell: public tapas::BasicCell<TSP> {
   friend class Partitioner<TSP>;
   friend class BodyIterator<Cell>;
+  friend void ExchangeLET<TSP>(Cell<TSP> &root);
 
   //========================================================
   // Typedefs 
@@ -520,48 +541,54 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
     if (s/d > theta) { // if the cell(ckey) is far enough
       TraverseLET<TSP, SetType>(p, ckey, data, list_attr, list_body);
     } else {
+      // If i-th children is far enough from `cell`, the rest of children
+      // are also `far`. Thus we don't need to traverse them recursively
+      // and just need their attributes(multipole)
+      
       for (size_t j = i; j < child_keys.size(); j++) {
         if (!is_local) list_attr.insert(ckey);
       }
       break;
     }
   }
-
-  // if (data.mpi_size > 1) {
-  //   MPI_Finalize();
-  //   exit(0);
-  // }
-  
   return;
 }
+
 
 template<class TSP>
 void ExchangeLET(Cell<TSP> &root) {
   using BodyType = typename Cell<TSP>::BodyType;
+  using BodyAttrType = typename Cell<TSP>::BodyAttrType;
+  using CellAttrType = typename Cell<TSP>::attr_type;
+  using SFC = typename Cell<TSP>::SFC;
   using KeyType = typename Cell<TSP>::KeyType;
   using KeySet = typename Cell<TSP>::SFC::KeySet;
   
-  KeySet list_attr; // cells of which attributes are to be transfered.
-  KeySet list_body; // cells of which bodies are to be transfered
+  KeySet list_attr; // cells of which attributes are to be transfered from remotes to local
+  KeySet list_body; // cells of which bodies are to be transfered from remotes to local
 
   list_attr.insert(root.key());
 
+  // Construct a list of necessary cells
   for (int bi = 0; bi < root.nbodies(); bi++) {
     BodyType &b = root.body(bi);
     TraverseLET<TSP, KeySet>(b, root.key(), root.data(), list_attr, list_body);
   }
 
+  // Traverse done. Do communication.
   BarrierExec([&](int rank, int) {
-      std::cerr << "rank " << rank << "  root.nbodies() = " << root.nbodies() << std::endl;
+      std::cout << "rank " << rank << "  root.nbodies() = "   << root.nbodies() << std::endl;
       std::cout << "rank " << rank << "  list_attr.size() = " << list_attr.size() << std::endl;
       std::cout << "rank " << rank << "  list_body.size() = " << list_body.size() << std::endl;
+      std::cout << std::endl;
     });
-
-  const auto &ht = root.data().ht_;
   
-  // We have complete lists of necessary cell to traverse.
+  const auto &ht = root.data().ht_;
+  auto &data = root.data();
+  
   // Local cells don't need to be transfered.
-  // FIXME: here we calculate difference of sets ({necessary cells} - {local cells})
+  // FIXME: here we calculate difference of sets
+  //   {necessary cells} - {local cells}
   // in a naive way.
   auto orig_list_attr = list_attr;
   list_attr.clear();
@@ -577,27 +604,374 @@ void ExchangeLET(Cell<TSP> &root) {
       list_body.insert(v);
     }
   }
-
+  
   BarrierExec([&](int rank, int) {
       std::cout << "rank " << rank << "  Local cells are filtered out" << std::endl;
       std::cout << "rank " << rank << "  list_attr.size() = " << list_attr.size() << std::endl;
       std::cout << "rank " << rank << "  list_body.size() = " << list_body.size() << std::endl;
+      std::cout << std::endl;
     });
+
+  // The root cell (key 0) is shared by all processes. Thus the root cell is never included in the send list.
+  TAPAS_ASSERT(list_attr.count(0) == 0);
+
+  {
+    // Transfer list_attr using MPI_Alltoallv
+
+    // First, exchange the lists of necessary cells (request) of each process
+
+    // vectorized list_attr. A list of cells (keys) that the local process requires.
+    std::vector<KeyType> req_keys(list_attr.begin(), list_attr.end()); // vectorized list_attr
+  
+    // BarrierExec([&](int rank, int) {
+    //     if (rank == 0) {
+    //       std::cout << "data.proc_first_keys = " << std::endl;
+    //       for (int i = 0; i < data.mpi_size_; i++) {
+    //         std::cout << "\t" << i << " : " << SFC::Decode(data.proc_first_keys_[i]) << std::endl;
+    //       }
+    //       std::cout << std::endl;
+    //     }
+    //   });
+
+    // List of Owners of the cells
+    std::vector<int> owners(req_keys.size(), 0);
+    for (size_t i = 0; i < req_keys.size(); i++) {
+      owners[i] = Partitioner<TSP>::FindOwnerProcess(data.proc_first_keys_, req_keys[i]);
+    }
+
+    // Sort the cells according to each owner process.
+    SortByKeys(owners, req_keys);
+
+    // Create a list of request length to each process
+    // (Request send_num_cells[p] cells to the process p)
+    std::vector<int> req_send_counts(data.mpi_size_); // Number of cells (keys) to send process p
+    for (int p = 0; p < data.mpi_size_; p++) {
+      auto range = std::equal_range(owners.begin(), owners.end(), p);
+      req_send_counts[p] = range.second - range.first;
+    }
+  
+    std::vector<int> req_recv_counts(data.mpi_size_);
+              
+    int err = MPI_Alltoall((void*)req_send_counts.data(), 1, MPI_INT,
+                           (void*)req_recv_counts.data(), 1, MPI_INT,
+                           MPI_COMM_WORLD);
+    TAPAS_ASSERT(err == MPI_SUCCESS);
+              
+    TAPAS_ASSERT(req_recv_counts[data.mpi_rank_] == 0); // receive nothing from itself
+              
+    // Exchange the request lists using MPI_Alltoallv
+    std::vector<int> req_send_disp(data.mpi_size_, 0);
+    std::vector<int> req_recv_disp(data.mpi_size_, 0);
+
+    for (int p = 1; p < data.mpi_size_; p++) {
+      req_send_disp[p] = req_send_disp[p-1] + req_send_counts[p-1];
+      req_recv_disp[p] = req_recv_disp[p-1] + req_recv_counts[p-1];
+    }
+
+    // Number of total keys(cells) to receive
+    int total_recv_keys_len = std::accumulate(req_recv_counts.begin(), req_recv_counts.end(), 0);
+    std::vector<KeyType> req_recv_keys(total_recv_keys_len);
+
+    BarrierExec([&](int rank, int) {
+        std::cout << "rank " << rank << std::endl;
+      
+        std::cout << "\t req_send_count = ";
+        for (int p = 0; p < data.mpi_size_; p++) {
+          std::cout << std::setw(3) << req_send_counts[p] << " ";
+        }
+        std::cout << std::endl;
+      
+        std::cout << "\t req_send_disp  = ";
+        for (int p = 0; p < data.mpi_size_; p++) {
+          std::cout << std::setw(3) << req_send_disp[p] << " ";
+        }
+        std::cout << std::endl;
+      });
+
+    BarrierExec([&](int rank, int) {
+        std::cout << "rank " << rank << std::endl;
+      
+        std::cout << "\t req_recv_count = ";
+        for (int p = 0; p < data.mpi_size_; p++) {
+          std::cout << std::setw(3) << req_recv_counts[p] << " ";
+        }
+        std::cout << std::endl;
+      
+        std::cout << "\t req_recv_disp  = ";
+        for (int p = 0; p < data.mpi_size_; p++) {
+          std::cout << std::setw(3) << req_recv_disp[p] << " ";
+        }
+        std::cout << std::endl;
+      });
+
+    // Perform MPI_Alltoallv
+
+    BarrierExec([&](int rank, int) {
+        std::cout << "rank " << rank << ": total recv len  = " << total_recv_keys_len << " " << std::endl;
+      });
+
+    const auto kType = MPI_DatatypeTraits<KeyType>::type();
+  
+    err = ::MPI_Alltoallv((void*)req_keys.data(), req_send_counts.data(), req_send_disp.data(), kType,
+                          (void*)req_recv_keys.data(), req_recv_counts.data(), req_recv_disp.data(), kType,
+                          MPI_COMM_WORLD);
+    TAPAS_ASSERT(err == MPI_SUCCESS);
+
+    // Now there is a list of requested cells from remote processes.
+
+    // FIXME:
+    // Can reduce data to transfer.
+
+    std::vector<KeyType> res_keys = req_keys;
+    std::vector<CellAttrType> res_attrs(res_keys.size());
+  
+    // the requests are made conservatively, thus not all the requested cells exist.
+    // Check the requested list and replace non-existing cells with existing cells.
+    BarrierExec([&](int rank, int) {
+        for (size_t i = 0; i < res_keys.size(); i++) {
+          KeyType k = res_keys[i];
+          if (ht.count(k) == 0) {
+            std::cerr << "rank " << rank << " : " << SFC::Decode(k) << " does not exist." << std::endl;
+            // the requested cell *itr does not exist. Replace it with an existing finest ancestor cell.
+            while(ht.count(k) == 0) {
+              k = SFC::Parent(k);
+            }
+            if (k == 0) {
+              TAPAS_LOG_WARNING() << "Response to "
+                                  << SFC::Decode(res_keys[i]) 
+                                  << " is 0. Key request destination is likely wrong."
+                                  << std::endl;
+            }
+                
+            res_keys[i] = k;
+            std::cerr << "rank " << rank << " : " << SFC::Decode(k) << " is used instead." << std::endl;
+            res_attrs[i] = ht.at(k)->attr();
+          }
+        }
+      });
+
+    // Send cell attributes
+    // Reuse counts and displacements buffer used in the previous MPI_Alltoallv().
+    err = ::MPI_Alltoallv((void*)res_keys.data(), req_recv_counts.data(), req_recv_disp.data(), kType,
+                          (void*)req_keys.data(), req_send_counts.data(), req_send_disp.data(), kType,
+                          MPI_COMM_WORLD);
+
+    // Next, send cell attributes (using MPI_BYTE type)
+    std::vector<CellAttrType> recv_attrs(req_keys.size());
+    for (int i = 0; i < data.mpi_size_; i++) {
+      req_recv_counts[i] *= sizeof(CellAttrType);
+      req_send_counts[i] *= sizeof(CellAttrType);
+      req_recv_disp[i] *= sizeof(CellAttrType);
+      req_send_disp[i] *= sizeof(CellAttrType);
+    }
+  
+    err = ::MPI_Alltoallv((void*)res_attrs.data(), req_recv_counts.data(), req_recv_disp.data(), MPI_BYTE,
+                          (void*)recv_attrs.data(), req_send_counts.data(), req_send_disp.data(), MPI_BYTE,
+                          MPI_COMM_WORLD);
+
+
+    // We got necessary cells of which attributes are required.
+    auto &ht_let = data.ht_let_;
+    BarrierExec([&](int rank, int) {
+        for (size_t i = 0; i < req_keys.size(); i++) {
+          KeyType k = req_keys[i];
+          if (ht.count(k) == 0) {
+            Cell<TSP> *cell = new Cell<TSP>(k, false, 0, 0, root.data_);
+            cell->attr() = recv_attrs[i];
+            ht_let[k] = cell;
+          } else {
+            TAPAS_LOG_DEBUG() << "Rank " << rank << std::endl;
+            TAPAS_LOG_DEBUG() << "\t" << "Cell " << SFC::Decode(k) << " is already in local hash." << std::endl;
+          }
+        }
+      });
+
+    BarrierExec([&](int rank, int) {
+        std::cout << "Rank " << rank << ": Received " << ht_let.size() << " cells." << std::endl;
+      });
+  }
+
+  // Next, we exchange cells of which bodies are required.
+  // (we transfer only 1 body for each cell tentatively for BH now).
+  {
+    // Transfer list_attr using MPI_Alltoallv
+
+    // First, exchange the lists of necessary cells (request) of each process
+
+    // vectorized list_attr. A list of cells (keys) that the local process requires.
+    std::vector<KeyType> req_keys(list_body.begin(), list_body.end()); // vectorized list_body
+  
+    // BarrierExec([&](int rank, int) {
+    //     if (rank == 0) {
+    //       std::cout << "data.proc_first_keys = " << std::endl;
+    //       for (int i = 0; i < data.mpi_size_; i++) {
+    //         std::cout << "\t" << i << " : " << SFC::Decode(data.proc_first_keys_[i]) << std::endl;
+    //       }
+    //       std::cout << std::endl;
+    //     }
+    //   });
+
+    // List of Owners of the cells
+    std::vector<int> owners(req_keys.size(), 0);
+    for (size_t i = 0; i < req_keys.size(); i++) {
+      owners[i] = Partitioner<TSP>::FindOwnerProcess(data.proc_first_keys_, req_keys[i]);
+    }
+
+    // Sort the cells according to each owner process.
+    SortByKeys(owners, req_keys);
+
+    // Create a list of request length to each process
+    // (Request send_num_cells[p] cells to the process p)
+    std::vector<int> req_send_counts(data.mpi_size_); // Number of cells (keys) to send process p
+    for (int p = 0; p < data.mpi_size_; p++) {
+      auto range = std::equal_range(owners.begin(), owners.end(), p);
+      req_send_counts[p] = range.second - range.first;
+    }
+  
+    std::vector<int> req_recv_counts(data.mpi_size_);
+              
+    int err = MPI_Alltoall((void*)req_send_counts.data(), 1, MPI_INT,
+                           (void*)req_recv_counts.data(), 1, MPI_INT,
+                           MPI_COMM_WORLD);
+    TAPAS_ASSERT(err == MPI_SUCCESS);
+              
+    TAPAS_ASSERT(req_recv_counts[data.mpi_rank_] == 0); // receive nothing from itself
+              
+    // Exchange the request lists using MPI_Alltoallv
+    std::vector<int> req_send_disp(data.mpi_size_, 0);
+    std::vector<int> req_recv_disp(data.mpi_size_, 0);
+
+    for (int p = 1; p < data.mpi_size_; p++) {
+      req_send_disp[p] = req_send_disp[p-1] + req_send_counts[p-1];
+      req_recv_disp[p] = req_recv_disp[p-1] + req_recv_counts[p-1];
+    }
+
+    // Number of total keys(cells) to receive
+    int total_recv_keys_len = std::accumulate(req_recv_counts.begin(), req_recv_counts.end(), 0);
+    std::vector<KeyType> req_recv_keys(total_recv_keys_len);
+
+    BarrierExec([&](int rank, int) {
+        std::cout << "rank " << rank << std::endl;
+      
+        std::cout << "\t req_send_count = ";
+        for (int p = 0; p < data.mpi_size_; p++) {
+          std::cout << std::setw(3) << req_send_counts[p] << " ";
+        }
+        std::cout << std::endl;
+      
+        std::cout << "\t req_send_disp  = ";
+        for (int p = 0; p < data.mpi_size_; p++) {
+          std::cout << std::setw(3) << req_send_disp[p] << " ";
+        }
+        std::cout << std::endl;
+      });
+
+    BarrierExec([&](int rank, int) {
+        std::cout << "rank " << rank << std::endl;
+      
+        std::cout << "\t req_recv_count = ";
+        for (int p = 0; p < data.mpi_size_; p++) {
+          std::cout << std::setw(3) << req_recv_counts[p] << " ";
+        }
+        std::cout << std::endl;
+      
+        std::cout << "\t req_recv_disp  = ";
+        for (int p = 0; p < data.mpi_size_; p++) {
+          std::cout << std::setw(3) << req_recv_disp[p] << " ";
+        }
+        std::cout << std::endl;
+      });
+
+    // Perform MPI_Alltoallv
+
+    BarrierExec([&](int rank, int) {
+        std::cout << "rank " << rank << ": total recv len  = " << total_recv_keys_len << " " << std::endl;
+      });
+
+    const auto kType = MPI_DatatypeTraits<KeyType>::type();
+  
+    err = ::MPI_Alltoallv((void*)req_keys.data(), req_send_counts.data(), req_send_disp.data(), kType,
+                          (void*)req_recv_keys.data(), req_recv_counts.data(), req_recv_disp.data(), kType,
+                          MPI_COMM_WORLD);
+    TAPAS_ASSERT(err == MPI_SUCCESS);
+
+    // Now there is a list of requested cells from remote processes.
+
+    // FIXME:
+    // Can reduce data to transfer.
+
+    std::vector<KeyType> res_keys = req_keys;
+    std::vector<BodyType> res_bodies(res_keys.size());
+  
+    // the requests are made conservatively, thus not all the requested cells exist.
+    // Check the requested list and replace non-existing cells with existing cells.
+    BarrierExec([&](int rank, int) {
+        for (size_t i = 0; i < res_keys.size(); i++) {
+          KeyType k = res_keys[i];
+          if (ht.count(k) == 0) {
+            std::cerr << "rank " << rank << " : " << SFC::Decode(k) << " does not exist." << std::endl;
+            // the requested cell *itr does not exist. Replace it with an existing finest ancestor cell.
+            while(ht.count(k) == 0) {
+              k = SFC::Parent(k);
+            }
+            if (k == 0) {
+              TAPAS_LOG_WARNING() << "Response to "
+                                  << SFC::Decode(res_keys[i]) 
+                                  << " is 0. Key request destination is likely wrong."
+                                  << std::endl;
+            }
+                
+            res_keys[i] = k;
+            std::cerr << "rank " << rank << " : " << SFC::Decode(k) << " is used instead." << std::endl;
+            res_bodies[i] = ht.at(k)->body(0);
+          }
+        }
+      });
+
+    // Send cell attributes
+    // Reuse counts and displacements buffer used in the previous MPI_Alltoallv().
+    err = ::MPI_Alltoallv((void*)res_keys.data(), req_recv_counts.data(), req_recv_disp.data(), kType,
+                          (void*)req_keys.data(), req_send_counts.data(), req_send_disp.data(), kType,
+                          MPI_COMM_WORLD);
+
+    // Next, send cell attributes (using MPI_BYTE type)
+    std::vector<CellAttrType> recv_bodies(req_keys.size());
+    for (int i = 0; i < data.mpi_size_; i++) {
+      req_recv_counts[i] *= sizeof(BodyType);
+      req_send_counts[i] *= sizeof(BodyType);
+      req_recv_disp[i] *= sizeof(BodyType);
+      req_send_disp[i] *= sizeof(BodyType);
+    }
+  
+    err = ::MPI_Alltoallv((void*)res_bodies.data(), req_recv_counts.data(), req_recv_disp.data(), MPI_BYTE,
+                          (void*)recv_bodies.data(), req_send_counts.data(), req_send_disp.data(), MPI_BYTE,
+                          MPI_COMM_WORLD);
+
+
+    // We got necessary cells of which bodies are required.
+    auto &ht_let = data.ht_let_;
+    BarrierExec([&](int rank, int) {
+        for (size_t i = 0; i < req_keys.size(); i++) {
+          KeyType k = req_keys[i];
+          if (ht.count(k) == 0) {
+            Cell<TSP> *cell = new Cell<TSP>(k, false, 0, 1, root.data_); // FIXME
+            // = recv_bodies[i];
+            ht_let[k] = cell;
+          } else {
+            TAPAS_LOG_DEBUG() << "Rank " << rank << std::endl;
+            TAPAS_LOG_DEBUG() << "\t" << "Cell " << SFC::Decode(k) << " is already in local hash." << std::endl;
+          }
+        }
+      });
+    
+    BarrierExec([&](int rank, int) {
+        std::cout << "Rank " << rank << ": Received " << ht_let.size() << " cells." << std::endl;
+      });
+  }
 }
 
 #endif // TAPAS_BH
 
-// MPI-related utilities and wrappers
-// TODO: wrap them as a pluggable policy/traits class
-template<class T> struct MPI_DatatypeTraits {};
-
-#define DEF_MPI_DATATYPE(__ctype, __mpitype) \
-  template<> struct MPI_DatatypeTraits<__ctype>  { static MPI_Datatype type() { return __mpitype; } };
-
-DEF_MPI_DATATYPE(int,    MPI_INT);
-DEF_MPI_DATATYPE(long,   MPI_LONG);
-DEF_MPI_DATATYPE(float,  MPI_FLOAT);
-DEF_MPI_DATATYPE(double, MPI_DOUBLE);
 
 template<class T>
 int MPI_Allreduce(const std::vector<T> &send, std::vector<T> &recv, MPI_Op op, MPI_Comm comm) {
@@ -786,13 +1160,6 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
  */
 template <class TSP>
 void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
-#ifdef TAPAS_BH
-  if (cell.key() == 0) {
-    std::cerr << "********** Map **********" << std::endl;
-    ExchangeLET<TSP>(cell);
-  }
-#endif
-  
   f(cell);
 }
 
@@ -802,6 +1169,15 @@ void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
 template<class TSP>
 void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
                     std::function<void(Cell<TSP>&, Cell<TSP>&)> f) {
+#ifdef TAPAS_BH
+  if (c1.key() == 0 && c2.key() == 0) {
+    if (c1.data_->mpi_rank_ == 0) {
+      std::cerr << "********** Map **********" << std::endl;
+    }
+    ExchangeLET<TSP>(c1);
+  }
+#endif
+  
   f(c1, c2);
 }
 
@@ -842,22 +1218,33 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) {
   Cell *c = Lookup(child_key);
 
   if (c == nullptr) {
-    TAPAS_LOG_ERROR() << "In MPI rank " << data_->mpi_rank << ": " 
-                      << "Cell not found for key " << SFC::Decode(child_key) << std::endl;
+    std::stringstream ss;
+    ss << "In MPI rank " << data_->mpi_rank_ << ": " 
+       << "Cell not found for key " << SFC::Decode(child_key) << std::endl;
+    ss << "LET hash = " << data_->ht_let_.size() << std::endl;
+    TAPAS_LOG_ERROR() << ss.str();
     TAPAS_ASSERT(c != nullptr);
   }
-
+  
   return *c;
 }
 
 template <class TSP>
 Cell<TSP> *Cell<TSP>::Lookup(KeyType k) const {
+  // Try the local hash.
   auto &ht = data_->ht_;
   auto i = ht.find(k);
   if (i != ht.end()) {
     return i->second;
   } else {
-    return nullptr;
+    // If the key is not in local hash, next try LET hash.
+    auto &ht_let = data_->ht_let_;
+    auto j = ht_let.find(k);
+    if (j != ht_let.end()) {
+      return j->second;
+    } else {
+      return nullptr;
+    }
   }
 }
 
@@ -929,8 +1316,8 @@ class Partitioner {
  private:
   const int max_nb_;
   using BodyType = typename TSP::BT::type;
+  using KeyType = typename Cell<TSP>::KeyType;
   using SFC = typename TSP::SFC;
-  using KeyType = typename SFC::KeyType;
 
   public:
     Partitioner(unsigned max_nb): max_nb_(max_nb) {}
@@ -939,13 +1326,36 @@ class Partitioner {
                          const Region<TSP> &r);
     Cell<TSP> *Partition(std::vector<typename TSP::BT::type> &b,
                          const Region<TSP> &r);
-  private:
-    void Refine(Cell<TSP> *c,
-                const std::vector<HelperNode<TSP>> &hn,
-                const BodyType *b,
-                int cur_depth,
-                KeyType cur_key) const;
+ private:
+  void Refine(Cell<TSP> *c,
+              const std::vector<HelperNode<TSP>> &hn,
+              const BodyType *b,
+              int cur_depth,
+              KeyType cur_key) const;
+
+ public:
+  //---------------------
+  // Supporting functions
+  //---------------------
+  
+  /**
+   * @brief Find owner process from a head-key list.
+   * The argument head_list contains SFC keys that are the first keys of processes.
+   * head_list[P] is the first SFC key belonging to process P.
+   * Because the first element is always 0 (by definition of space filling curve),
+   * the result must be always >= 0.
+   * 
+   */
+  static int
+  FindOwnerProcess(const std::vector<KeyType> &head_list, KeyType key) {
+    TAPAS_ASSERT(Cell<TSP>::SFC::RemoveDepth(head_list[0]) == 0);
+    auto comp = [](KeyType a, KeyType b) {
+      return Cell<TSP>::SFC::RemoveDepth(a) < Cell<TSP>::SFC::RemoveDepth(b);
+    };
+    return std::upper_bound(head_list.begin(), head_list.end(), key, comp) - head_list.begin() - 1;
+  }
 }; // class Partitioner
+
 
 /**
  * \brief Create a list of keys where i-th element is the first key of process i.
@@ -1074,7 +1484,6 @@ size_t sum(const T& c) {
   return std::accumulate(c.begin(), c.end(), 0);
 }
 
-
 template<class TSP>
 void Cell<TSP>::RegisterCell(Cell<TSP> *c) {
   std::lock_guard<std::mutex> lock(data_->ht_mtx_);
@@ -1140,10 +1549,10 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
   int max_depth = 0;
 
-  MPI_Comm_rank(MPI_COMM_WORLD, &data->mpi_rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &data->mpi_size);
-  int mpi_rank = data->mpi_rank;
-  int mpi_size = data->mpi_size;
+  MPI_Comm_rank(MPI_COMM_WORLD, &data->mpi_rank_);
+  MPI_Comm_size(MPI_COMM_WORLD, &data->mpi_size_);
+  int mpi_rank = data->mpi_rank_;
+  int mpi_size = data->mpi_size_;
 
   // Calculate the global bouding box by MPI_Allreduce
   data->region_ = ExchangeRegion(reg);
@@ -1178,24 +1587,22 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                                                             _key).second;
     }
     
-#if 1
-    BarrierExec([&] (int rank, int) {
-        // std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
-        // std::cerr << "hn.size() = " << hn.size() << ", ";
-        // for (auto n : hn) {
-        //   std::cerr << std::fixed << std::setw(6) << SFC::RemoveDepth(n.key) << " ";
-        // }
-        // std::cerr << std::endl;
+    // BarrierExec([&] (int rank, int) {
+    //     std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
+    //     std::cerr << "hn.size() = " << hn.size() << ", ";
+    //     for (auto n : hn) {
+    //       std::cerr << std::fixed << std::setw(6) << SFC::RemoveDepth(n.key) << " ";
+    //     }
+    //     std::cerr << std::endl;
 
-        std::cerr << "leaf_nb_local.size() = " << leaf_nb_local.size() << ", [";
-        for (auto nb : leaf_nb_local) {
-          std::cerr << std::fixed << std::setw(3) << nb << " ";
-        }
-        std::cerr << "]" << std::endl;
-        std::cerr.clear();
-      });
-#endif
-
+    //     std::cerr << "leaf_nb_local.size() = " << leaf_nb_local.size() << ", [";
+    //     for (auto nb : leaf_nb_local) {
+    //       std::cerr << std::fixed << std::setw(3) << nb << " ";
+    //     }
+    //     std::cerr << "]" << std::endl;
+    //     std::cerr.clear();
+    //   });
+    
     // Count bodies belonging to the cell[i] globally using MPI_Allreduce(+)
     MPI_Allreduce(leaf_nb_local, leaf_nb_global, MPI_SUM, MPI_COMM_WORLD);
 
@@ -1204,7 +1611,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     for (auto nb : leaf_nb_global) {
       total_nb += nb;
     }
-    
+
     BarrierExec([&] (int rank, int) {
         if (rank == 0) {
           std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
@@ -1228,10 +1635,10 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     }
   } // end of while(1) loop
   
-  ::MPI_Allreduce(&max_depth, &max_depth, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  ::MPI_Allreduce(&max_depth, &data->max_depth_, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
   data->max_depth_ = max_depth;
 
-  if (data->mpi_rank == 0) {
+  if (data->mpi_rank_ == 0) {
     // debug
     std::cerr << "Max depth = " << max_depth << std::endl;
   }
@@ -1242,9 +1649,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   auto &leaf_owners = data->leaf_owners_;
   leaf_owners = SplitKeysSimple(leaf_nb_global, mpi_size);
 
-  std::vector<KeyType> proc_head_keys = ProcHeadKeys<KeyType>(leaf_keys,
-                                                              leaf_owners,
-                                                              mpi_size);
+  data->proc_first_keys_ = ProcHeadKeys<KeyType>(leaf_keys, leaf_owners, mpi_size);
 
   // Exchange bodies using MPI_Alltoallv
   std::vector<int> send_counts(mpi_size, 0); // number of bodies that this process sends to others
@@ -1354,7 +1759,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
   // Now we have all bodies & keys transferred to their owner processes.
   // Sort the bodies locally using their keys.
-  SortByPermutations(local_body_keys, local_bodies);
+  SortByKeys(local_body_keys, local_bodies);
 
   // Dump local bodies into a file named exch_bodies.dat
   // All processes dump bodies in the file in a coordinated way. init_bodies.dat and
@@ -1463,10 +1868,13 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 #endif // TAPAS_DEBUG
   
   if (data->ht_[0] == nullptr) {
-    // 0 : root key 
-    // Create a dummy cell if ht[0] is nullptr, which means the local process
-    // was assigned no leaf cell (but need to return a root cell).
-    data->ht_[0] = new CellType(data);
+    // If no leaf is assigned to the process, root node is not generated
+    if (data->mpi_rank_ == 0) {
+      std::cerr << "There are too few particles compared to the number of processes."
+                << std::endl;
+    }
+    MPI_Finalize();
+    exit(-1);
   }
 
 #ifdef TAPAS_DEBUG
@@ -1525,7 +1933,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     } // if rank 0
   }
 #endif
-  
+
   // return the root cell (root key is always 0)
   return data->ht_[0];
 }
@@ -1535,7 +1943,7 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
                               const std::vector<HelperNode<TSP>> &hn,
                               const typename TSP::BT::type *b,
                               int cur_depth,
-                              typename TSP::SFC::KeyType cur_key) const {
+                              typename Cell<TSP>::KeyType cur_key) const {
     const constexpr int Dim = TSP::Dim;
     using SFC = typename TSP::SFC;
     using KeyType = typename SFC::KeyType;
@@ -1633,17 +2041,6 @@ struct HOT {
   using SFC = _SFC<_Dim, _KeyType>;
   using KeyType = typename SFC::KeyType;
 };
-
-/**
- * @brief Find owner process from a head-key list.
- * The argument head_list contains SFC keys that are the first keys of processes.
- * head_list[P] is the first SFC key belonging to process P.
- */
-template<class TSP>
-int FindOwnerProcess(const std::vector<typename TSP::KeyType> &head_list,
-                     typename TSP::KeyType key) {
-  return std::upper_bound(head_list.begin(), head_list.end(), key) - 1;
-}
 
 /**
  * @brief Advance decleration of a dummy class to achieve template specialization.

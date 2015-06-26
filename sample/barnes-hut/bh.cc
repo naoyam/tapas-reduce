@@ -178,7 +178,11 @@ float4 *calc(float4 *p, size_t np) {
   // octree for 3D particles and a quadtree for 2D particles.
   Tapas::Region r(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 1.0, 1.0));
   Tapas::Cell *root = Tapas::Partition(p, np, r, 1);
-  tapas::Map(approximate, *root); // or, simply: approximate(*root);
+
+
+  // FIXME: this line is commented out for debugging.
+  //tapas::Map(approximate, *root); // or, simply: approximate(*root);
+  
   real_t theta = 0.5;
   tapas::Map(interact, tapas::Product(*root, *root), theta);
   float4 *out = root->body_attrs();
@@ -218,7 +222,12 @@ int main(int argc, char **argv) {
       sourceHost[j].w = w;
     }
   }
-  std::cout << std::scientific << "N      : " << N_total << std::endl;
+
+  if (rank == 0) {
+    std::cout << std::scientific << "N      : " << N_total
+              << " (" << N << " per proc)"
+              << std::endl;
+  }
 
   float4 *targetTapas = calc(sourceHost, N);
 
