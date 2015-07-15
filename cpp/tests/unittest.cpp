@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <tapas/common.h>
 #include <tapas/map.h>
 #include <tapas/hot.h>
 
@@ -23,13 +24,13 @@ DEF_STREAM_HELPER(char)
 
 #include "test_morton_key.cpp"
 
-TEST(TestAlgorithm, TestSortByPermutations) {
+TEST(TestAlgorithm, TestSortByKeys) {
   V<char> vals {'2', '3', '0', '4', '5', '1'};
   V<int>  keys { 2,   3,   0,   4,   5,   1};
   V<char> ans_vals  {'0', '1', '2', '3', '4', '5'};
   V<int>  ans_keys  { 0,   1,   2,   3,   4,   5 };
 
-  tapas::hot::SortByKeys(keys, vals);
+  tapas::SortByKeys(keys, vals);
   ASSERT_EQ(ans_vals, vals);
   ASSERT_EQ(ans_keys, keys);
 }
@@ -70,3 +71,7 @@ TEST(TestMap, TestSetUnion) {
   }
 }
 
+TEST(TestDiff, TestDiff) {
+  using tapas::ContainerDiff;
+  
+}

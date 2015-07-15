@@ -26,6 +26,7 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <algorithm>
 
 #ifdef TAPAS_DEBUG
 # if TAPAS_DEBUG == 0
@@ -41,7 +42,7 @@
 #include <sys/syscall.h> // for gettid()
 #include <sys/types.h>   // for gettid()
 
-#ifdef EXAFMM_TAPAS_MPI
+#if defined(EXAFMM_TAPAS_MPI) || defined(USE_MPI) // FIXME: EXAFMM_TAPAS_MPI is only for debug
 #include <mpi.h>
 #endif
 
@@ -55,7 +56,7 @@ class Stderr {
  public:
   Stderr(const char *label) : fs_(nullptr) {
 #ifdef DEBUG_WRITE
-#ifdef EXAFMM_TAPAS_MPI
+#if defined(EXAFMM_TAPAS_MPI) || defined(USE_MPI)  // FIXME: EXAFMM_TAPAS_MPI is only for debug
     pid_t tid = syscall(SYS_gettid);
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -193,6 +194,42 @@ struct TapasStaticParams {
   //        the concept of `SFC` is specific to HOT partitioning algorithm.
   //        As of now, HOT is the only implemented partitioning algorithm.
 };
+
+
+/**
+ * @brief Sort vals using keys (assuming T1 is comparable). Both of keys and vals are sorted.
+ *
+ * @param keys keys
+ * @param vals Values to be sorted.
+ *
+ */
+template<class T1, class T2>
+void SortByKeys(std::vector<T1> &keys, std::vector<T2> &vals) {
+  assert(keys.size() == vals.size());
+  
+  auto len = keys.size();
+
+  std::vector<size_t> perm(len); // Permutation
+
+  for (size_t i = 0; i < len; i++) {
+    perm[i] = i;
+  }
+
+  std::sort(std::begin(perm), std::end(perm),
+            [&keys](size_t a, size_t b) { return keys[a] < keys[b]; });
+
+  std::vector<T1> keys2(len); // sorted keys
+  std::vector<T2> vals2(len); // sorted vals
+  for (size_t i = 0; i < len; i++) {
+    size_t idx = perm[i];
+    vals2[i] = vals[idx];
+    keys2[i] = keys[idx];
+  }
+  
+  keys = keys2;
+  vals = vals2;
+}
+
 
 } // namespace tapas
 

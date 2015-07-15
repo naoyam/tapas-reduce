@@ -34,14 +34,17 @@ typedef tapas::BodyInfo<float4, 0> BodyInfo;
 
 #ifdef USE_MPI
 #include "tapas/hot.h"
-typedef tapas::Tapas<DIM, real_t, BodyInfo,
-                     float4, float4,
+typedef tapas::Tapas<DIM, real_t,
+                     BodyInfo, // BT
+                     float4,   // Cell attr
+                     float4,   // body attr
                      tapas::HOT<DIM, tapas::sfc::Morton>,
                      tapas::threading::Default> Tapas;
 #else
 #include "tapas/single_node_hot.h"
 typedef tapas::Tapas<DIM, real_t, BodyInfo,
-                     float4, float4,
+                     float4,
+                     float4,
                      tapas::SingleNodeHOT<DIM, tapas::sfc::Morton>,
                      tapas::threading::Default> Tapas;
 #endif

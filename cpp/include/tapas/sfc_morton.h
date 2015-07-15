@@ -388,7 +388,7 @@ class Morton {
    */
   static
   std::string Simplify(KeyType k) {
-    int W=4;
+    const constexpr int W=4;
     std::stringstream ss;
     ss << std::setw(20) << std::setfill('0') << k;
     std::string s = ss.str();
