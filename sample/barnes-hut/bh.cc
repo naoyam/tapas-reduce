@@ -147,11 +147,24 @@ static void approximate(Tapas::Cell &c) {
 }
 
 static void interact(Tapas::Cell &c1, Tapas::Cell &c2, real_t theta) {
+  {
+    Stderr e("interact");
+    e.out() << "Head." << std::endl;
+    e.out() << "\t" << Tapas::Cell::SFC::Decode(c1.key()) << std::endl;
+    e.out() << "\t" << Tapas::Cell::SFC::Decode(c2.key()) << std::endl;
+  }
   if (c1.nb() == 0 || c2.nb() == 0) {
     return;
   } else if (!c1.IsLeaf()) {
     tapas::Map(interact, tapas::Product(c1.subcells(), c2), theta);
   } else if (c2.IsLeaf()) {
+    {
+      Stderr e("interact");
+      e.out() << "Leaf/leaf." << std::endl;
+      e.out() << "\t" << Tapas::Cell::SFC::Decode(c1.key()) << std::endl;
+      e.out() << "\t" << Tapas::Cell::SFC::Decode(c2.key()) << std::endl;
+    }
+    
     // c1 and c2 have only one particle each. Calculate direct force.
     //tapas::Map(ComputeForce, tapas::Product(c1.particles(),
     //c2.particles()));
@@ -161,15 +174,24 @@ static void interact(Tapas::Cell &c1, Tapas::Cell &c2, real_t theta) {
     const float4 &p1 = c1.body(0);
     real_t d = std::sqrt(distR2(c2.attr(), p1));
     real_t s = c2.width(0);
-#if 0
-    tapas::Map(interact, tapas::Product(c1, c2.subcells()), theta);
-#else
+    
     if ((s/ d) < theta) {
+      {
+        Stderr e("interact");
+        e.out() << "Leaf/branch. far enough. approximate." << std::endl;
+        e.out() << "\t" << Tapas::Cell::SFC::Decode(c1.key()) << std::endl;
+        e.out() << "\t" << Tapas::Cell::SFC::Decode(c2.key()) << std::endl;
+      }
       tapas::Map(ComputeForce, c1.bodies(), c2.attr(), EPS2);
     } else {
+      {
+        Stderr e("interact");
+        e.out() << "Leaf/branch. close. recursive." << std::endl;
+        e.out() << "\t" << Tapas::Cell::SFC::Decode(c1.key()) << std::endl;
+        e.out() << "\t" << Tapas::Cell::SFC::Decode(c2.key()) << std::endl;
+      }
       tapas::Map(interact, tapas::Product(c1, c2.subcells()), theta);
     }
-#endif    
   }
 }
 
@@ -192,6 +214,24 @@ float4 *calc(float4 *p, size_t np) {
   return out;
 }
 
+void setRandSeed(int rank, int size) {
+  int seed;
+  if (rank == 0) {
+    if (getenv("TAPAS_SEED")) {
+      seed = atoi(getenv("TAPAS_SEED"));
+      std::cerr << "Seed = " << seed << std::endl;
+    } else {
+      seed = 0;
+    }
+  }
+
+#ifdef USE_MPI
+  MPI_Bcast(&seed, 1, MPI_INT, 0, MPI_COMM_WORLD);
+#endif
+
+  srand48(seed);
+}
+
 int main(int argc, char **argv) {
   int rank = 0; // MPI rank
   int size = 1; // MPI size
@@ -209,7 +249,8 @@ int main(int argc, char **argv) {
   int N_total = N * size;
   float4 *sourceHost = new float4 [N];
   float4 *targetHost = new float4 [N];
-  srand48(0);
+
+  setRandSeed(rank, size);
   
   for (int i = 0; i < N_total; i++) {
     double x = drand48();

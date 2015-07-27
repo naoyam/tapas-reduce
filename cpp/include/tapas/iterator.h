@@ -149,6 +149,10 @@ class SubCellIterator {
     return c_.subcell(idx_);
   }
   value_type &operator++() {
+    typename Cell::KeyType kn = Cell::SFC::GetNext(c_.key());
+
+    if (c_.data().ht_.count(kn) > 0 || c_.data().ht_let_.count(kn)) {
+    }
     return c_.subcell(++idx_);
   }
   value_type &operator++(int) {

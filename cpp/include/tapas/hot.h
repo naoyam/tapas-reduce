@@ -445,41 +445,59 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
   auto &ht = data.ht_;
 
   // Maximum depth of the tree.
-  // FIXME:
-  // For now, we use the theoretical maximum depth of the tree from the space filling curves,
-  // but we can use the actual maximum depth obtained by using MPI_Allreduce.
   const int max_depth = data.max_depth_;
 
+#ifdef TAPAS_DEBUG
   {
     Stderr e("traverse_let");
     e.out() << SFC::Decode(key) << " : started TraverseLET"<< std::endl;
   }
+#endif
 
   bool is_local = ht.count(key) != 0;
   bool is_local_leaf = is_local && ht[key]->IsLeaf();
   bool is_remote_leaf = !is_local && SFC::GetDepth(key) >= max_depth;
 
+  // debug
+  bool is_debug = false;
+
+#ifdef TAPAS_DEBUG
+  if (data.mpi_rank_ == 7) {
+    if (SFC::Decode(key) == "[0]-000-010-110-011-110-000-110-000-000-000-000-000-000-000-000-000-000-000-000-<6>") {
+      is_debug = true;
+      std::cerr << "========== debug" << std::endl;
+    }
+  }
+#endif TAPAS_DEBUG
+    
   if (is_local_leaf) {
+#ifdef TAPAS_DEBUG
     {
       Stderr e("traverse_let");
       e.out() << SFC::Decode(key) << " is a local leaf. return." << std::endl;
     }
+#endif
     return;
   } 
   else if (is_remote_leaf) {
+#ifdef TAPAS_DEBUG
     {
       Stderr e("traverse_let");
       e.out() << SFC::Decode(key) << " is a remote leaf. marked. return." << std::endl;
     }
+#endif
     list_attr.insert(key);
     list_body.insert(key);
     return;
   }
-  
+
+#ifdef TAPAS_DEBUG
   {
     Stderr e("traverse_let");
     e.out() << SFC::Decode(key) << " is a remote non-leaf cell. marked. return." << std::endl;
   }
+#endif
+  
   list_attr.insert(key);
 
   TAPAS_ASSERT(SFC::GetDepth(key) <= SFC::MAX_DEPTH);
@@ -516,11 +534,13 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
     FP d = std::sqrt(distR2(ctr));
 
     if (s/d > theta) { // if the cell(ckey) is close
+#ifdef TAPAS_DEBUG
       {
         Stderr e("traverse_let");
         e.out() << SFC::Decode(key)  << " 's children "
                 << SFC::Decode(ckey) << " is close. Recursively traversing." << std::endl;
       }
+#endif
       TraverseLET<TSP, SetType>(p, ckey, data, list_attr, list_body);
     } else {
       // If i-th children is far enough from `cell`, the rest of children
@@ -530,11 +550,13 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
       for (size_t j = i; j < child_keys.size(); j++) {
         KeyType ckey2 = child_keys[j];
         if (ht.count(ckey2) == 0) {
+#ifdef TAPAS_DEBUG
           {
             Stderr e("traverse_let");
             e.out() << SFC::Decode(key) << " 's children " << SFC::Decode(child_keys[j])
                     << " is far enough.. Recursively traversing." << std::endl;
           }
+#endif
           
           list_attr.insert(child_keys[j]);
         }
@@ -545,6 +567,11 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
   return;
 }
 
+#ifdef TAPAS_DEBUG
+#else
+# define TAPAS_MEASURE
+#endif
+
 template<class TSP>
 void ExchangeLET(Cell<TSP> &root) {
   using BodyType = typename Cell<TSP>::BodyType;
@@ -553,24 +580,43 @@ void ExchangeLET(Cell<TSP> &root) {
   using SFC = typename Cell<TSP>::SFC;
   using KeyType = typename Cell<TSP>::KeyType;
   using KeySet = typename Cell<TSP>::SFC::KeySet;
+
+#ifdef TAPAS_MEASURE
+  double beg_all, end_all;
+  double beg_trv, end_trv;
+  double beg_req, end_req;
+  double beg_sel, end_sel;
+  double beg_res, end_res;
+#endif
   
   KeySet req_keys_attr; // cells of which attributes are to be transfered from remotes to local
   KeySet req_keys_body; // cells of which bodies are to be transfered from remotes to local
 
   req_keys_attr.insert(root.key());
 
+#ifdef TAPAS_MEASURE
+  beg_all = MPI_Wtime();
+  beg_trv = MPI_Wtime();
+#endif
+    
   // Construct request lists of necessary cells
   for (int bi = 0; bi < root.nbodies(); bi++) {
     BodyType &b = root.body(bi);
     TraverseLET<TSP, KeySet>(b, root.key(), root.data(), req_keys_attr, req_keys_body);
   }
 
+#ifdef TAPAS_MEASURE
+  end_trv = MPI_Wtime();
+#endif
+  
+#ifdef TAPAS_DEBUG
   BarrierExec([&](int rank, int) {
       std::cout << "rank " << rank << "  root.nbodies() = "   << root.nbodies() << std::endl;
       std::cout << "rank " << rank << "  req_keys_attr.size() = " << req_keys_attr.size() << std::endl;
       std::cout << "rank " << rank << "  req_keys_body.size() = " << req_keys_body.size() << std::endl;
       std::cout << std::endl;
     });
+#endif
   
   const auto &ht = root.data().ht_;
   auto &data = root.data();
@@ -593,7 +639,8 @@ void ExchangeLET(Cell<TSP> &root) {
       req_keys_body.insert(v);
     }
   }
-  
+
+#ifdef TAPAS_DEBUG
   BarrierExec([&](int rank, int) {
       std::cout << "rank " << rank << "  Local cells are filtered out" << std::endl;
       std::cout << "rank " << rank << "  req_keys_attr.size() = " << req_keys_attr.size() << std::endl;
@@ -609,6 +656,7 @@ void ExchangeLET(Cell<TSP> &root) {
         }
       }
     });
+#endif
 
   // The root cell (key 0) is shared by all processes. Thus the root cell is never included in the send list.
   TAPAS_ASSERT(req_keys_attr.count(0) == 0);
@@ -617,6 +665,10 @@ void ExchangeLET(Cell<TSP> &root) {
   // Transfer req_keys_attr using MPI_Alltoallv
 
   // Step 1 : Exchange requests
+
+#ifdef TAPAS_MEASURE
+  beg_req = MPI_Wtime();
+#endif
 
   // vectorized req_keys_attr. A list of cells (keys) that the local process requires.
   // (send buffer)
@@ -647,7 +699,12 @@ void ExchangeLET(Cell<TSP> &root) {
                                  keys_attr_recv, attr_src, MPI_COMM_WORLD);
   tapas::mpi::Alltoallv<KeyType>(keys_body_send, body_dest,
                                  keys_body_recv, body_src, MPI_COMM_WORLD);
-    
+
+#ifdef TAPAS_MEASURE
+  end_req = MPI_Wtime();
+#endif
+  
+#ifdef TAPAS_DEBUG
   {
     assert(keys_body_recv.size() == body_src.size());
     Stderr e("body_keys_recv");
@@ -655,11 +712,24 @@ void ExchangeLET(Cell<TSP> &root) {
       e.out() << SFC::Decode(keys_body_recv[i]) << " from " << body_src[i] << std::endl;
     }
   }
+#endif
 
+#ifdef TAPAS_MEASURE
+  beg_sel = MPI_Wtime();
+#endif
+                     
   Partitioner<TSP>::SelectResponseCells(keys_attr_recv, attr_src,
                                         keys_body_recv, body_src,
                                         data.ht_);
   
+#ifdef TAPAS_MEASURE
+  end_sel = MPI_Wtime();
+#endif
+  
+#ifdef TAPAS_MEASURE
+  beg_res = MPI_Wtime();
+#endif
+                     
   // swap send/recv buffer (because response is sent to the original requester)
   keys_attr_recv.swap(keys_attr_send);
   keys_body_recv.swap(keys_body_send);
@@ -683,6 +753,9 @@ void ExchangeLET(Cell<TSP> &root) {
   tapas::mpi::Alltoallv(nb_send,        body_dest, nb_recv,        body_src, MPI_COMM_WORLD);
   tapas::mpi::Alltoallv(body_send,      body_dest, body_recv,      body_src, MPI_COMM_WORLD);
 
+#ifdef TAPAS_MEASURE
+  end_res = MPI_Wtime();
+#endif
   // TODO: send body attributes
   
   data.let_bodies_ = body_recv;
@@ -747,7 +820,17 @@ void ExchangeLET(Cell<TSP> &root) {
     }
   }
 #endif
-  
+
+#ifndef TAPAS_DEBUG
+  end_all = MPI_Wtime();
+  if (root.data().mpi_rank_ == 0) {
+    std::cout << "time ExchangeLET " << (end_all - beg_all) << std::endl;
+    std::cout << "time TraverseLET " << (end_trv - beg_trv) << std::endl;
+    std::cout << "time Request "     << (end_req - beg_req) << std::endl;
+    std::cout << "time Select "      << (end_sel - beg_sel) << std::endl;
+    std::cout << "time Response "    << (end_res - beg_res) << std::endl;
+  }
+#endif
 }
 
 #endif // TAPAS_BH
@@ -940,7 +1023,9 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
  */
 template <class TSP>
 void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
-  f(cell);
+  if (cell.IsLocal()) {
+    f(cell);
+  }
 }
 
 /**
@@ -951,14 +1036,19 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
                     std::function<void(Cell<TSP>&, Cell<TSP>&)> f) {
 #ifdef TAPAS_BH
   if (c1.key() == 0 && c2.key() == 0) {
-    if (c1.data_->mpi_rank_ == 0) {
+    int rank = c1.data_->mpi_rank_;
+    double beg = 0, end = 0;
+    
+    if (rank == 0) {
       std::cerr << "********** Map **********" << std::endl;
     }
+
     ExchangeLET<TSP>(c1);
   }
 #endif
-  
-  f(c1, c2);
+  if (c1.IsLocal() && c2.IsLocal()) {
+    f(c1, c2);
+  }
 }
 
 template <class TSP>
@@ -1003,12 +1093,17 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) {
   Cell *c = Lookup(child_key);
 
   if (c == nullptr) {
+    //\todo: fix memory leak
+    // (use pseudo leaf-only hash table)
+    c = new Cell<TSP>(child_key, false, 0, 0, data_);
+#if 0
     std::stringstream ss;
     ss << "In MPI rank " << data_->mpi_rank_ << ": " 
        << "Cell not found for key " << SFC::Decode(child_key) << std::endl;
     ss << "LET hash = " << data_->ht_let_.size() << std::endl;
-    TAPAS_LOG_ERROR() << ss.str();
+    TAPAS_LOG_ERROR() << ss.str(); abort();
     TAPAS_ASSERT(c != nullptr);
+#endif
   }
   
   return *c;
@@ -1020,12 +1115,14 @@ Cell<TSP> *Cell<TSP>::Lookup(KeyType k) const {
   auto &ht = data_->ht_;
   auto i = ht.find(k);
   if (i != ht.end()) {
+    assert(i->second != nullptr);
     return i->second;
   } else {
     // If the key is not in local hash, next try LET hash.
     auto &ht_let = data_->ht_let_;
     auto j = ht_let.find(k);
     if (j != ht_let.end()) {
+      assert(j->second != nullptr);
       return j->second;
     } else {
       return nullptr;
@@ -1199,10 +1296,12 @@ class Partitioner {
 
         if (k == 0) {
           // if k 0 (= root node), the request destination of k is wrong.
+#ifdef TAPAS_DEBUG
           TAPAS_LOG_ERROR() << "Rank " << mpi_rank << ": Response to "
                             << SFC::Decode(attr_keys[i]) 
                             << " is 0. Key request destination is likely wrong."
                             << std::endl;
+#endif
           TAPAS_ASSERT(false);
         }
         
