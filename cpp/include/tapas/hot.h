@@ -567,11 +567,6 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
   return;
 }
 
-#ifdef TAPAS_DEBUG
-#else
-# define TAPAS_MEASURE
-#endif
-
 template<class TSP>
 void ExchangeLET(Cell<TSP> &root) {
   using BodyType = typename Cell<TSP>::BodyType;
@@ -1037,7 +1032,6 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
 #ifdef TAPAS_BH
   if (c1.key() == 0 && c2.key() == 0) {
     int rank = c1.data_->mpi_rank_;
-    double beg = 0, end = 0;
     
     if (rank == 0) {
       std::cerr << "********** Map **********" << std::endl;
@@ -1561,6 +1555,11 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
   int max_depth = 0;
 
+#ifdef TAPAS_MEASURE
+  double beg, end;
+  beg = MPI_Wtime();
+#endif
+
   MPI_Comm_rank(MPI_COMM_WORLD, &data->mpi_rank_);
   MPI_Comm_size(MPI_COMM_WORLD, &data->mpi_size_);
   int mpi_rank = data->mpi_rank_;
@@ -1599,22 +1598,6 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                                                             _key).second;
     }
     
-    // BarrierExec([&] (int rank, int) {
-    //     std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
-    //     std::cerr << "hn.size() = " << hn.size() << ", ";
-    //     for (auto n : hn) {
-    //       std::cerr << std::fixed << std::setw(6) << SFC::RemoveDepth(n.key) << " ";
-    //     }
-    //     std::cerr << std::endl;
-
-    //     std::cerr << "leaf_nb_local.size() = " << leaf_nb_local.size() << ", [";
-    //     for (auto nb : leaf_nb_local) {
-    //       std::cerr << std::fixed << std::setw(3) << nb << " ";
-    //     }
-    //     std::cerr << "]" << std::endl;
-    //     std::cerr.clear();
-    //   });
-    
     // Count bodies belonging to the cell[i] globally using MPI_Allreduce(+)
     MPI_Allreduce(leaf_nb_local, leaf_nb_global, MPI_SUM, MPI_COMM_WORLD);
 
@@ -1623,7 +1606,8 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     for (auto nb : leaf_nb_global) {
       total_nb += nb;
     }
-
+    
+#ifdef TAPAS_DEBUG
     BarrierExec([&] (int rank, int) {
         if (rank == 0) {
           std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
@@ -1638,6 +1622,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
           std::cerr << std::endl;
         }
       });
+#endif
     
     if (max_nb <= max_nb_) {    // Finished. all cells have at most max_nb_ bodies.
       break;
@@ -1776,12 +1761,14 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   // Dump local bodies into a file named exch_bodies.dat
   // All processes dump bodies in the file in a coordinated way. init_bodies.dat and
   // exch_bodies.dat must match (if sorted).
+#if TAPAS_DEBUG
   BarrierExec([&](int rank, int size) {
       std::stringstream ss;
       ss << "exch_bodies." << size << ".dat";
       bool append_mode = (rank > 0);
       DumpToFile(local_bodies, local_body_keys, ss.str().c_str(), append_mode);
     });
+#endif
 
   // construct a local tree from cells which belong to this process.
   auto leaf_beg = std::lower_bound(std::begin(leaf_owners), std::end(leaf_owners), mpi_rank)
@@ -1848,11 +1835,12 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   // Debug
   // Dump all (local) cells to a file
   {
-    Stderr e("cells");
     for (auto& iter : data->ht_) {
       KeyType k = iter.first;
       Cell<TSP> *c = iter.second;
       if (c->IsLocal() && c->key() != 0) {
+#ifdef TAPAS_DEBUG
+        Stderr e("cells");
         e.out() << SFC::Simplify(k) << " "
                 << "d=" << SFC::GetDepth(k) << " "
                 << "leaf=" << c->IsLeaf() << " "
@@ -1862,6 +1850,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
             //<< "parent=" << SFC::Simplify(SFC::Parent(k)) << " "
                 << "decoded=" << SFC::Decode(k) << " "
                 << std::endl;
+#endif
         // Print bodies which belong to Cell c
 #if 0
         if (c->IsLeaf()) {
@@ -1947,6 +1936,11 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   }
 #endif
 
+#ifdef TAPAS_MEASURE
+  end = MPI_Wtime();
+  std::cout << "time Partition " << (end - beg) << std::endl;
+#endif
+  
   // return the root cell (root key is always 0)
   return data->ht_[0];
 }

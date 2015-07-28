@@ -31,6 +31,7 @@
 #ifdef TAPAS_DEBUG
 # if TAPAS_DEBUG == 0
 #  undef TAPAS_DEBUG
+#  define TAPAS_MEASURE
 # endif
 #else  // TAPAS_DEBUG
 # define TAPAS_DEBUG // default
