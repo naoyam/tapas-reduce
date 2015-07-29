@@ -201,9 +201,10 @@ static void interact(Tapas::Cell &c1, Tapas::Cell &c2, real_t theta) {
 typedef tapas::Vec<DIM, real_t> Vec3;
 
 float4 *calc(float4 *p, size_t np) {
+  int mpi_size = 1;
+  
 #ifdef USE_MPI
-  int size = 0;
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 #endif
   
   // PartitionBSP is a function that partitions the given set of
@@ -213,19 +214,31 @@ float4 *calc(float4 *p, size_t np) {
   Tapas::Cell *root = Tapas::Partition(p, np, r, 1);
 
 
-  // FIXME: this line is commented out for debugging.
-  if (size == 1) {
+  // FIXME: this line is skipped for multi-process run because
+  //        ExchangeLET for approximate phase is not yet implemented.
+  if (mpi_size == 1) {
     tapas::Map(approximate, *root); // or, simply: approximate(*root);
+  } else {
+    // Load upward result from a file
   }
   
   real_t theta = 0.5;
   tapas::Map(interact, tapas::Product(*root, *root), theta);
+
+  // Get the evaluation result from Tapas
   float4 *out = root->body_attrs();
+
+  // Get the re-ordered sourceHost
+  assert(np == root->nbodies());
+  
+  for (int i = 0; i < np; i++) {
+    p[i] = root->body(i);
+  }
   return out;
 }
 
 void setRandSeed(int rank, int size) {
-  int seed;
+  int seed = 0;
   if (rank == 0) {
     if (getenv("TAPAS_SEED")) {
       seed = atoi(getenv("TAPAS_SEED"));
@@ -247,16 +260,16 @@ int N_total = -1;
 
 void parseOption(int *argc, char ***argv) {
   int result;
+  int mpi_size = 1;
 
 #ifdef USE_MPI
-  int size = 0;
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 #endif
   
   while((result = getopt(*argc, *argv, "s:w:")) != -1) {
     switch(result) {
       case 'w':
-        N_total = atoi(optarg) * size;
+        N_total = atoi(optarg) * mpi_size;
         break;
       case 's':
         N_total = atoi(optarg);
@@ -272,7 +285,6 @@ void parseOption(int *argc, char ***argv) {
   *argc = optind;
 }
 
-
 int main(int argc, char **argv) {
   int rank = 0; // MPI rank
   int size = 1; // MPI size
@@ -286,6 +298,11 @@ int main(int argc, char **argv) {
 #endif
 
   parseOption(&argc, &argv);
+
+  if (N_total <= 0) {
+    std::cerr << "Error: particle number is not specified." << std::endl;
+    exit(-1);
+  }
 
   // NOTE: Total number of particles is N * size (weak scaling)
   const real_t OPS = 20. * N_total * N_total * 1e-9;
@@ -321,15 +338,17 @@ int main(int argc, char **argv) {
               << std::endl;
   }
 
+  // ------ Force evalution by Tapas
   double tic = get_time();
   float4 *targetTapas = calc(sourceHost, N);
   double toc = get_time();
   std::cout << "time total_calc "   << std::scientific << toc-tic << " s" << std::endl;
   std::cout << "time total_gflops " << std::scientific << OPS / (toc-tic) << " GFlops" << std::endl;
 
+  // ------ Force evalution by direct computation (for validation)
   if (size == 1) {
     double tic = get_time();
-    P2P(targetHost,sourceHost,N,N,EPS2);
+    P2P(targetHost, sourceHost, N, N, EPS2);
     double toc = get_time();
     std::cout << std::scientific << "No SSE : " << toc-tic << " s : "
               << OPS / (toc-tic) << " GFlops" << std::endl;
