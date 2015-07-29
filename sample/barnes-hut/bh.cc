@@ -12,8 +12,10 @@
 #include "tapas.h"
 
 //#define DIM (3)
-const constexpr int DIM = 3;
 typedef double real_t;
+
+const constexpr int DIM = 3;
+const real_t EPS2 = 1e-6;
 
 struct float4 {
   real_t x;
@@ -21,14 +23,6 @@ struct float4 {
   real_t z;
   real_t w;
 };
-
-#ifdef NB
-const int N = NB;
-#else
-const int N = 1 << 10;
-#endif
-const real_t OPS = 20. * N * N * 1e-9;
-const real_t EPS2 = 1e-6;
 
 typedef tapas::BodyInfo<float4, 0> BodyInfo;
 
@@ -147,23 +141,28 @@ static void approximate(Tapas::Cell &c) {
 }
 
 static void interact(Tapas::Cell &c1, Tapas::Cell &c2, real_t theta) {
+#ifdef TAPAS_DEBUG
   {
     Stderr e("interact");
     e.out() << "Head." << std::endl;
     e.out() << "\t" << Tapas::Cell::SFC::Decode(c1.key()) << std::endl;
     e.out() << "\t" << Tapas::Cell::SFC::Decode(c2.key()) << std::endl;
   }
+#endif
+  
   if (c1.nb() == 0 || c2.nb() == 0) {
     return;
   } else if (!c1.IsLeaf()) {
     tapas::Map(interact, tapas::Product(c1.subcells(), c2), theta);
   } else if (c2.IsLeaf()) {
+#ifdef TAPAS_DEBUG
     {
       Stderr e("interact");
       e.out() << "Leaf/leaf." << std::endl;
       e.out() << "\t" << Tapas::Cell::SFC::Decode(c1.key()) << std::endl;
       e.out() << "\t" << Tapas::Cell::SFC::Decode(c2.key()) << std::endl;
     }
+#endif
     
     // c1 and c2 have only one particle each. Calculate direct force.
     //tapas::Map(ComputeForce, tapas::Product(c1.particles(),
@@ -176,20 +175,24 @@ static void interact(Tapas::Cell &c1, Tapas::Cell &c2, real_t theta) {
     real_t s = c2.width(0);
     
     if ((s/ d) < theta) {
+#ifdef TAPAS_DEBUG
       {
         Stderr e("interact");
         e.out() << "Leaf/branch. far enough. approximate." << std::endl;
         e.out() << "\t" << Tapas::Cell::SFC::Decode(c1.key()) << std::endl;
         e.out() << "\t" << Tapas::Cell::SFC::Decode(c2.key()) << std::endl;
       }
+#endif
       tapas::Map(ComputeForce, c1.bodies(), c2.attr(), EPS2);
     } else {
+#ifdef TAPAS_DEBUG
       {
         Stderr e("interact");
         e.out() << "Leaf/branch. close. recursive." << std::endl;
         e.out() << "\t" << Tapas::Cell::SFC::Decode(c1.key()) << std::endl;
         e.out() << "\t" << Tapas::Cell::SFC::Decode(c2.key()) << std::endl;
       }
+#endif
       tapas::Map(interact, tapas::Product(c1, c2.subcells()), theta);
     }
   }
@@ -198,6 +201,11 @@ static void interact(Tapas::Cell &c1, Tapas::Cell &c2, real_t theta) {
 typedef tapas::Vec<DIM, real_t> Vec3;
 
 float4 *calc(float4 *p, size_t np) {
+#ifdef USE_MPI
+  int size = 0;
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+#endif
+  
   // PartitionBSP is a function that partitions the given set of
   // particles by the binary space partitioning. The result is a
   // octree for 3D particles and a quadtree for 2D particles.
@@ -206,7 +214,9 @@ float4 *calc(float4 *p, size_t np) {
 
 
   // FIXME: this line is commented out for debugging.
-  //tapas::Map(approximate, *root); // or, simply: approximate(*root);
+  if (size == 1) {
+    tapas::Map(approximate, *root); // or, simply: approximate(*root);
+  }
   
   real_t theta = 0.5;
   tapas::Map(interact, tapas::Product(*root, *root), theta);
@@ -232,6 +242,37 @@ void setRandSeed(int rank, int size) {
   srand48(seed);
 }
 
+// Total number of particles.
+int N_total = -1;
+
+void parseOption(int *argc, char ***argv) {
+  int result;
+
+#ifdef USE_MPI
+  int size = 0;
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+#endif
+  
+  while((result = getopt(*argc, *argv, "s:w:")) != -1) {
+    switch(result) {
+      case 'w':
+        N_total = atoi(optarg) * size;
+        break;
+      case 's':
+        N_total = atoi(optarg);
+        break;
+      case '?':
+        std::cerr << "Usage:"
+                  << "   $ " << (*argv)[0] << " -w N_per_proc -s N_total" << std::endl;
+        exit(0);
+        break;
+    }
+  }
+
+  *argc = optind;
+}
+
+
 int main(int argc, char **argv) {
   int rank = 0; // MPI rank
   int size = 1; // MPI size
@@ -244,9 +285,16 @@ int main(int argc, char **argv) {
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 #endif
 
-  // ALLOCATE
+  parseOption(&argc, &argv);
+
   // NOTE: Total number of particles is N * size (weak scaling)
-  int N_total = N * size;
+  const real_t OPS = 20. * N_total * N_total * 1e-9;
+  assert(N_total % size == 0);
+  int N = N_total / size;
+
+  std::cout << "time n_total " << N_total << std::endl;
+  std::cout << "time n_per_proc " << (N_total / size) << std::endl;
+  
   float4 *sourceHost = new float4 [N];
   float4 *targetHost = new float4 [N];
 
@@ -273,18 +321,24 @@ int main(int argc, char **argv) {
               << std::endl;
   }
 
-  float4 *targetTapas = calc(sourceHost, N);
-
   double tic = get_time();
-  P2P(targetHost,sourceHost,N,N,EPS2);
+  float4 *targetTapas = calc(sourceHost, N);
   double toc = get_time();
+  std::cout << "time total_calc "   << std::scientific << toc-tic << " s" << std::endl;
+  std::cout << "time total_gflops " << std::scientific << OPS / (toc-tic) << " GFlops" << std::endl;
+
+  if (size == 1) {
+    double tic = get_time();
+    P2P(targetHost,sourceHost,N,N,EPS2);
+    double toc = get_time();
+    std::cout << std::scientific << "No SSE : " << toc-tic << " s : "
+              << OPS / (toc-tic) << " GFlops" << std::endl;
+  }
   
 #ifdef DUMP
   std::ofstream ref_out("bh_ref.txt");
   std::ofstream tapas_out("bh_tapas.txt");
 #endif
-
-  std::cout << std::scientific << "No SSE : " << toc-tic << " s : " << OPS / (toc-tic) << " GFlops" << std::endl;
 
   // COMPARE RESULTS
   if (size == 1) {
