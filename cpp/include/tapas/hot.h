@@ -1777,8 +1777,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                   - std::begin(leaf_owners);
 
   std::vector<Cell<TSP>*> interior_cells;
-  Stderr e("partition");
-
+  
   // Build a local tree in a bottom-up manner.
   for (auto i = leaf_beg; i < leaf_end; i++) {
     KeyType k = leaf_keys[i];
