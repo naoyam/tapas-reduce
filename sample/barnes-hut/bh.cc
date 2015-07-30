@@ -16,6 +16,8 @@ typedef double real_t;
 
 const constexpr int DIM = 3;
 const real_t EPS2 = 1e-6;
+int mpi_size = 1;
+int mpi_rank = 0;
 
 struct float4 {
   real_t x;
@@ -201,8 +203,6 @@ static void interact(Tapas::Cell &c1, Tapas::Cell &c2, real_t theta) {
 typedef tapas::Vec<DIM, real_t> Vec3;
 
 float4 *calc(float4 *p, size_t np) {
-  int mpi_size = 1;
-  
 #ifdef USE_MPI
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 #endif
@@ -237,9 +237,9 @@ float4 *calc(float4 *p, size_t np) {
   return out;
 }
 
-void setRandSeed(int rank, int size) {
+void setRandSeed() {
   int seed = 0;
-  if (rank == 0) {
+  if (mpi_rank == 0) {
     if (getenv("TAPAS_SEED")) {
       seed = atoi(getenv("TAPAS_SEED"));
       std::cerr << "Seed = " << seed << std::endl;
@@ -286,15 +286,12 @@ void parseOption(int *argc, char ***argv) {
 }
 
 int main(int argc, char **argv) {
-  int rank = 0; // MPI rank
-  int size = 1; // MPI size
-  
 #ifdef USE_MPI
   int provided, required = MPI_THREAD_MULTIPLE;
   MPI_Init_thread(&argc, &argv, required, &provided);
   assert(provided >= required);
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 #endif
 
   parseOption(&argc, &argv);
@@ -306,24 +303,25 @@ int main(int argc, char **argv) {
 
   // NOTE: Total number of particles is N * size (weak scaling)
   const real_t OPS = 20. * N_total * N_total * 1e-9;
-  assert(N_total % size == 0);
-  int N = N_total / size;
+  assert(N_total % mpi_size == 0);
+  int N = N_total / mpi_size;
 
   std::cout << "time n_total " << N_total << std::endl;
-  std::cout << "time n_per_proc " << (N_total / size) << std::endl;
+  std::cout << "time n_per_proc " << (N_total / mpi_size) << std::endl;
   
   float4 *sourceHost = new float4 [N];
   float4 *targetHost = new float4 [N];
 
-  setRandSeed(rank, size);
-  
+  setRandSeed();
+
+  // initialze data
   for (int i = 0; i < N_total; i++) {
     double x = drand48();
     double y = drand48();
     double z = drand48();
     double w = drand48() / N_total;
     
-    if (N*rank <= i && i < N*(rank+1)) {
+    if (N * mpi_rank <= i && i < N * (mpi_rank+1)) {
       int j = i % N;
       sourceHost[j].x = x;
       sourceHost[j].y = y;
@@ -332,7 +330,7 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (rank == 0) {
+  if (mpi_rank == 0) {
     std::cout << std::scientific << "N      : " << N_total
               << " (" << N << " per proc)"
               << std::endl;
@@ -346,7 +344,7 @@ int main(int argc, char **argv) {
   std::cout << "time total_gflops " << std::scientific << OPS / (toc-tic) << " GFlops" << std::endl;
 
   // ------ Force evalution by direct computation (for validation)
-  if (size == 1) {
+  if (mpi_size == 1) {
     double tic = get_time();
     P2P(targetHost, sourceHost, N, N, EPS2);
     double toc = get_time();
@@ -360,7 +358,7 @@ int main(int argc, char **argv) {
 #endif
 
   // COMPARE RESULTS
-  if (size == 1) {
+  if (mpi_size == 1) {
     real_t pd = 0, pn = 0, fd = 0, fn = 0;
     for( int i=0; i<N; i++ ) {
 #ifdef DUMP
