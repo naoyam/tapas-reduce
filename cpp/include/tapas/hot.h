@@ -820,10 +820,10 @@ void ExchangeLET(Cell<TSP> &root) {
   end_all = MPI_Wtime();
   if (root.data().mpi_rank_ == 0) {
     std::cout << "time ExchangeLET " << (end_all - beg_all) << std::endl;
-    std::cout << "time TraverseLET " << (end_trv - beg_trv) << std::endl;
-    std::cout << "time Request "     << (end_req - beg_req) << std::endl;
-    std::cout << "time Select "      << (end_sel - beg_sel) << std::endl;
-    std::cout << "time Response "    << (end_res - beg_res) << std::endl;
+    std::cout << "time ExchangeLET/TraverseLET " << (end_trv - beg_trv) << std::endl;
+    std::cout << "time ExchangeLET/Request "     << (end_req - beg_req) << std::endl;
+    std::cout << "time ExchangeLET/Select "      << (end_sel - beg_sel) << std::endl;
+    std::cout << "time ExchangeLET/Response "    << (end_res - beg_res) << std::endl;
   }
 #endif
 }
