@@ -1034,7 +1034,7 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
     int rank = c1.data_->mpi_rank_;
     
     if (rank == 0) {
-      std::cerr << "********** Map **********" << std::endl;
+      //std::cerr << "********** Map **********" << std::endl;
     }
 
     ExchangeLET<TSP>(c1);
