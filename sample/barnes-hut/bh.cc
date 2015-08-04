@@ -16,8 +16,13 @@ typedef double real_t;
 
 const constexpr int DIM = 3;
 const real_t EPS2 = 1e-6;
+
+// Global variables
 int mpi_size = 1;
 int mpi_rank = 0;
+int seed = 0;     // random seed
+int N_total = -1; // Total number of particles
+real_t OPS = 0;
 
 struct float4 {
   real_t x;
@@ -202,24 +207,73 @@ static void interact(Tapas::Cell &c1, Tapas::Cell &c2, real_t theta) {
 
 typedef tapas::Vec<DIM, real_t> Vec3;
 
+const char *dumpFileName = "approx.dat";
+
+void DumpApproximate(Tapas::Cell *root) {
+  // Dump random seed, number of bodies, and body_attrs
+  // File name is fixed for now.
+  std::ofstream out(dumpFileName);
+  assert(out.good());
+  out << seed << std::endl;
+  out << N_total << std::endl;
+  
+  std::function<void (Tapas::Cell&)> dumper = [&out, &dumper](Tapas::Cell &cell) {
+    out << cell.key() << " ";
+    out << std::scientific << cell.attr().x << " ";
+    out << std::scientific << cell.attr().y << " ";
+    out << std::scientific << cell.attr().z << " ";
+    out << std::scientific << cell.attr().w << " ";
+    out << std::endl;
+    if (!cell.IsLeaf()) {
+      tapas::Map(dumper, cell.subcells());
+    }
+  };
+
+  tapas::Map(dumper, *root);
+
+  out.close();
+}
+
+void LoadApproximate(Tapas::Cell *root) {
+#ifdef USE_MPI
+  std::ifstream in(dumpFileName);
+  assert(in.good());
+  
+  int seed2 = 0, N_total2 = 0;
+  in >> seed2 >> N_total2;
+  assert(seed == seed2);
+  assert(N_total == N_total2);
+
+  auto &ht = root->data().ht_;
+
+  while(!in.eof()) {
+    Tapas::Cell::SFC::KeyType k;
+    float4 v;
+    in >> k >> v.x >> v.y >> v.z >> v.w;
+
+    if (ht.count(k) > 0) {
+      assert(ht[k] != nullptr);
+      ht[k]->attr() = v;
+    }
+  }
+#endif
+}
+
 float4 *calc(float4 *p, size_t np) {
 #ifdef USE_MPI
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 #endif
   
-  // PartitionBSP is a function that partitions the given set of
-  // particles by the binary space partitioning. The result is a
-  // octree for 3D particles and a quadtree for 2D particles.
   Tapas::Region r(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 1.0, 1.0));
   Tapas::Cell *root = Tapas::Partition(p, np, r, 1);
-
 
   // FIXME: this line is skipped for multi-process run because
   //        ExchangeLET for approximate phase is not yet implemented.
   if (mpi_size == 1) {
     tapas::Map(approximate, *root); // or, simply: approximate(*root);
+    DumpApproximate(root);
   } else {
-    // Load upward result from a file
+    LoadApproximate(root);
   }
   
   real_t theta = 0.5;
@@ -229,8 +283,6 @@ float4 *calc(float4 *p, size_t np) {
   float4 *out = root->body_attrs();
 
   // Get the re-ordered sourceHost
-  assert(np == root->nbodies());
-  
   for (int i = 0; i < np; i++) {
     p[i] = root->body(i);
   }
@@ -238,7 +290,6 @@ float4 *calc(float4 *p, size_t np) {
 }
 
 void setRandSeed() {
-  int seed = 0;
   if (mpi_rank == 0) {
     if (getenv("TAPAS_SEED")) {
       seed = atoi(getenv("TAPAS_SEED"));
@@ -254,9 +305,6 @@ void setRandSeed() {
 
   srand48(seed);
 }
-
-// Total number of particles.
-int N_total = -1;
 
 void parseOption(int *argc, char ***argv) {
   int result;
@@ -285,6 +333,52 @@ void parseOption(int *argc, char ***argv) {
   *argc = optind;
 }
 
+void CheckResult(int np_check,
+                 float4 *sourceHost,
+                 float4 *targetTapas,
+                 float4 *targetHost) {
+  int N = N_total / mpi_size;
+  
+  // ------ Force evalution by direct computation (for validation)
+  if (mpi_size == 1) {
+    double tic = get_time();
+    P2P(targetHost, sourceHost, np_check, N, EPS2);
+    double toc = get_time();
+    std::cout << std::scientific << "No SSE : " << toc-tic << " s : "
+              << OPS / (toc-tic) << " GFlops" << std::endl;
+  }
+  
+#ifdef DUMP
+  std::ofstream ref_out("bh_ref.txt");
+  std::ofstream tapas_out("bh_tapas.txt");
+#endif
+
+  // COMPARE RESULTS
+  if (mpi_size == 1) {
+    real_t pd = 0, pn = 0, fd = 0, fn = 0;
+    for(int i = 0; i < np_check; i++ ) {
+#ifdef DUMP
+      ref_out << targetHost[i].x << " " << targetHost[i].y << " "
+              << targetHost[i].z << " " << targetHost[i].w << std::endl;
+      tapas_out << targetTapas[i].x << " " << targetTapas[i].y << " "
+                << targetTapas[i].z << " " << targetTapas[i].w << std::endl;
+#endif
+      targetHost[i].w -= sourceHost[i].w / sqrtf(EPS2);
+      targetTapas[i].w -= sourceHost[i].w / sqrtf(EPS2);
+      pd += (targetHost[i].w - targetTapas[i].w) * (targetHost[i].w - targetTapas[i].w); // d^2, where d = potential diff
+      pn += targetHost[i].w * targetHost[i].w;
+      fd += (targetHost[i].x - targetTapas[i].x) * (targetHost[i].x - targetTapas[i].x)
+            + (targetHost[i].y - targetTapas[i].y) * (targetHost[i].y - targetTapas[i].y)
+            + (targetHost[i].z - targetTapas[i].z) * (targetHost[i].z - targetTapas[i].z);
+      fn += targetHost[i].x * targetHost[i].x + targetHost[i].y * targetHost[i].y + targetHost[i].z * targetHost[i].z;
+    }
+    std::cout << std::scientific << "P ERR  : " << sqrtf(pd/pn) << std::endl;
+    std::cout << std::scientific << "F ERR  : " << sqrtf(fd/fn) << std::endl;
+  } else {
+    std::cout << "Skipping result check" << std::endl;
+  }
+}
+
 int main(int argc, char **argv) {
 #ifdef USE_MPI
   int provided, required = MPI_THREAD_MULTIPLE;
@@ -302,13 +396,13 @@ int main(int argc, char **argv) {
   }
 
   // NOTE: Total number of particles is N * size (weak scaling)
-  const real_t OPS = 20. * N_total * N_total * 1e-9;
   assert(N_total % mpi_size == 0);
   int N = N_total / mpi_size;
+  OPS = 20. * N_total * N_total * 1e-9;  
 
   std::cout << "time n_total " << N_total << std::endl;
   std::cout << "time n_per_proc " << (N_total / mpi_size) << std::endl;
-  
+
   float4 *sourceHost = new float4 [N];
   float4 *targetHost = new float4 [N];
 
@@ -343,46 +437,9 @@ int main(int argc, char **argv) {
   std::cout << "time total_calc "   << std::scientific << toc-tic << " s" << std::endl;
   std::cout << "time total_gflops " << std::scientific << OPS / (toc-tic) << " GFlops" << std::endl;
 
-  // ------ Force evalution by direct computation (for validation)
-  if (mpi_size == 1) {
-    double tic = get_time();
-    P2P(targetHost, sourceHost, N, N, EPS2);
-    double toc = get_time();
-    std::cout << std::scientific << "No SSE : " << toc-tic << " s : "
-              << OPS / (toc-tic) << " GFlops" << std::endl;
-  }
+  CheckResult(std::min(100, N), sourceHost, targetTapas, targetHost);
   
-#ifdef DUMP
-  std::ofstream ref_out("bh_ref.txt");
-  std::ofstream tapas_out("bh_tapas.txt");
-#endif
-
-  // COMPARE RESULTS
-  if (mpi_size == 1) {
-    real_t pd = 0, pn = 0, fd = 0, fn = 0;
-    for( int i=0; i<N; i++ ) {
-#ifdef DUMP
-      ref_out << targetHost[i].x << " " << targetHost[i].y << " "
-              << targetHost[i].z << " " << targetHost[i].w << std::endl;
-      tapas_out << targetTapas[i].x << " " << targetTapas[i].y << " "
-                << targetTapas[i].z << " " << targetTapas[i].w << std::endl;
-#endif
-      targetHost[i].w -= sourceHost[i].w / sqrtf(EPS2);
-      targetTapas[i].w -= sourceHost[i].w / sqrtf(EPS2);
-      pd += (targetHost[i].w - targetTapas[i].w) * (targetHost[i].w - targetTapas[i].w);
-      pn += targetHost[i].w * targetHost[i].w;
-      fd += (targetHost[i].x - targetTapas[i].x) * (targetHost[i].x - targetTapas[i].x)
-            + (targetHost[i].y - targetTapas[i].y) * (targetHost[i].y - targetTapas[i].y)
-            + (targetHost[i].z - targetTapas[i].z) * (targetHost[i].z - targetTapas[i].z);
-      fn += targetHost[i].x * targetHost[i].x + targetHost[i].y * targetHost[i].y + targetHost[i].z * targetHost[i].z;
-    }
-    std::cout << std::scientific << "P ERR  : " << sqrtf(pd/pn) << std::endl;
-    std::cout << std::scientific << "F ERR  : " << sqrtf(fd/fn) << std::endl;
-  } else {
-    std::cout << "Skipping result check" << std::endl;
-  }
-
-// DEALLOCATE
+  // DEALLOCATE
   delete[] sourceHost;
   delete[] targetHost;
   //delete[] targetTapas;
