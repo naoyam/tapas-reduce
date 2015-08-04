@@ -59,8 +59,8 @@ double get_time() {
 }
 
 
-void P2P(f4vec &target, f4vec &source, float eps2) {
-  int ni = target.size();
+void P2P(f4vec &tattrs, f4vec &tbodies, f4vec &source, float eps2) {
+  int ni = tbodies.size();
   int nj = source.size();
   
 #pragma omp parallel for
@@ -69,9 +69,9 @@ void P2P(f4vec &target, f4vec &source, float eps2) {
     real_t ay = 0;
     real_t az = 0;
     real_t phi = 0;
-    real_t xi = source[i].x;
-    real_t yi = source[i].y;
-    real_t zi = source[i].z;
+    real_t xi = tbodies[i].x;
+    real_t yi = tbodies[i].y;
+    real_t zi = tbodies[i].z;
     for (int j=0; j<nj; j++) {
       real_t dx = source[j].x - xi;
       real_t dy = source[j].y - yi;
@@ -84,10 +84,10 @@ void P2P(f4vec &target, f4vec &source, float eps2) {
       ay += dy * invR3;
       az += dz * invR3;
     }
-    target[i].w = phi;
-    target[i].x = ax;
-    target[i].y = ay;
-    target[i].z = az;
+    tattrs[i].w += phi;
+    tattrs[i].x += ax;
+    tattrs[i].y += ay;
+    tattrs[i].z += az;
   }
 }
 
@@ -338,14 +338,18 @@ void parseOption(int *argc, char ***argv) {
 
 void CheckResult(int np_check,
                  f4vec &sourceHost,
-                 f4vec &targetTapas,
-                 f4vec &targetHost) {
-  int N = N_total / mpi_size;
+                 f4vec &targetTapas) {
+  // sourceHost: local source bodies
+  // targetTapas : target attrs computed by Tapas
+  // tbodies : sampled target bodies (small portion of sourceHost)
+  // tattrs  : target attrs to be computed directly in this function
+  f4vec tbodies(sourceHost.begin(), sourceHost.begin() + np_check);
+  f4vec tattrs(np_check);
   
   // ------ Force evalution by direct computation (for validation)
   if (mpi_size == 1) {
     double tic = get_time();
-    P2P(targetHost, sourceHost, EPS2);
+    P2P(tattrs, tbodies, sourceHost, EPS2);
     double toc = get_time();
     std::cout << std::scientific << "No SSE : " << toc-tic << " s : "
               << OPS / (toc-tic) << " GFlops" << std::endl;
@@ -361,19 +365,19 @@ void CheckResult(int np_check,
     real_t pd = 0, pn = 0, fd = 0, fn = 0;
     for(int i = 0; i < np_check; i++ ) {
 #ifdef DUMP
-      ref_out << targetHost[i].x << " " << targetHost[i].y << " "
-              << targetHost[i].z << " " << targetHost[i].w << std::endl;
+      ref_out << tattrs[i].x << " " << tattrs[i].y << " "
+              << tattrs[i].z << " " << tattrs[i].w << std::endl;
       tapas_out << targetTapas[i].x << " " << targetTapas[i].y << " "
                 << targetTapas[i].z << " " << targetTapas[i].w << std::endl;
 #endif
-      targetHost[i].w -= sourceHost[i].w / sqrtf(EPS2);
+      tattrs[i].w -= sourceHost[i].w / sqrtf(EPS2);
       targetTapas[i].w -= sourceHost[i].w / sqrtf(EPS2);
-      pd += (targetHost[i].w - targetTapas[i].w) * (targetHost[i].w - targetTapas[i].w); // d^2, where d = potential diff
-      pn += targetHost[i].w * targetHost[i].w;
-      fd += (targetHost[i].x - targetTapas[i].x) * (targetHost[i].x - targetTapas[i].x)
-            + (targetHost[i].y - targetTapas[i].y) * (targetHost[i].y - targetTapas[i].y)
-            + (targetHost[i].z - targetTapas[i].z) * (targetHost[i].z - targetTapas[i].z);
-      fn += targetHost[i].x * targetHost[i].x + targetHost[i].y * targetHost[i].y + targetHost[i].z * targetHost[i].z;
+      pd += (tattrs[i].w - targetTapas[i].w) * (tattrs[i].w - targetTapas[i].w); // d^2, where d = potential diff
+      pn += tattrs[i].w * tattrs[i].w;
+      fd += (tattrs[i].x - targetTapas[i].x) * (tattrs[i].x - targetTapas[i].x)
+            + (tattrs[i].y - targetTapas[i].y) * (tattrs[i].y - targetTapas[i].y)
+            + (tattrs[i].z - targetTapas[i].z) * (tattrs[i].z - targetTapas[i].z);
+      fn += tattrs[i].x * tattrs[i].x + tattrs[i].y * tattrs[i].y + tattrs[i].z * tattrs[i].z;
     }
     std::cout << std::scientific << "P ERR  : " << sqrtf(pd/pn) << std::endl;
     std::cout << std::scientific << "F ERR  : " << sqrtf(fd/fn) << std::endl;
@@ -407,7 +411,6 @@ int main(int argc, char **argv) {
   std::cout << "time n_per_proc " << (N_total / mpi_size) << std::endl;
 
   f4vec sourceHost(N);
-  f4vec targetHost(N);
 
   setRandSeed();
 
@@ -440,7 +443,7 @@ int main(int argc, char **argv) {
   std::cout << "time total_calc "   << std::scientific << toc-tic << " s" << std::endl;
   std::cout << "time total_gflops " << std::scientific << OPS / (toc-tic) << " GFlops" << std::endl;
 
-  CheckResult(std::min(100, N), sourceHost, targetTapas, targetHost);
+  CheckResult(std::min(100, N), sourceHost, targetTapas);
   
   // DEALLOCATE
   
