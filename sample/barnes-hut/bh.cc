@@ -31,6 +31,8 @@ struct float4 {
   real_t w;
 };
 
+typedef std::vector<float4> f4vec;
+
 typedef tapas::BodyInfo<float4, 0> BodyInfo;
 
 #ifdef USE_MPI
@@ -57,7 +59,10 @@ double get_time() {
 }
 
 
-void P2P(float4 *target, float4 *source, int ni, int nj, float eps2) {
+void P2P(f4vec &target, f4vec &source, float eps2) {
+  int ni = target.size();
+  int nj = source.size();
+  
 #pragma omp parallel for
   for (int i=0; i<ni; i++) {
     real_t ax = 0;
@@ -259,13 +264,13 @@ void LoadApproximate(Tapas::Cell *root) {
 #endif
 }
 
-float4 *calc(float4 *p, size_t np) {
+f4vec calc(f4vec &source, size_t np) {
 #ifdef USE_MPI
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 #endif
   
   Tapas::Region r(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 1.0, 1.0));
-  Tapas::Cell *root = Tapas::Partition(p, np, r, 1);
+  Tapas::Cell *root = Tapas::Partition(source.data(), source.size(), r, 1);
 
   // FIXME: this line is skipped for multi-process run because
   //        ExchangeLET for approximate phase is not yet implemented.
@@ -280,12 +285,10 @@ float4 *calc(float4 *p, size_t np) {
   tapas::Map(interact, tapas::Product(*root, *root), theta);
 
   // Get the evaluation result from Tapas
-  float4 *out = root->body_attrs();
+  int nb = root->nbodies();
+  f4vec out(&root->body_attr(0), &root->body_attr(0) + nb);
+  source = f4vec(&root->body(0), &root->body(0) + nb);
 
-  // Get the re-ordered sourceHost
-  for (int i = 0; i < np; i++) {
-    p[i] = root->body(i);
-  }
   return out;
 }
 
@@ -334,15 +337,15 @@ void parseOption(int *argc, char ***argv) {
 }
 
 void CheckResult(int np_check,
-                 float4 *sourceHost,
-                 float4 *targetTapas,
-                 float4 *targetHost) {
+                 f4vec &sourceHost,
+                 f4vec &targetTapas,
+                 f4vec &targetHost) {
   int N = N_total / mpi_size;
   
   // ------ Force evalution by direct computation (for validation)
   if (mpi_size == 1) {
     double tic = get_time();
-    P2P(targetHost, sourceHost, np_check, N, EPS2);
+    P2P(targetHost, sourceHost, EPS2);
     double toc = get_time();
     std::cout << std::scientific << "No SSE : " << toc-tic << " s : "
               << OPS / (toc-tic) << " GFlops" << std::endl;
@@ -403,8 +406,8 @@ int main(int argc, char **argv) {
   std::cout << "time n_total " << N_total << std::endl;
   std::cout << "time n_per_proc " << (N_total / mpi_size) << std::endl;
 
-  float4 *sourceHost = new float4 [N];
-  float4 *targetHost = new float4 [N];
+  f4vec sourceHost(N);
+  f4vec targetHost(N);
 
   setRandSeed();
 
@@ -432,7 +435,7 @@ int main(int argc, char **argv) {
 
   // ------ Force evalution by Tapas
   double tic = get_time();
-  float4 *targetTapas = calc(sourceHost, N);
+  f4vec targetTapas = calc(sourceHost, N);
   double toc = get_time();
   std::cout << "time total_calc "   << std::scientific << toc-tic << " s" << std::endl;
   std::cout << "time total_gflops " << std::scientific << OPS / (toc-tic) << " GFlops" << std::endl;
@@ -440,10 +443,7 @@ int main(int argc, char **argv) {
   CheckResult(std::min(100, N), sourceHost, targetTapas, targetHost);
   
   // DEALLOCATE
-  delete[] sourceHost;
-  delete[] targetHost;
-  //delete[] targetTapas;
-
+  
 #ifdef USE_MPI
   MPI_Finalize();
 #endif
