@@ -582,18 +582,19 @@ void ExchangeLET(Cell<TSP> &root) {
   double beg_req, end_req;
   double beg_sel, end_sel;
   double beg_res, end_res;
+  double beg_reg, end_reg;
 #endif
   
   KeySet req_keys_attr; // cells of which attributes are to be transfered from remotes to local
   KeySet req_keys_body; // cells of which bodies are to be transfered from remotes to local
-
-  req_keys_attr.insert(root.key());
 
 #ifdef TAPAS_MEASURE
   beg_all = MPI_Wtime();
   beg_trv = MPI_Wtime();
 #endif
     
+  req_keys_attr.insert(root.key());
+
   // Construct request lists of necessary cells
   for (int bi = 0; bi < root.nbodies(); bi++) {
     BodyType &b = root.body(bi);
@@ -752,6 +753,10 @@ void ExchangeLET(Cell<TSP> &root) {
   end_res = MPI_Wtime();
 #endif
   // TODO: send body attributes
+
+#ifdef TAPAS_MEASURE
+  beg_reg = MPI_Wtime();
+#endif
   
   data.let_bodies_ = body_recv;
   
@@ -788,6 +793,10 @@ void ExchangeLET(Cell<TSP> &root) {
     }
   }
   
+#ifdef TAPAS_MEASURE
+  end_reg = MPI_Wtime();
+#endif
+  
   //MPI_Finalize();
   //exit(0);
 
@@ -816,7 +825,7 @@ void ExchangeLET(Cell<TSP> &root) {
   }
 #endif
 
-#ifndef TAPAS_DEBUG
+#ifdef TAPAS_MEASURE
   end_all = MPI_Wtime();
   if (root.data().mpi_rank_ == 0) {
     std::cout << "time ExchangeLET " << (end_all - beg_all) << std::endl;
@@ -824,6 +833,7 @@ void ExchangeLET(Cell<TSP> &root) {
     std::cout << "time ExchangeLET/Request "     << (end_req - beg_req) << std::endl;
     std::cout << "time ExchangeLET/Select "      << (end_sel - beg_sel) << std::endl;
     std::cout << "time ExchangeLET/Response "    << (end_res - beg_res) << std::endl;
+    std::cout << "time ExchangeLET/Register "    << (end_reg - beg_reg) << std::endl;
   }
 #endif
 }
