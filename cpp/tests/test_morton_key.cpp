@@ -69,10 +69,9 @@ TEST(TestMorton, TestIsDescendant) {
 
 TEST(TestMorton, TestLETRequirement) {
   const constexpr int Dim = 2;
-  
   using K = tapas::sfc::Morton<Dim, uint64_t>;
   using KeyType = K::KeyType;
-
+  
   auto comp = [](KeyType a, KeyType b) {
     return K::RemoveDepth(a) < K::RemoveDepth(b);
   };

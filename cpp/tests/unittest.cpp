@@ -4,23 +4,10 @@
 
 #include <tapas/common.h>
 #include <tapas/map.h>
-#include <tapas/hot.h>
+#include <utility>
+#include <set>
 
 template<class T> using V = std::vector<T>;
-
-#define DEF_STREAM_HELPER(TYPE)                                         \
-  template <>                                                           \
-  inline void GTestStreamToHelper<std::vector<TYPE>>(std::ostream* os, const std::vector<TYPE>& v) { \
-    *os << "[";                                                         \
-    for (size_t i = 0; i < v.size(); i++) {                             \
-      *os << v[i];                                                      \
-      *os << (i == v.size() - 1 ? "" : ",");                            \
-    }                                                                   \
-    *os << "]";                                                         \
-  }
-
-DEF_STREAM_HELPER(int)
-DEF_STREAM_HELPER(char)
 
 #include "test_morton_key.cpp"
 
@@ -35,6 +22,8 @@ TEST(TestAlgorithm, TestSortByKeys) {
   ASSERT_EQ(ans_keys, keys);
 }
 
+#if 0
+// SetUnion is no longer used
 TEST(TestMap, TestSetUnion) {
   using tapas::hot::SetUnion;
   typedef std::vector<int> Vi;
@@ -70,8 +59,26 @@ TEST(TestMap, TestSetUnion) {
     ASSERT_TRUE(ans == SetUnion(a,b));
   }
 }
+#endif
 
-TEST(TestDiff, TestDiff) {
-  using tapas::ContainerDiff;
-  
+TEST(TestSet, TestIfSetIsSorted) {
+  // Test if std::set (not unordered_set) iterates over the elements in a sorted fasion.
+  srand(0);
+  const int N = 100;
+  std::set<std::pair<int, double>> S;
+
+  for (int i = 0; i < N; i++) {
+    S.insert(std::make_pair(rand(), drand48()));
+  }
+
+  std::vector<int> v;
+  for (auto &&itr : S) {
+    v.push_back(itr.first);
+  }
+
+  // check if v is sorted.
+  for (size_t i = 0; i < v.size()-1; i++) {
+    ASSERT_TRUE(v[i] <= v[i+1]);
+  }
 }
+

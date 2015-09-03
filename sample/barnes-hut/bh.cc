@@ -98,6 +98,13 @@ static real_t distR2(const float4 &p, const float4 &q) {
   return dx * dx + dy * dy + dz * dz;
 }
 
+static real_t distR2(const tapas::Vec<3, double> &p, const float4 &q) {
+  real_t dx = q.x - p[0];
+  real_t dy = q.y - p[1];
+  real_t dz = q.z - p[2];
+  return dx * dx + dy * dy + dz * dz;
+}
+
 
 static void ComputeForce(Tapas::BodyIterator &p1, 
                          float4 approx, real_t eps2) {
@@ -114,27 +121,18 @@ static void ComputeForce(Tapas::BodyIterator &p1,
 }
 
 static void approximate(Tapas::Cell &c) {
-#ifdef DUMP
-  std::cerr << "Approximate: " << c.key() << std::endl;
-#endif
-
-  if (c.nb() == 0) {
-    c.attr().w = 0.0;
+  if (c.IsLeaf()) {
+    if (c.nb() == 0) {
+      c.attr().w = 0.0;
 #if 0
-    c.attr().x = 0.0;
-    c.attr().y = 0.0;
-    c.attr().z = 0.0;
+      c.attr().x = 0.0;
+      c.attr().y = 0.0;
+      c.attr().z = 0.0;
 #endif
-
-#ifdef DUMP
-    std::cerr << "Empty" << std::endl;
-#endif
-
-  } else if (c.nb() == 1) {
-    c.attr() = c.body(0);
-#ifdef DUMP
-    std::cerr << "One particle" << std::endl;
-#endif
+    } else if (c.nb() == 1) {
+      c.attr() = c.body(0);
+    }
+    else { assert(false); }
   } else {
     tapas::Map(approximate, c.subcells());
     float4 center = {0.0, 0.0, 0.0, 0.0};
@@ -153,58 +151,30 @@ static void approximate(Tapas::Cell &c) {
 }
 
 static void interact(Tapas::Cell &c1, Tapas::Cell &c2, real_t theta) {
-#ifdef TAPAS_DEBUG
-  {
-    Stderr e("interact");
-    e.out() << "Head." << std::endl;
-    e.out() << "\t" << Tapas::Cell::SFC::Decode(c1.key()) << std::endl;
-    e.out() << "\t" << Tapas::Cell::SFC::Decode(c2.key()) << std::endl;
-  }
-#endif
-  
-  if (c1.nb() == 0 || c2.nb() == 0) {
-    return;
-  } else if (!c1.IsLeaf()) {
+  if (!c1.IsLeaf()) {
     tapas::Map(interact, tapas::Product(c1.subcells(), c2), theta);
+  } else if (c1.IsLeaf() && c1.nb() == 0) {
+    return;
   } else if (c2.IsLeaf()) {
-#ifdef TAPAS_DEBUG
-    {
-      Stderr e("interact");
-      e.out() << "Leaf/leaf." << std::endl;
-      e.out() << "\t" << Tapas::Cell::SFC::Decode(c1.key()) << std::endl;
-      e.out() << "\t" << Tapas::Cell::SFC::Decode(c2.key()) << std::endl;
+    if (c2.nb() == 0) {
+      return;
+    } else {
+      // Both of c1 and c2 are leaves.
+      // c1 and c2 have only one particle each. Calculate direct force.
+      tapas::Map(ComputeForce, c1.bodies(), c2.body(0), EPS2);
     }
-#endif
-    
-    // c1 and c2 have only one particle each. Calculate direct force.
-    //tapas::Map(ComputeForce, tapas::Product(c1.particles(),
-    //c2.particles()));
-    tapas::Map(ComputeForce, c1.bodies(), c2.body(0), EPS2);
   } else {
+    assert(c1.IsLeaf() && !c2.IsLeaf());
+    
     // use apploximation
     const float4 &p1 = c1.body(0);
-    real_t d = std::sqrt(distR2(c2.attr(), p1));
+    real_t d = std::sqrt(distR2(c2.center(), p1));
+    //real_t d = std::sqrt(distR2(c2.attr(), p1));
     real_t s = c2.width(0);
-    
+
     if ((s/ d) < theta) {
-#ifdef TAPAS_DEBUG
-      {
-        Stderr e("interact");
-        e.out() << "Leaf/branch. far enough. approximate." << std::endl;
-        e.out() << "\t" << Tapas::Cell::SFC::Decode(c1.key()) << std::endl;
-        e.out() << "\t" << Tapas::Cell::SFC::Decode(c2.key()) << std::endl;
-      }
-#endif
       tapas::Map(ComputeForce, c1.bodies(), c2.attr(), EPS2);
     } else {
-#ifdef TAPAS_DEBUG
-      {
-        Stderr e("interact");
-        e.out() << "Leaf/branch. close. recursive." << std::endl;
-        e.out() << "\t" << Tapas::Cell::SFC::Decode(c1.key()) << std::endl;
-        e.out() << "\t" << Tapas::Cell::SFC::Decode(c2.key()) << std::endl;
-      }
-#endif
       tapas::Map(interact, tapas::Product(c1, c2.subcells()), theta);
     }
   }
@@ -243,6 +213,8 @@ void LoadApproximate(Tapas::Cell *root) {
 #ifdef USE_MPI
   std::ifstream in(dumpFileName);
   assert(in.good());
+  int rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   
   int seed2 = 0, N_total2 = 0;
   in >> seed2 >> N_total2;
@@ -257,6 +229,7 @@ void LoadApproximate(Tapas::Cell *root) {
     in >> k >> v.x >> v.y >> v.z >> v.w;
 
     if (ht.count(k) > 0) {
+      assert(ht.count(k) == 1);
       assert(ht[k] != nullptr);
       ht[k]->attr() = v;
     }
@@ -265,29 +238,23 @@ void LoadApproximate(Tapas::Cell *root) {
 }
 
 f4vec calc(f4vec &source, size_t np) {
-#ifdef USE_MPI
-  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
-#endif
-  
   Tapas::Region r(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 1.0, 1.0));
   Tapas::Cell *root = Tapas::Partition(source.data(), source.size(), r, 1);
 
-  // FIXME: this line is skipped for multi-process run because
-  //        ExchangeLET for approximate phase is not yet implemented.
-  if (mpi_size == 1) {
-    tapas::Map(approximate, *root); // or, simply: approximate(*root);
-    DumpApproximate(root);
-  } else {
-    LoadApproximate(root);
-  }
+#ifdef USE_MPI
+  LoadApproximate(root);
+#else
+  tapas::Map(approximate, *root); // or, simply: approximate(*root);
+  DumpApproximate(root);
+#endif
   
   real_t theta = 0.5;
   tapas::Map(interact, tapas::Product(*root, *root), theta);
 
   // Get the evaluation result from Tapas
-  int nb = root->nbodies();
-  f4vec out(&root->body_attr(0), &root->body_attr(0) + nb);
-  source = f4vec(&root->body(0), &root->body(0) + nb);
+  int nb = root->local_nb();
+  f4vec out(&root->local_body_attr(0), &root->local_body_attr(0) + nb);
+  source = f4vec(&root->local_body(0), &root->local_body(0) + nb);
 
   return out;
 }
@@ -354,15 +321,63 @@ void CheckResult(int np_check,
     std::cout << std::scientific << "No SSE : " << toc-tic << " s : "
               << OPS / (toc-tic) << " GFlops" << std::endl;
   }
+#ifdef USE_MPI
+  else {
+    for (int i = 0; i < mpi_size; i++) {
+      int src = i;
+      int dst = (i + 1) % mpi_size;
+      
+      if (mpi_rank == src) {
+        std::cerr << "Computing on rank " << mpi_rank << " and sending to " << dst << std::endl;
+        P2P(tattrs, tbodies, sourceHost, EPS2);
+        MPI_Send(tattrs.data(), tattrs.size() * sizeof(tattrs[0]), MPI_BYTE, dst, 0, MPI_COMM_WORLD);
+        MPI_Send(tbodies.data(), tbodies.size() * sizeof(tbodies[0]), MPI_BYTE, dst, 0, MPI_COMM_WORLD);
+      } else if (mpi_rank == dst) {
+        MPI_Status st;
+        MPI_Recv(tattrs.data(), tattrs.size() * sizeof(tattrs[0]), MPI_BYTE, src, 0, MPI_COMM_WORLD, &st);
+        MPI_Recv(tbodies.data(), tbodies.size() * sizeof(tbodies[0]), MPI_BYTE, src, 0, MPI_COMM_WORLD, &st);
+      }
+      
+      MPI_Barrier(MPI_COMM_WORLD);
+    }
+  }
+#endif
   
 #ifdef DUMP
   std::ofstream ref_out("bh_ref.txt");
   std::ofstream tapas_out("bh_tapas.txt");
 #endif
 
+#ifdef USE_MPI
+  tapas::hot::BarrierExec([&tattrs](int rank, int size) {
+      std::stringstream ss;
+      ss << "direct_" << mpi_size << ".dat";
+      std::ofstream ofs(ss.str().c_str());
+      for (size_t i = 0; i < tattrs.size(); i++) {
+        ofs << tattrs[i].x << " "
+            << tattrs[i].y << " "
+            << tattrs[i].z << " "
+            << tattrs[i].w << std::endl;
+      }
+      ofs.close();
+    });
+#else // USE_MPI
+  std::stringstream ss;
+  ss << "direct.dat";
+  std::ofstream ofs(ss.str().c_str());
+  for (size_t i = 0; i < tattrs.size(); i++) {
+    ofs << tattrs[i].x << " "
+        << tattrs[i].y << " "
+        << tattrs[i].z << " "
+        << tattrs[i].w << std::endl;
+  }
+  ofs.close();
+#endif
+
   // COMPARE RESULTS
-  if (mpi_size == 1) {
+  if (mpi_rank == 0) {
     real_t pd = 0, pn = 0, fd = 0, fn = 0;
+    
     for(int i = 0; i < np_check; i++ ) {
 #ifdef DUMP
       ref_out << tattrs[i].x << " " << tattrs[i].y << " "
@@ -381,8 +396,6 @@ void CheckResult(int np_check,
     }
     std::cout << std::scientific << "P ERR  : " << sqrtf(pd/pn) << std::endl;
     std::cout << std::scientific << "F ERR  : " << sqrtf(fd/fn) << std::endl;
-  } else {
-    std::cout << "Skipping result check" << std::endl;
   }
 }
 

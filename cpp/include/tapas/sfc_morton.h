@@ -8,6 +8,7 @@
 #include <utility>
 #include <list>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "tapas/vec.h"
 
