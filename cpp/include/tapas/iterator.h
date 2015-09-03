@@ -69,6 +69,10 @@ class BodyIterator {
   template <class T>
   bool operator==(const T &) const { return false; }
   bool AllowMutualInteraction(const BodyIterator &x) const {
+    // unconditionally returns false.
+    // This function is created to support ExaFMM's mutual interaction behavior
+    // but it is not supported in Tapas.
+    return false;
     return c_ == x.c_;
   }
 };
@@ -81,6 +85,8 @@ class CellIterator {
   typedef CELL value_type;
   typedef CELL CellType;
   typedef typename CELL::attr_type attr_type;
+  using KeyType = typename CellType::KeyType;
+  
   CELL &operator*() {
     return c_;
   }
@@ -93,6 +99,20 @@ class CellIterator {
   CELL &operator++(int) {
     return c_;
   }
+  
+  bool IsLocal() const {
+#ifdef USE_MPI
+    KeyType k = key();
+    return c_.data().ht_.count(k) > 0;
+#else
+    return true;
+#endif
+  }
+
+  KeyType key() const {
+    return c_.key();
+  }
+
   attr_type &attr() {
     return c_.attr();
   }
@@ -117,6 +137,7 @@ class CellIterator {
     return 1;
   }
   bool AllowMutualInteraction(const CellIterator &x) const {
+    return false;
     return c_ == x.c_;
   }
 }; // class CellIterator
@@ -126,9 +147,11 @@ class SubCellIterator {
   Cell &c_;
   int idx_;
  public:
-  typedef Cell CellType;
-  typedef CellType value_type;
-  typedef typename CellType::attr_type attr_type;
+  using CellType = Cell;
+  using value_type = CellType;
+  using attr_type = typename CellType::attr_type;
+  using KeyType = typename CellType::KeyType;
+  using SFC = typename CellType::SFC;
   
   SubCellIterator(CellType &c): c_(c), idx_(0) {}
   SubCellIterator(const SubCellIterator& rhs) : c_(rhs.c_),idx_(rhs.idx_) {}
@@ -145,18 +168,36 @@ class SubCellIterator {
       return 1 << CellType::Dim;
     }
   }
+  
   value_type &operator*() {
     return c_.subcell(idx_);
   }
-  value_type &operator++() {
-    typename Cell::KeyType kn = Cell::SFC::GetNext(c_.key());
 
-    if (c_.data().ht_.count(kn) > 0 || c_.data().ht_let_.count(kn)) {
-    }
-    return c_.subcell(++idx_);
+  bool IsLocal() const {
+#ifdef USE_MPI
+    KeyType k = key();
+    return c_.data().ht_.count(k) > 0;
+#else
+    return true;
+#endif
   }
-  value_type &operator++(int) {
-    return c_.subcell(idx_++);
+  
+  KeyType key() const {
+    KeyType pk = c_.key();
+    KeyType ck = SFC::Child(pk, idx_);
+    return ck;
+  }
+  
+  // prefix increment operator
+  SubCellIterator<CellType> &operator++() {
+    idx_ = std::min(size(), idx_ + 1);
+    return *this;
+  }
+  
+  SubCellIterator<CellType> operator++(int) {
+    SubCellIterator<CellType> dup = *this;
+    ++(*this);
+    return dup;
   }
   void rewind(int idx) {
     idx_ = idx;
@@ -176,6 +217,7 @@ class SubCellIterator {
   template <class T>
   bool operator==(const T &) const { return false; }
   bool AllowMutualInteraction(const SubCellIterator &x) const {
+    return false;
     return c_ == x.c_;
   }
 }; // class SubCellIterator

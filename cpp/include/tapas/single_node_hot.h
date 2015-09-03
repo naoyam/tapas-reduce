@@ -113,7 +113,7 @@ class Cell: public tapas::BasicCell<TSP> {
     bool IsRoot() const;
     bool IsLeaf() const;
     int nsubcells() const;
-    int nbodies() const { return nb_; }
+    int local_nb() const { return nb_; } 
     Cell &subcell(int idx) const;
     Cell &parent() const;
   
@@ -132,17 +132,24 @@ class Cell: public tapas::BasicCell<TSP> {
    */
   BodyType& body(index_t idx);
   const BodyType& body(index_t idx) const;
+  BodyType& local_body(index_t idx);
+  const BodyType& local_body(index_t idx) const;
 
   /**
    * \brief Returns an attribute of the idx-th local body.
    */
   BodyAttrType &body_attr(index_t idx);
   const BodyAttrType &body_attr(index_t idx) const;
+  BodyAttrType &local_body_attr(index_t idx);
+  const BodyAttrType &local_body_attr(index_t idx) const;
   
   BodyIterator<Cell> bodies();
   
   BodyAttrType *body_attrs();
   const BodyAttrType *body_attrs() const;
+  
+  BodyAttrType *local_body_attrs();
+  const BodyAttrType *local_body_attrs() const;
   
 #ifdef DEPRECATED
     typename TSP::BT_ATTR *particle_attrs() const {
@@ -415,6 +422,16 @@ const typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
 }
 
 template <class TSP>
+typename TSP::BT::type &Cell<TSP>::local_body(index_t idx) {
+  return this->body(idx);
+}
+
+template <class TSP>
+const typename TSP::BT::type &Cell<TSP>::local_body(index_t idx) const {
+  return this->body(idx);
+}
+
+template <class TSP>
 typename TSP::BT_ATTR *Cell<TSP>::body_attrs() {
   return body_attrs_;
 }
@@ -425,12 +442,32 @@ const typename TSP::BT_ATTR *Cell<TSP>::body_attrs() const {
 }
 
 template <class TSP>
+typename TSP::BT_ATTR *Cell<TSP>::local_body_attrs() {
+  return body_attrs_;
+}
+
+template <class TSP>
+const typename TSP::BT_ATTR *Cell<TSP>::local_body_attrs() const {
+  return body_attrs_;
+}
+
+template <class TSP>
 typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) {
   return body_attrs_[this->bid_+idx];
 }
 
 template <class TSP>
 const typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) const {
+  return body_attrs_[this->bid_+idx];
+}
+
+template <class TSP>
+typename TSP::BT_ATTR &Cell<TSP>::local_body_attr(index_t idx) {
+  return body_attrs_[this->bid_+idx];
+}
+
+template <class TSP>
+const typename TSP::BT_ATTR &Cell<TSP>::local_body_attr(index_t idx) const {
   return body_attrs_[this->bid_+idx];
 }
 
@@ -610,7 +647,7 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
         c->ht()->insert(std::make_pair(child_key, child_cell));
         TAPAS_LOG_DEBUG() << "Particles: \n";
 #ifdef TAPAS_DEBUG    
-        tapas::debug::PrintBodies<Dim, typename TSP::FP, typename TSP::BT>(b+cur_offset, child_bn, std::cerr);
+        //tapas::debug::PrintBodies<Dim, typename TSP::FP, typename TSP::BT>(b+cur_offset, child_bn, std::cerr);
 #endif    
         Refine(child_cell, hn, b, cur_depth+1, child_key);
 

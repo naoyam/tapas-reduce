@@ -103,11 +103,13 @@ void Alltoallv(std::vector<T>& send_buf, std::vector<int>& dest,
   if(!MPI_DatatypeTraits<T>::IsEmbType()) {
     kType = MPI_BYTE;
     // If T is not an embedded type, MPI_BYTE and sizeof(T) is used.
-    for (auto &p : recv_disp) {
-      p *= sizeof(T);
+    for (size_t i = 0; i < recv_disp.size(); i++) {
+      recv_disp[i] *= sizeof(T);
+      recv_counts[i] *= sizeof(T);
     }
-    for (auto &p : send_disp) {
-      p *= sizeof(T);
+    for (size_t i = 0; i < send_disp.size(); i++) {
+      send_disp[i] *= sizeof(T);
+      send_counts[i] *= sizeof(T);
     }
   }
 

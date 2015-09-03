@@ -62,10 +62,10 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
                         Funct f, Args... args) {
   assert(beg1 < end1 && beg2 < end2);
   
-  typedef typename T1_Iter::value_type C1; // Container type (actually Body or Cell)
-  typedef typename T2_Iter::value_type C2;
-  typedef typename T1_Iter::CellType CellType;
-  typedef typename CellType::Threading Th;
+  using CellType = typename T1_Iter::CellType;
+  using C1 = typename T1_Iter::value_type; // Container type (actually Body or Cell)
+  using C2 = typename T2_Iter::value_type;
+  using Th = typename CellType::Threading;
 
   if (end1 - beg1 <= ThreadSpawnThreshold<T1_Iter>::Value ||
       end2 - beg2 <= ThreadSpawnThreshold<T2_Iter>::Value) {
@@ -80,7 +80,9 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
         // if i and j are mutually interactive, f(i,j) is evaluated only once.
         bool am = AllowMutual<T1_Iter, T2_Iter>::value(iter1, iter2);
         if ((am && i <= j) || !am) {
-          CellType::Map(*(iter1+i), *(iter2+j), g);
+          if (iter1.IsLocal()) {
+            CellType::Map(*(iter1+i), *(iter2+j), g);
+          }
         }
       }
     }
@@ -126,7 +128,9 @@ template <class Funct, class T1_Iter, class...Args>
 void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
   TAPAS_LOG_DEBUG() << "map product iterator size: "
                     << prod.size() << std::endl;
-#ifdef USE_NEW_PRODUCT_MAP
+#if 0
+  // This implementation using product_map is currently disabled because
+  // as of now 1-argument ProductIterator is not used.
   product_map(prod.t1_, 0, prod.t1_.size(),
               prod.t2_, 0, prod.t2_.size(),
               f, args...);

@@ -1,6 +1,8 @@
 #ifndef TAPAS_DEBUG_UTIL_H_
 #define TAPAS_DEBUG_UTIL_H_
 
+#include <string>
+
 #include "tapas/common.h"
 #include "tapas/basic_types.h"
 
@@ -16,6 +18,13 @@ void PrintBodies(const typename BT::type *b, int nb, std::ostream &os) {
     }
     os << std::endl;
   }
+}
+
+template <class T>
+std::string ToStr(T v) {
+  std::stringstream ss;
+  ss << v;
+  return ss.str();
 }
 
 } // debug
