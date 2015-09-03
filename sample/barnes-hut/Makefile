@@ -1,4 +1,3 @@
-
 # Build using g++
 # CXX = g++
 # MPICXX = mpicxx -cxx=g++ -DUSE_MPI

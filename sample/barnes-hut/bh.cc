@@ -10,6 +10,7 @@
 #endif
 
 #include "tapas.h"
+#include "tapas/single_node_morton_hot.h"
 
 //#define DIM (3)
 typedef double real_t;
