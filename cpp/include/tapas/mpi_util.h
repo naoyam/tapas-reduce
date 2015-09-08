@@ -57,6 +57,10 @@ template<typename T>
 void Allreduce(const T *sendbuf, T *recvbuf, int count, MPI_Op op, MPI_Comm comm) {
   auto kType = MPI_DatatypeTraits<T>::type();
 
+  if (!MPI_DatatypeTraits<T>::IsEmbType()) {
+    TAPAS_ASSERT(0 && "Allreduce() is not supported for user-defined types.");
+  }
+
   int ret = MPI_Allreduce((const void*)sendbuf, (void*)recvbuf, count, kType, op, comm);
 
   TAPAS_ASSERT(ret == MPI_SUCCESS);
@@ -69,6 +73,22 @@ void Allreduce(const std::vector<T>& sendbuf, std::vector<T> &recvbuf,
   recvbuf.resize(len);
 
   Allreduce(sendbuf.data(), recvbuf.data(), (int) len, op, comm);
+}
+
+template<typename T>
+void Alltoall(const T *sendbuf, T *recvbuf, int count, MPI_Comm comm) {
+  const auto kType = MPI_DatatypeTraits<T>::type();
+  int size = MPI_DatatypeTraits<T>::IsEmbType() ? count : count * sizeof(T);
+  int ret = ::MPI_Alltoall(sendbuf, size, kType,
+                           recvbuf, size, kType,
+                           comm);
+  TAPAS_ASSERT(ret == MPI_SUCCESS);
+}
+
+template<typename T>
+void Alltoall(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, int count, MPI_Comm comm) {
+  recvbuf.resize(sendbuf.size());
+  Alltoall(sendbuf.data(), recvbuf.data(), count, comm);
 }
 
 /**

@@ -1864,10 +1864,13 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     int proc = leaf_owners[ci];
     send_counts[proc] += leaf_nb_local[ci];
   }
-  
+
+  tapas::mpi::Alltoall(send_counts, recv_counts, 1, MPI_COMM_WORLD);
+#if 0
   MPI_Alltoall(send_counts.data(), 1, MPI_INT,
                recv_counts.data(), 1, MPI_INT,
                MPI_COMM_WORLD);
+#endif
   
   std::vector<int> send_bytes_bodies(send_counts);
   std::vector<int> send_bytes_keys(send_counts);
