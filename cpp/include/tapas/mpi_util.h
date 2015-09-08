@@ -28,7 +28,7 @@ template<class T> struct MPI_DatatypeTraits {
     static MPI_Datatype type() {                    \
       return __mpitype;                             \
     }                                               \
-    static constexpr bool IsEmbType() {           \
+    static constexpr bool IsEmbType() {             \
       return true;                                  \
     }                                               \
   };
@@ -52,6 +52,24 @@ DEF_MPI_DATATYPE(unsigned long long, MPI_UNSIGNED_LONG_LONG);
 DEF_MPI_DATATYPE(float,  MPI_FLOAT);
 DEF_MPI_DATATYPE(double, MPI_DOUBLE);
 DEF_MPI_DATATYPE(long double, MPI_LONG_DOUBLE);
+
+template<typename T>
+void Allreduce(const T *sendbuf, T *recvbuf, int count, MPI_Op op, MPI_Comm comm) {
+  auto kType = MPI_DatatypeTraits<T>::type();
+
+  int ret = MPI_Allreduce((const void*)sendbuf, (void*)recvbuf, count, kType, op, comm);
+
+  TAPAS_ASSERT(ret == MPI_SUCCESS);
+}
+
+template<typename T>
+void Allreduce(const std::vector<T>& sendbuf, std::vector<T> &recvbuf,
+               MPI_Op op, MPI_Comm comm) {
+  size_t len = sendbuf.size();
+  recvbuf.resize(len);
+
+  Allreduce(sendbuf.data(), recvbuf.data(), (int) len, op, comm);
+}
 
 /**
  * \brief Perform MPI_Alltoallv (version 1)
@@ -98,7 +116,7 @@ void Alltoallv(std::vector<T>& send_buf, std::vector<int>& dest,
   }
 
   int total_recv_counts = std::accumulate(recv_counts.begin(), recv_counts.end(), 0);
-
+  
   recv_buf.resize(total_recv_counts);
 
   auto kType = MPI_DatatypeTraits<T>::type();

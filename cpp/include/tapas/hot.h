@@ -73,7 +73,7 @@ struct HotData {
   KeySet        gleaves_;   // set of global leaves (= local roots), which are a part of keys(ht_gtree_) and keys(ht_)
   std::mutex ht_mtx_;  //!< mutex to protect ht_
   Region<TSP> region_; //!< global bouding box
-
+  
   int mpi_rank_;
   int mpi_size_;
   int max_depth_; //!< Actual maximum depth of the tree
@@ -1220,21 +1220,29 @@ template <class TSP>
 Cell<TSP> *Cell<TSP>::Lookup(KeyType k) const {
   // Try the local hash.
   auto &ht = data_->ht_;
+  auto &ht_gtree = data_->ht_gtree_;
+  auto &ht_let = data_->ht_let_;
+  
   auto i = ht.find(k);
   if (i != ht.end()) {
     assert(i->second != nullptr);
     return i->second;
-  } else {
-    // If the key is not in local hash, next try LET hash.
-    auto &ht_let = data_->ht_let_;
-    auto j = ht_let.find(k);
-    if (j != ht_let.end()) {
-      assert(j->second != nullptr);
-      return j->second;
-    } else {
-      return nullptr;
-    }
   }
+
+  i = ht_gtree.find(k);
+  if (i != ht.end()) {
+    assert(i->second != nullptr);
+    return i->second;
+  }
+
+  i = ht_let.find(k);
+  // If the key is not in local hash, next try LET hash.
+  if (i != ht_let.end()) {
+    assert(i->second != nullptr);
+    return i->second;
+  }
+  
+  return nullptr;
 }
 
 template <class TSP>
@@ -1598,27 +1606,6 @@ Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b, const Region
     return Partitioner<TSP>::Partition(b.data(), b.size(), r);
 }
 
-#if 0
-/**
- * @brief Returns a std::vector of parent's children
- */
-template<class TSP>
-std::vector<typename TSP::SFC::KeyType> GetChildren(typename TSP::SFC::KeyType parent) {
-  using SFC = typename TSP::SFC;
-  using KeyType = typename TSP::KeyType;
-  
-  std::vector<KeyType> ret;
-  
-  KeyType child_key = SFC::FirstChild(parent);
-  for (int child_idx = 0; child_idx < (1 << TSP::Dim); child_idx++) {
-    ret.push_back(child_key);
-    child_key = SFC::GetNext(child_key);
-  }
-
-  return ret;
-}
-#endif
-
 /**
  * @brief Split cells that have more than nb_max bodies (not recursive)
  *
@@ -1838,7 +1825,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     }
   } // end of while(1) loop
   
-  ::MPI_Allreduce(&max_depth, &data->max_depth_, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  tapas::mpi::Allreduce(&max_depth, &data->max_depth_, 1, MPI_SUM, MPI_COMM_WORLD);
   data->max_depth_ = max_depth;
 
   if (data->mpi_rank_ == 0) {
