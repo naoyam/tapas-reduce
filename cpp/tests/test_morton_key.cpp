@@ -1,9 +1,10 @@
 #include <vector>
 
-#include <gtest/gtest.h>
-
+#include <tapas/test.h>
 #include <tapas/map.h>
 #include <tapas/sfc_morton.h>
+
+SETUP_TEST;
 
 template<class SFC>
 typename SFC::KeyType GenKey(std::vector<int> args) {
@@ -20,7 +21,7 @@ typename SFC::KeyType GenKey(std::vector<int> args) {
   return k;
 }
 
-TEST(TestMorton, TestParent) {
+void Test_Morton_Parent() {
   const constexpr int Dim = 3;
   using K = tapas::sfc::Morton<Dim, uint64_t>;
   using KeyType = K::KeyType;
@@ -30,7 +31,7 @@ TEST(TestMorton, TestParent) {
   ASSERT_EQ(p, K::Parent(c));
 }
 
-TEST(TestMorton, TestNext) {
+void Test_Morton_Next() {
   const constexpr int Dim = 3;
   using K = tapas::sfc::Morton<Dim, uint64_t>;
   using KeyType = K::KeyType;
@@ -44,7 +45,7 @@ TEST(TestMorton, TestNext) {
   ASSERT_EQ(k4, K::GetNext(k3));
 }
 
-TEST(TestMorton, TestIsDescendant) {
+void Test_Morton_IsDescendant() {
   const constexpr int Dim = 3;
   using K = tapas::sfc::Morton<Dim, uint64_t>;
   using KeyType = K::KeyType;
@@ -67,7 +68,7 @@ TEST(TestMorton, TestIsDescendant) {
   ASSERT_FALSE(K::IsDescendant(a2, d2));
 }
 
-TEST(TestMorton, TestLETRequirement) {
+void Test_Morton_LETRequirement() {
   const constexpr int Dim = 2;
   using K = tapas::sfc::Morton<Dim, uint64_t>;
   using KeyType = K::KeyType;
@@ -96,7 +97,7 @@ TEST(TestMorton, TestLETRequirement) {
   ASSERT_EQ(2, p - procs.begin());
 }
 
-TEST(TestMorton, TestGetDirOnDepth) {
+void Test_Morton_GetDirOnDepth() {
   // calculate center of a cell of the key
   const constexpr int Dim = 3;
   using K = tapas::sfc::Morton<Dim, uint64_t>;
@@ -119,11 +120,11 @@ TEST(TestMorton, TestGetDirOnDepth) {
       ASSERT_EQ(0, K::GetDirOnDepth(k, dim, dep));
     }
   }
-  std::cout << "--------------" << std::endl;
+  //std::cout << "--------------" << std::endl;
 
   k = GenKey<K>({7, 3, 2}); // 111 - 011 - 010
 
-  std::cout << ((K::RemoveDepth(k) >> (K::MAX_DEPTH - 1) * Dim) & 7) << std::endl;
+  //std::cout << ((K::RemoveDepth(k) >> (K::MAX_DEPTH - 1) * Dim) & 7) << std::endl;
   // Check X-dim
   ASSERT_EQ(1, K::GetDirOnDepth(k, 0, 1));
   ASSERT_EQ(1, K::GetDirOnDepth(k, 0, 2));
@@ -141,3 +142,17 @@ TEST(TestMorton, TestGetDirOnDepth) {
 }
 
 
+int main(int argc, char **argv) {
+  MPI_Init(&argc, &argv);
+  
+  Test_Morton_Parent();
+  Test_Morton_Next();
+  Test_Morton_IsDescendant();
+  Test_Morton_LETRequirement();
+  Test_Morton_GetDirOnDepth();
+
+  TEST_REPORT_RESULT();
+  
+  MPI_Finalize();
+  return (TEST_SUCCESS() ? 0 : 1);
+}

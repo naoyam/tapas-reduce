@@ -1,32 +1,18 @@
-add_executable(unittest unittest.cpp)
-
 include_directories(${CMAKE_SOURCE_DIR}/cpp/include)
 
-# Find Google's test library
-# (Unittests are enabled only if the library is found)
+message(STATUS "MPI_CXX_COMPILE_FLAGS=${MPI_CXX_COMPILE_FLAGS}")
+message(STATUS "MPI_CXX_LINK_FLAGS=${MPI_CXX_LINK_FLAGS}")
 
-find_library(GTEST_MAIN_LIBRARY
-  NAMES gtest_main gtest_main.a
-  PATHS ${GTEST_LIB_DIR} ${GTEST_PREFIX}/make)
+foreach(trg test_set test_morton_key test_allgatherv test_alltoallv)
+  add_executable(${trg} ${trg}.cpp)
 
-find_path(GTEST_INCLUDE_DIR
-  gtest/gtest.h
-  PATHS ${GTEST_INCLUDE_DIR} ${GTEST_PREFIX}/include)
+  set_property(TARGET ${trg} APPEND PROPERTY COMPILE_FLAGS       "${MPI_CXX_COMPILE_FLAGS}")
+  set_property(TARGET ${trg} APPEND PROPERTY COMPILE_FLAGS       "-DTO_SERIAL")
+  set_property(TARGET ${trg} APPEND PROPERTY INCLUDE_DIRECTORIES "${MPI_CXX_INCLUDE_PATH}")
+  set_property(TARGET ${trg} APPEND PROPERTY LINK_FLAGS          "${MPI_CXX_LINK_FLAGS}")
   
-if (GTEST_MAIN_LIBRARY AND GTEST_INCLUDE_DIR)
-  message(STATUS "Found gtest library at ${GTEST_LIBRARY}, ${GTEST_MAIN_LIBRARY}")
+  target_link_libraries(${trg} ${MPI_CXX_LIBRARIES})
+endforeach()
 
-  set_property(TARGET unittest APPEND PROPERTY COMPILE_FLAGS       "${MPI_CXX_COMPILE_FLAGS}")
-  set_property(TARGET unittest APPEND PROPERTY COMPILE_FLAGS       "-DTO_SERIAL")
-  set_property(TARGET unittest APPEND PROPERTY INCLUDE_DIRECTORIES "${MPI_CXX_INCLUDE_PATH}")
-  set_property(TARGET unittest APPEND PROPERTY INCLUDE_DIRECTORIES "${GTEST_INCLUDE_DIR}")
-  set_property(TARGET unittest APPEND PROPERTY LINK_FLAGS          "${MPI_CXX_LINK_FLAGS}")
-  
-  target_link_libraries(unittest
-    pthread
-    ${GTEST_MAIN_LIBRARY})
-else()
-  message(STATUS "gtest not found")
-endif()
 
 

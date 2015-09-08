@@ -6,6 +6,8 @@
 
 #include <mpi.h>
 
+#include <tapas/common.h>
+
 namespace tapas {
 namespace mpi {
 
@@ -91,6 +93,7 @@ void Alltoallv(std::vector<T>& send_buf, std::vector<int>& dest,
   
   for (int p = 1; p < mpi_size; p++) {
     send_disp[p] = send_disp[p-1] + send_counts[p-1];
+
     recv_disp[p] = recv_disp[p-1] + recv_counts[p-1];
   }
 

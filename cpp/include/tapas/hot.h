@@ -63,11 +63,14 @@ struct HotData {
   using KeyType = typename SFC::KeyType;
   using CellType = Cell<TSP>;
   using CellHashTable = typename std::unordered_map<KeyType, CellType*>;
+  using KeySet = std::unordered_set<KeyType>;
   using BodyType = typename TSP::BT::type;
   using BodyAttrType = typename TSP::BT_ATTR;
   
   CellHashTable ht_;
   CellHashTable ht_let_;
+  CellHashTable ht_gtree_;  // Hsah table of the global tree.
+  KeySet        gleaves_;   // set of global leaves (= local roots), which are a part of keys(ht_gtree_) and keys(ht_)
   std::mutex ht_mtx_;  //!< mutex to protect ht_
   Region<TSP> region_; //!< global bouding box
 
