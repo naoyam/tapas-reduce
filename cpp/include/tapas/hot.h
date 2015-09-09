@@ -58,8 +58,9 @@ template<class TSP> class Cell;
  * \brief Struct to hold shared data among Cells
  * Never accessed by users directly. Only held by Cells using shared_ptr.
  */
-template<class TSP, class SFC>
+template<class TSP, class SFC_>
 struct HotData {
+  using SFC = SFC_;
   using KeyType = typename SFC::KeyType;
   using CellType = Cell<TSP>;
   using CellHashTable = typename std::unordered_map<KeyType, CellType*>;
@@ -376,6 +377,7 @@ class Cell: public tapas::BasicCell<TSP> {
   }
 
   Data &data() { return *data_; }
+  std::shared_ptr<Data> data_ptr() { return data_; }
   
 #ifdef DEPRECATED
   typename TSP::BT::type &particle(index_t idx) const {
@@ -426,9 +428,9 @@ class Cell: public tapas::BasicCell<TSP> {
   static tapas::Vec<Dim, FP> CalcCenter(KeyType, const Region<TSP>& r);
   
 #ifdef DEPRECATED
-    typename TSP::BT_ATTR *particle_attrs() const {
-        return body_attrs();
-    }
+  typename TSP::BT_ATTR *particle_attrs() const {
+    return body_attrs();
+  }
 #endif
   SubCellIterator<Cell> subcells();
 
@@ -1136,13 +1138,8 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
     ExchangeLET<TSP>(c1);
   }
 #endif
-
+  
   f(c1, c2);
-  return;
-
-  if (c1.IsLocal() && c2.IsLocal()) {
-    f(c1, c2);
-  }
 }
 
 template <class TSP>
@@ -1229,15 +1226,16 @@ Cell<TSP> *Cell<TSP>::Lookup(KeyType k) const {
     return i->second;
   }
 
-  i = ht_gtree.find(k);
-  if (i != ht.end()) {
-    assert(i->second != nullptr);
-    return i->second;
-  }
-
   i = ht_let.find(k);
   // If the key is not in local hash, next try LET hash.
   if (i != ht_let.end()) {
+    assert(i->second != nullptr);
+    return i->second;
+  }
+  
+  // ?
+  i = ht_gtree.find(k);
+  if (i != ht.end()) {
     assert(i->second != nullptr);
     return i->second;
   }
@@ -1779,7 +1777,7 @@ void GenerateLeaves(int num_bodies,
           std::cerr << "]" << std::endl;
           std::cerr << "Total nb = " << total_nb << std::endl;
           std::cerr << "rank " << rank << " " << "max_nb = " << max_nb << " "
-                    << "(the limit is " << max_nb_ << ")" << std::endl;
+                    << "(the limit is " << ncrit << ")" << std::endl;
           std::cerr << std::endl;
         }
       });
@@ -1794,6 +1792,103 @@ void GenerateLeaves(int num_bodies,
   } // end of while(1) loop
   
   tapas::mpi::Allreduce(&tmp_max_depth, &max_depth, 1, MPI_SUM, MPI_COMM_WORLD);
+}
+
+template<class HotData>
+void FindGlobalLeaves(typename HotData::KeyType key,
+                      typename HotData::CellHashTable &ht,
+                      typename HotData::KeySet   &gleaves) {
+  using CellType = typename HotData::CellType;
+  using KeyType = typename HotData::KeyType;
+  using SFC = typename HotData::SFC;
+
+  TAPAS_ASSERT(ht.count(key) == 1);
+
+  CellType *c = ht[key];
+
+  if (c->IsLeaf()) {
+    // If c is leaf, c is a global leaf
+    gleaves.insert(key);
+  } else {
+    auto chld = SFC::GetChildren(key);
+
+    // if c's children are all local, c is a global leaf.
+    bool is_global_leaf = std::all_of(chld.begin(), chld.end(), [&ht](KeyType k) {
+        return ht.count(k) > 0;
+      });
+
+    if (is_global_leaf) {
+      // If all the children are local, then the `key` is a global leaf (= local tree)
+      gleaves.insert(key);
+    } else {
+      for (auto &&chk : chld) {
+        if (ht.count(chk) > 0) {
+          FindGlobalLeaves<HotData>(chk, ht, gleaves);
+        }
+      }
+    }
+  }
+}
+
+template<class HotData>
+void ExchangeGlobalLeaves(typename HotData::KeySet &gleaves) {
+  using KeyType = typename HotData::KeyType;
+
+  std::vector<KeyType> gl_keys_send(gleaves.begin(), gleaves.end()); // global leaf keys
+  std::vector<KeyType> gl_keys_recv;
+  tapas::mpi::Allgatherv(gl_keys_send, gl_keys_recv, MPI_COMM_WORLD);
+  
+  gleaves.insert(gl_keys_recv.begin(), gl_keys_recv.end());
+}
+
+template<class HotData>
+void GrowGlobalTree(const typename HotData::KeySet &gleaves,
+                    const typename HotData::CellHashTable &ht,
+                    typename HotData::CellHashTable &ht_gtree) {
+  using CellType = typename HotData::CellType;
+  using KeyType = typename HotData::KeyType;
+  using SFC = typename HotData::SFC;
+  std::shared_ptr<HotData> dp = ht.at(0)->data_ptr();
+
+  for (auto && key : gleaves) {
+    for (KeyType k = key; k != 0; k = SFC::Parent(k)) {
+      if (ht_gtree.count(k) > 0) {
+        continue;
+      } else if (ht.count(k) > 0) {
+        ht_gtree[k] = ht.at(k);
+      } else {
+        ht_gtree[k] = CellType::CreateRemoteCell(k, 0, dp);
+      }
+    }
+  }
+}
+
+/**
+ * \brief Build global tree
+ * 1. Traverse recursively from the root and identify global leaves
+ * 2. Exchange global leaves using Alltoallv
+ * 3. Build global tree locally
+ */
+template<class HotData>
+void BuildGlobalTree(HotData &data) {
+  // Traverse from root and mark global leaves
+  using HT = typename HotData::CellHashTable;
+  using ST = typename HotData::KeySet;
+  using KeyType = typename HotData::KeyType;
+
+  HT &ltree = data.ht_;       // hash table for the local tree
+  HT &gtree = data.ht_gtree_; // hash table for the global tree
+  ST &gleaves = data.gleaves_;
+
+  gtree.clear();
+
+  FindGlobalLeaves<HotData>(0, ltree, gleaves);
+
+  // Exchange global leaves using Allgatherv
+  ExchangeGlobalLeaves<HotData>(gleaves);
+
+  // Glow the global tree locally in each process
+  GrowGlobalTree<HotData>(gleaves, data.ht_, data.ht_gtree_);
 }
 
 
@@ -2124,6 +2219,8 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   end = MPI_Wtime();
   std::cout << "time Partition " << (end - beg) << std::endl;
 #endif
+
+  BuildGlobalTree(*data);
 
   // return the root cell (root key is always 0)
   return data->ht_[0];
