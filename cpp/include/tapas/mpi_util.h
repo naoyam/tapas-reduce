@@ -3,14 +3,97 @@
 
 #include <vector>
 #include <algorithm>
+#include <functional>
 
 #include <mpi.h>
 
 #include <tapas/common.h>
 
+
+namespace tapas {
+namespace util {
+
+/**
+ * \brief Generic inclusive scan
+ *
+ * Prototypes of inclusive_scan and exclusive_scan are inspired by
+ * "Working Draft, Technical Specification for C++ Extensions for Parallelism"
+ * by Jared Hoberock (NVIDIA Corporation)
+ * http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2014/n4310.html#parallel.alg.inclusive.scan
+ */
+template<class InputIterator, class OutputIterator,
+         class BinaryOperation>
+OutputIterator
+inclusive_scan(InputIterator first, InputIterator last,
+               OutputIterator result,
+               BinaryOperation binary_op) {
+  using value_type = typename InputIterator::value_type;
+  value_type tally = *first;
+  InputIterator iter = first + 1;
+  *result = tally;
+  result++;
+
+  while (iter != last) {
+    tally = binary_op(tally, *iter);
+    *result = tally;
+    result++;
+    iter++;
+  }
+  
+  return result;
+}
+
+template<class InputIterator, class OutputIterator>
+OutputIterator
+inclusive_scan(InputIterator first, InputIterator last,
+               OutputIterator result) {
+  return inclusive_scan(first, last, result,
+                        std::plus<typename InputIterator::value_type>());
+}
+
+
+template<class InputIterator, class OutputIterator,
+         class BinaryOperation>
+OutputIterator
+exclusive_scan(InputIterator first, InputIterator last,
+               OutputIterator result,
+               BinaryOperation binary_op) {
+  using value_type = typename InputIterator::value_type;
+  value_type tally = value_type();
+  InputIterator iter = first;
+  
+  *result = tally;
+  result++;
+  
+  while (iter + 1 != last) {
+    tally = binary_op(tally, *iter);
+    *result = tally;
+    result++;
+    iter++;
+  }
+  
+  return result;
+}
+
+
+template<class InputIterator, class OutputIterator>
+OutputIterator
+exclusive_scan(InputIterator first, InputIterator last,
+               OutputIterator result) {
+  return exclusive_scan(first, last, result,
+                        std::plus<typename InputIterator::value_type>());
+}
+
+
+
+} // namespace tuil
+} // namespace tapas
+
+
 namespace tapas {
 namespace mpi {
 
+using tapas::util::exclusive_scan;
 
 // MPI-related utilities and wrappers
 // TODO: wrap them as a pluggable policy/traits class
@@ -53,6 +136,11 @@ DEF_MPI_DATATYPE(float,  MPI_FLOAT);
 DEF_MPI_DATATYPE(double, MPI_DOUBLE);
 DEF_MPI_DATATYPE(long double, MPI_LONG_DOUBLE);
 
+// MPI::COMPLEX Complex<float>
+// MPI::DOUBLE_COMPLEX Complex<double>
+// MPI::LONG_DOUBLE_COMPLEX Complex<long double>
+// MPI::BYTE
+
 template<typename T>
 void Allreduce(const T *sendbuf, T *recvbuf, int count, MPI_Op op, MPI_Comm comm) {
   auto kType = MPI_DatatypeTraits<T>::type();
@@ -63,6 +151,7 @@ void Allreduce(const T *sendbuf, T *recvbuf, int count, MPI_Op op, MPI_Comm comm
 
   int ret = MPI_Allreduce((const void*)sendbuf, (void*)recvbuf, count, kType, op, comm);
 
+  (void)ret; // to avoid warnings of 'unused variable'
   TAPAS_ASSERT(ret == MPI_SUCCESS);
 }
 
@@ -82,6 +171,7 @@ void Alltoall(const T *sendbuf, T *recvbuf, int count, MPI_Comm comm) {
   int ret = ::MPI_Alltoall(sendbuf, size, kType,
                            recvbuf, size, kType,
                            comm);
+  (void)ret; // to avoid warnings of 'unused variable'
   TAPAS_ASSERT(ret == MPI_SUCCESS);
 }
 
@@ -172,12 +262,47 @@ void Alltoallv(std::vector<T>& send_buf, std::vector<int>& dest,
   }
 }
 
-}
+template<class T>
+void Allgatherv(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, MPI_Comm comm) {
+  int size = -1, rank = -1;
+
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+          
+  int count = sendbuf.size();
+  std::vector<int> recvcounts(size);
+  
+  auto kType = MPI_DatatypeTraits<T>::type();
+
+  // Call allgather and create recvcount & displacements array.
+  int ret = ::MPI_Allgather((const void*)&count, 1, MPI_INT,
+                            (void*)recvcounts.data(), 1, MPI_INT, comm);
+  (void)ret;
+  TAPAS_ASSERT(ret == MPI_SUCCESS);
+  
+  std::vector<int> disp;
+  exclusive_scan(recvcounts.begin(), recvcounts.end(), back_inserter(disp));
+
+  int recvcount = std::accumulate(recvcounts.begin(), recvcounts.end(), 0);
+  recvbuf.resize(recvcount);
+  
+  if (kType == MPI_BYTE) {
+    count *= sizeof(T);
+    recvcount *= sizeof(T);
+    for (auto && c : recvcounts) c *= sizeof(T);
+    for (auto && d : disp) d *= sizeof(T);
+  }
+
+  ret = ::MPI_Allgatherv((const void*)sendbuf.data(), count, kType,
+                         (void*)recvbuf.data(), recvcounts.data(), disp.data(),
+                         kType, comm);
+
+
+  (void)ret;
+  TAPAS_ASSERT(ret == MPI_SUCCESS);
 }
 
-// MPI::COMPLEX Complex<float>
-// MPI::DOUBLE_COMPLEX Complex<double>
-// MPI::LONG_DOUBLE_COMPLEX Complex<long double>
-// MPI::BYTE
+} // namespace mpi
+} // namespace tapas
 
 #endif // TAPAS_MPI_UTIL_
