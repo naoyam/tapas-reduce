@@ -2120,69 +2120,11 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     exit(-1);
   }
 
-  
-#ifdef TAPAS_DEBUG
-  // Dump all cells in DOT (graphviz) format
-  // Only rank 0 process works on this.
-  {
-    int rank = 0;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    if (rank == 0) {
-      // Space filling curve key -> owners
-      auto owners = std::unordered_map<KeyType, std::unordered_set<int>>();
-      auto isleaf = std::unordered_map<KeyType, bool>();
-      for (size_t i = 0; i < leaf_owners.size(); i++) {
-        KeyType k = leaf_keys[i];
-        int owner = leaf_owners[i];
-        
-        owners[k].insert(owner);
-        isleaf[k] = true;
-        
-        do {
-          k = SFC::Parent(k);
-          owners[k].insert(owner);
-          isleaf[k] = false;
-        } while(k != 0);
-      }
-
-      std::ofstream ofs("tree_tapas.dot");
-      ofs << "digraph tapas_tree {" << std::endl;
-      ofs << "graph [rankdir=LR];" << std::endl;
-
-      for (auto iter = owners.begin(); iter != owners.end(); iter++) {
-        auto k = iter->first;
-        auto &v = iter->second; // Owners
-
-        // Dump cell info
-        std::stringstream level;
-        level << "[" << SFC::GetDepth(k) << "]";
-
-        std::stringstream owned_by;
-        owned_by << "(owned by ";
-        for (auto &p : v) owned_by << p << " ";
-        owned_by << ")";
-
-        ofs << "cell_" << k << " [label=\"" << SFC::Simplify(k) << " " << level.str() << " " << owned_by.str() << "\"";
-        if (isleaf[k]) {
-          ofs << ", shape=box";
-        }
-        ofs << "];" << std::endl;
-
-        // Print link to parent
-        if (k != 0) {
-          ofs << "cell_" << k << " -> " << "cell_" << SFC::Parent(k) << ";" << std::endl;
-        }
-      }
-      ofs << "}" << std::endl;
-    } // if rank 0
-  }
-#endif
-
 #ifdef TAPAS_MEASURE
   end = MPI_Wtime();
   std::cout << "time Partition " << (end - beg) << std::endl;
 #endif
-  
+
   // return the root cell (root key is always 0)
   return data->ht_[0];
 }
