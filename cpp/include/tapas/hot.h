@@ -1494,10 +1494,12 @@ class Partitioner {
       res_body.insert(std::make_pair(src_pid, k));
     }
 
+#if TAPAS_DEBUG
     BarrierExec([&res_attr, &res_body](int rank, int size) {
         std::cerr << "Rank " << rank << " SelectResponseCells: keys_attr.size() = " << res_attr.size() << std::endl;
         std::cerr << "Rank " << rank << " SelectResponseCells: keys.body.size() = " << res_body.size() << std::endl;
       });
+#endif
 
     // Set values to the vectors
     attr_keys.resize(res_attr.size());
@@ -1549,10 +1551,6 @@ class Partitioner {
     bodies.resize(keys.size());
     nb.resize(keys.size());
 
-    BarrierExec([&keys](int rank, int size) {
-        std::cerr << "Rank " << rank << " KeysToBodies: keys.size() = " << keys.size() << std::endl;
-      });
-    
     // In BH, each leaf has 0 or 1 body (while every cell has attribute)
     for (size_t i = 0; i < keys.size(); i++) {
       KeyType k = keys[i];
@@ -1719,59 +1717,29 @@ Vec<Cell<TSP>::Dim, typename TSP::FP> Cell<TSP>::CalcCenter(KeyType key, const R
 }
 
 /**
- * @brief Partition the simulation space and build SFC key based octree
- * @tparam TSP Tapas static params
- * @param b Array of particles
- * @param numBodies Length of b (NOT the total number of bodies over all processes)
- * @param r Geometry of the target space
- * @return The root cell of the constructed tree
- * @todo In this function keys are exchanged using alltoall communication, as well as bodies.
- *       In extremely large scale systems, calculating keys locally again after communication
- *       might be faster.
+ * \brief Generate leaves and associated information from bodies.
+ * First sort the bodies according to their SFC keys. Then, Split the space 
+ * recursively from the root until all leaves have less than `ncrit` bodies.
+ * \param [IN] 
  */
-template <class TSP> // TSP : Tapas Static Params
-Cell<TSP>*
-Partitioner<TSP>::Partition(typename TSP::BT::type *b,
-                            index_t num_bodies,
-                            const Region<TSP> &reg) {
-  using BodyType = typename TSP::BT::type;
-  using BodyAttrType = typename TSP::BT_ATTR;
-  
-  using SFC = typename TSP::SFC;
-  using KeyType = typename SFC::KeyType;
-  
-  typedef Cell<TSP> CellType;
-  typedef HelperNode<TSP> HN;
-  using Data = typename CellType::Data;
-
-  auto data = std::make_shared<Data>();
-
-  int max_depth = 0;
-
-#ifdef TAPAS_MEASURE
-  double beg, end;
-  beg = MPI_Wtime();
-#endif
-
-  MPI_Comm_rank(MPI_COMM_WORLD, &data->mpi_rank_);
-  MPI_Comm_size(MPI_COMM_WORLD, &data->mpi_size_);
-  int mpi_rank = data->mpi_rank_;
-  int mpi_size = data->mpi_size_;
-
-  // Calculate the global bouding box by MPI_Allreduce
-  data->region_ = ExchangeRegion(reg);
-
+template<class TSP>
+void GenerateLeaves(int num_bodies,
+                    typename Cell<TSP>::BodyType *b,
+                    int ncrit,
+                    const Region<TSP> &region,
+                    int &max_depth,
+                    std::vector<HelperNode<TSP>> &hn,
+                    std::vector<typename Cell<TSP>::SFC::KeyType> &leaf_keys,
+                    std::vector<index_t> &leaf_nb_local,
+                    std::vector<index_t> &leaf_nb_global) {
   // Sort local bodies using SFC  keys
-  std::vector<HN> hn = CreateInitialNodes<TSP>(b, num_bodies, data->region_);
+  using HN = HelperNode<TSP>;
+  using SFC = typename Cell<TSP>::SFC;
+  
   std::sort(hn.begin(), hn.end(),
             [](const HN &lhs, const HN &rhs) { return lhs.key < rhs.key; });
 
-  // shortcuts to HotData members:
-  auto &leaf_keys = data->leaf_keys_;     // Keys of leaf cells (global)
-  auto &leaf_nb_global = data->leaf_nb_;  // Number of local bodies (global)
-
-  // Number of local bodies (Allreduce()ed to leaf_nb_global)
-  std::vector<index_t> leaf_nb_local;
+  int tmp_max_depth;
 
   // Start from a root cell and refine it recursively until all cells have at most
   leaf_keys.push_back(0);
@@ -1782,7 +1750,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     leaf_nb_global.clear();
     leaf_nb_local.resize(leaf_keys.size(), 0);
     leaf_nb_global.resize(leaf_keys.size(), 0);
-
+    
     for (size_t i = 0; i < leaf_keys.size(); i++) {
       auto _key = [](const HN &hn) { return hn.key; };
       // Count process-local bodies belonging to the cell[i].
@@ -1817,16 +1785,76 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       });
 #endif
     
-    if (max_nb <= max_nb_) {    // Finished. all cells have at most max_nb_ bodies.
+    if (max_nb <= ncrit) {    // Finished. all cells have at most max_nb_ bodies.
       break;
     } else {
       // Find cells that have more than max_nb_ bodies and split them.
-      leaf_keys = SplitLargeCellsOnce<TSP>(leaf_keys, leaf_nb_global, max_nb_, &max_depth);
+      leaf_keys = SplitLargeCellsOnce<TSP>(leaf_keys, leaf_nb_global, ncrit, &tmp_max_depth);
     }
   } // end of while(1) loop
   
-  tapas::mpi::Allreduce(&max_depth, &data->max_depth_, 1, MPI_SUM, MPI_COMM_WORLD);
-  data->max_depth_ = max_depth;
+  tapas::mpi::Allreduce(&tmp_max_depth, &max_depth, 1, MPI_SUM, MPI_COMM_WORLD);
+}
+
+
+/**
+ * @brief Partition the simulation space and build SFC key based octree
+ * @tparam TSP Tapas static params
+ * @param b Array of particles
+ * @param numBodies Length of b (NOT the total number of bodies over all processes)
+ * @param r Geometry of the target space
+ * @return The root cell of the constructed tree
+ * @todo In this function keys are exchanged using alltoall communication, as well as bodies.
+ *       In extremely large scale systems, calculating keys locally again after communication
+ *       might be faster.
+ */
+template <class TSP> // TSP : Tapas Static Params
+Cell<TSP>*
+Partitioner<TSP>::Partition(typename TSP::BT::type *b,
+                            index_t num_bodies,
+                            const Region<TSP> &reg) {
+  using BodyType = typename TSP::BT::type;
+  using BodyAttrType = typename TSP::BT_ATTR;
+  
+  using HN = HelperNode<TSP>;
+  using SFC = typename TSP::SFC;
+  using KeyType = typename SFC::KeyType;
+  
+  typedef Cell<TSP> CellType;
+  using Data = typename CellType::Data;
+
+  auto data = std::make_shared<Data>();
+
+  int max_depth = 0;
+
+#ifdef TAPAS_MEASURE
+  double beg, end;
+  beg = MPI_Wtime();
+#endif
+
+  MPI_Comm_rank(MPI_COMM_WORLD, &data->mpi_rank_);
+  MPI_Comm_size(MPI_COMM_WORLD, &data->mpi_size_);
+  int mpi_rank = data->mpi_rank_;
+  int mpi_size = data->mpi_size_;
+
+  // Calculate the global bouding box by MPI_Allreduce
+  data->region_ = ExchangeRegion(reg);
+
+  auto &leaf_nb_global = data->leaf_nb_;
+  auto &leaf_keys = data->leaf_keys_;
+  std::vector<index_t> leaf_nb_local;
+  
+  std::vector<HN> hn = CreateInitialNodes<TSP>(b, num_bodies, data->region_);
+  
+  GenerateLeaves<TSP>(num_bodies,
+                      b,
+                      max_nb_,
+                      data->region_,
+                      data->max_depth_,
+                      hn,
+                      leaf_keys,
+                      leaf_nb_local,
+                      leaf_nb_global);
 
   if (data->mpi_rank_ == 0) {
     // debug
@@ -2092,6 +2120,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     exit(-1);
   }
 
+  
 #ifdef TAPAS_DEBUG
   // Dump all cells in DOT (graphviz) format
   // Only rank 0 process works on this.
