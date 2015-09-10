@@ -846,9 +846,13 @@ void ExchangeLET(Cell<TSP> &root) {
             << attr_recv[i].w << "]" << std::endl;
 #endif
 
-    // TODO: fix nb (we need nb even if non-leaf cell)
-    auto *c = Cell<TSP>::CreateRemoteCell(k, 0, root.data_);
-    //Cell<TSP> *c = new Cell<TSP>(k, false, 0, 0, root.data_);
+    Cell<TSP> *c = nullptr;
+
+    if (data.ht_gtree_.count(k) > 0) {
+      c = data.ht_gtree_.at(k);
+    } else {
+      c = Cell<TSP>::CreateRemoteCell(k, 0, root.data_);
+    }
     c->attr() = attr_recv[i];
     c->is_leaf_ = false;
     c->nb_ = 0;
@@ -862,11 +866,11 @@ void ExchangeLET(Cell<TSP> &root) {
 
     if (data.ht_let_.count(k) > 0) {
       // If the cell is already registered to ht_let_, the cell has attributes but not body info.
-      c = data.ht_let_[k];
+      c = data.ht_let_.at(k);
+    } else if (data.ht_gtree_.count(k) > 0) {
+      c = data.ht_gtree_.at(k);
     } else {
       c = Cell<TSP>::CreateRemoteCell(k, 1, root.data_);
-      //new Cell<TSP>(k, false, 0, 0, root.data_);
-      //c = new Cell<TSP>(k, false, 0, 0, root.data_);
       data.ht_let_[k] = c;
     }
 
@@ -1225,20 +1229,19 @@ Cell<TSP> *Cell<TSP>::Lookup(KeyType k) const {
     assert(i->second != nullptr);
     return i->second;
   }
-
+  
   i = ht_let.find(k);
   // If the key is not in local hash, next try LET hash.
   if (i != ht_let.end()) {
     assert(i->second != nullptr);
     return i->second;
   }
-  
-  // ?
-  i = ht_gtree.find(k);
-  if (i != ht.end()) {
-    assert(i->second != nullptr);
-    return i->second;
-  }
+
+  // NOTE: we do not search in ht_gtree.
+  //       ht_gtree is for global tree, and used only in upward phase.
+  //       If a cell exists only in ht_gtree, only the value of attr of the cell matters
+  //       and whether the cell is leaf or not.
+  //       Thus, cells in ht_gtree are not used in dual tree traversal.
   
   return nullptr;
 }
