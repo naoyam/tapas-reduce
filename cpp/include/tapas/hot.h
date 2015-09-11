@@ -340,6 +340,7 @@ class Cell: public tapas::BasicCell<TSP> {
   template <class T>
   bool operator==(const T &) const { return false; }
   bool IsRoot() const;
+  bool IsLocalSubtree() const;
 
   static void Map(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
   static void Map(Cell<TSP> &c1, Cell<TSP> &c2,
@@ -1168,6 +1169,13 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
  */
 template<class TSP>
 void LocalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
+  if (!c.IsLocal()) {
+    using SFC = typename Cell<TSP>::SFC;
+    auto k = c.key();
+    std::cerr << SFC::Simplify(k) << " "
+              << SFC::Decode(k) << " "
+              << k << std::endl;
+  }
   TAPAS_ASSERT(c.IsLocal());
       
   if (c.IsLeaf()) {
@@ -1296,21 +1304,10 @@ void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
     // 1. calculate local roots in each process,
     // 2. allgatherv the results
     // 3. culculate the global tree in each process
-    
+
     for (auto && key_lr : data.lroots_) {
       TAPAS_ASSERT(data.ht_.count(key_lr) == 1);
       auto *cell = data.ht_[key_lr];
-      
-      {
-        using SFC = typename Cell<TSP>::SFC;
-        using KeyType = typename Cell<TSP>::KeyType;
-        KeyType k = cell->key();
-        Stderr e("local_upward_traversal");
-        e.out() << SFC::Simplify(k) << " "
-                << SFC::Decode(k) << " "
-                << k << std::endl;
-      }
-  
       LocalUpwardTraversal(*cell, f);
     }
 
@@ -1318,7 +1315,12 @@ void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
 
     GlobalUpwardTraversal(c, f);
   } else {
+    
     // c is not in the global tree, which means c's subtree is perfectly local.
+    // This means that the user called PostOrderMap not from the root cell.
+    // We're not sure yet if such invocation is allowed in Tapas programming model.
+    
+    assert(false); // for debug
     LocalUpwardTraversal(c, f);
   }
 
@@ -1353,6 +1355,11 @@ bool Cell<TSP>::operator==(const Cell &c) const {
 template <class TSP>
 bool Cell<TSP>::IsRoot() const {
   return SFC::GetDepth(key_) == 0;
+}
+
+template <class TSP>
+bool Cell<TSP>::IsLocalSubtree() const {
+  return is_local_subtree_;
 }
 
 
@@ -2084,17 +2091,7 @@ void LocalPreOrderTraverse(Cell<TSP> *c, Funct f) {
  */
 template<class KeyType, class CellType>
 bool ReduceLocality(bool b, KeyType k, const CellType *c) {
-  {
-    using SFC = typename CellType::SFC;
-    Stderr e("local_reduce");
-    e.out() << "key " << SFC::Simplify(k) << " " << SFC::Decode(k) << " " << k << std::endl;
-    e.out() << "b = " << b << std::endl;
-    e.out() << "c != nullptr : " << (c != nullptr) << std::endl;
-    e.out() << "c->IsLocal() = " << (c ? c->IsLocal() : -1)<< std::endl;
-    e.out() << "result = " << (b && c != nullptr && c->IsLocal()) << std::endl;
-    e.out() << std::endl;
-  }
-  return b && c != nullptr && c->IsLocal();
+  return b && c != nullptr && c->IsLocalSubtree();
 }
 
 template<class TSP>
@@ -2109,21 +2106,13 @@ void FindLocalRoots(typename Cell<TSP>::KeyType key,
 
   CellType *c = ht.at(key);
 
-  LocalUpwardReduce(c, &CellType::is_local_subtree_, true, ReduceLocality<KeyType, CellType>);
+  LocalUpwardReduce(c, &CellType::is_local_subtree_, true,
+                    ReduceLocality<KeyType, CellType>);
 
   // Create a closure to find all local roots.
   auto local_root_collector = [&lroots] (const CellType *c) -> bool {
     if (c->is_local_subtree_) {
       lroots.insert(c->key());
-      
-      {
-        KeyType k = c->key();
-        Stderr e("local_roots");
-        e.out() << SFC::Simplify(k) << " "
-                << SFC::Decode(k) << " "
-                << k << std::endl;
-      }
-      
       return false;
     } else {
       return true;
@@ -2144,16 +2133,6 @@ void ExchangeGlobalLeafKeys(const typename Cell<TSP>::KeySet &lroots,
   tapas::mpi::Allgatherv(gl_keys_send, gl_keys_recv, MPI_COMM_WORLD);
   
   gleaves.insert(gl_keys_recv.begin(), gl_keys_recv.end());
-
-  {
-    Stderr e("global_leaves");
-    using SFC = typename Cell<TSP>::SFC;
-    for (auto &&k : gleaves) {
-      e.out() << SFC::Simplify(k) << " "
-              << SFC::Decode(k) << " "
-              << k << std::endl;
-    }
-  }
 }
 
 template<class TSP>
