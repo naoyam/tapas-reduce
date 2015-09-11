@@ -121,6 +121,7 @@ static void ComputeForce(Tapas::BodyIterator &p1,
   p1.attr().w += invR * approx.w;
 }
 
+#ifdef USE_MPI
 static void approximate(Tapas::Cell &c) {
   if (c.IsLeaf()) {
     if (c.nb() == 0) {
@@ -133,7 +134,41 @@ static void approximate(Tapas::Cell &c) {
     } else if (c.nb() == 1) {
       c.attr() = c.body(0);
     }
-    else { assert(false); }
+    else {
+      assert(false);
+    }
+  } else {
+    //tapas::Map(approximate, c.subcells());
+    float4 center = {0.0, 0.0, 0.0, 0.0};
+    for (int i = 0; i < c.nsubcells(); ++i) {
+      Tapas::Cell &sc = c.subcell(i);
+      center.w += sc.attr().w;
+      center.x += sc.attr().x * sc.attr().w;
+      center.y += sc.attr().y * sc.attr().w;
+      center.z += sc.attr().z * sc.attr().w;
+    }
+    center.x /= center.w;
+    center.y /= center.w;
+    center.z /= center.w;
+    c.attr() = center;
+  }
+}
+#else
+static void approximate(Tapas::Cell &c) {
+  if (c.IsLeaf()) {
+    if (c.nb() == 0) {
+      c.attr().w = 0.0;
+#if 0
+      c.attr().x = 0.0;
+      c.attr().y = 0.0;
+      c.attr().z = 0.0;
+#endif
+    } else if (c.nb() == 1) {
+      c.attr() = c.body(0);
+    }
+    else {
+      assert(false);
+    }
   } else {
     tapas::Map(approximate, c.subcells());
     float4 center = {0.0, 0.0, 0.0, 0.0};
@@ -150,6 +185,7 @@ static void approximate(Tapas::Cell &c) {
     c.attr() = center;
   }
 }
+#endif
 
 static void interact(Tapas::Cell &c1, Tapas::Cell &c2, real_t theta) {
   if (!c1.IsLeaf()) {
@@ -243,7 +279,7 @@ f4vec calc(f4vec &source, size_t np) {
   Tapas::Cell *root = Tapas::Partition(source.data(), source.size(), r, 1);
 
 #ifdef USE_MPI
-  LoadApproximate(root);
+  tapas::UpwardMap(approximate, *root); // or, simply: approximate(*root);
 #else
   tapas::Map(approximate, *root); // or, simply: approximate(*root);
   DumpApproximate(root);

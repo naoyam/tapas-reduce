@@ -169,6 +169,19 @@ void Map(Funct f, BodyIterator<T> iter, Args...args) {
   }
 }
 
+template<class Funct, class T, class...Args>
+void PostOrderMap(Funct f, T &x, Args...args) {
+  std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
+  T::PostOrderMap(x, lambda);
+}
+
+template<class Funct, class T, class...Args>
+void UpwardMap(Funct f, T &x, Args...args) {
+  std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
+  T::PostOrderMap(x, lambda);
+}
+
+
 template <class Funct, class T, class... Args>
 void Map(Funct f, T &x, Args...args) {
   TAPAS_LOG_DEBUG() << "map non-iterator" << std::endl;

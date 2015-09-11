@@ -71,7 +71,8 @@ struct HotData {
   CellHashTable ht_;
   CellHashTable ht_let_;
   CellHashTable ht_gtree_;  // Hsah table of the global tree.
-  KeySet        gleaves_;   // set of global leaves (= local roots), which are a part of keys(ht_gtree_) and keys(ht_)
+  KeySet        gleaves_;   // set of global leaves, which are a part of ht_gtree_.keys and ht_.keys
+  KeySet        lroots_;    // set of local roots. It must be a subset of gleaves. gleaves is "Allgatherv-ed" lroots.
   std::mutex ht_mtx_;  //!< mutex to protect ht_
   Region<TSP> region_; //!< global bouding box
   
@@ -231,6 +232,11 @@ class Partitioner;
 template<class TSP>
 void ExchangeLET(Cell<TSP> &);
 
+template<class TSP>
+void FindLocalRoots(typename Cell<TSP>::KeyType,
+                    const typename Cell<TSP>::CellHashTable&,
+                    typename Cell<TSP>::KeySet&);
+
 template <class TSP> // TapasStaticParams
 class Cell: public tapas::BasicCell<TSP> {
   friend class Partitioner<TSP>;
@@ -246,6 +252,7 @@ class Cell: public tapas::BasicCell<TSP> {
   typedef typename SFC::KeyType KeyType;
   
   typedef std::unordered_map<KeyType, Cell*> CellHashTable;
+  using KeySet = std::unordered_set<KeyType>;
   typedef typename TSP::ATTR attr_type;
   typedef typename TSP::ATTR AttrType;
   typedef typename TSP::BT::type BodyType;
@@ -259,6 +266,8 @@ class Cell: public tapas::BasicCell<TSP> {
 
   template<class T>
   using VecPtr = std::shared_ptr<std::vector<T>>;
+
+  friend void FindLocalRoots<TSP>(KeyType, const CellHashTable&, KeySet&);
 
   //========================================================
   // Constructors
@@ -288,9 +297,11 @@ class Cell: public tapas::BasicCell<TSP> {
     c->key_ = k;
     c->is_leaf_ = is_leaf;
     c->is_local_ = true;
+    c->is_local_subtree_ = false;
     c->data_ = data;
     c->bid_ = body_beg;
     c->nb_ = body_num;
+    bzero(&c->attr_, sizeof(c->attr_));
 
     TAPAS_ASSERT(body_num >= 0);
     TAPAS_ASSERT(body_beg >= 0);
@@ -305,11 +316,13 @@ class Cell: public tapas::BasicCell<TSP> {
     c->key_ = k;
     c->is_leaf_ = false;
     c->is_local_ = false;
+    c->is_local_subtree_ = false;
     c->nb_ = nb;
     c->remote_bodies_.clear();
     c->remote_body_attrs_.resize(nb);
     c->data_ = data;
-
+    bzero(&c->attr_, sizeof(c->attr_));
+    
     return c;
   }
 
@@ -331,6 +344,9 @@ class Cell: public tapas::BasicCell<TSP> {
   static void Map(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
   static void Map(Cell<TSP> &c1, Cell<TSP> &c2,
                   std::function<void(Cell<TSP>&, Cell<TSP>&)> f);
+
+  static void PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
+  static void UpwardMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
   
   static void Map(BodyIter &b1, BodyIter &b2,
                   std::function<void(BodyIter&, BodyIter&)> f) {
@@ -457,6 +473,7 @@ class Cell: public tapas::BasicCell<TSP> {
   std::shared_ptr<std::mutex>    ht_mtx_; //!< mutex to manipulate ht_
   
   bool is_local_; //!< if it's a local cell or LET cell.
+  bool is_local_subtree_; //!< If all of its descendants are local.
   std::vector<BodyType> remote_bodies_; //!< LET bodies (if !is_local_)
   std::vector<BodyAttrType> remote_body_attrs_; //!< LET body attrs (If !is_local_)
 }; // class Cell
@@ -1146,6 +1163,188 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
   f(c1, c2);
 }
 
+/**
+ * \brief PostOrderMap starting from a local cell. The subtree under c must be completely local.
+ */
+template<class TSP>
+void LocalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
+  TAPAS_ASSERT(c.IsLocal());
+      
+  if (c.IsLeaf()) {
+    f(c);
+  } else {
+    int nc = c.nsubcells();
+    for (int ci = 0; ci < nc; ci++) {
+      Cell<TSP> &child = c.subcell(ci);
+      LocalUpwardTraversal(child, f);
+    }
+    f(c);
+  }
+}
+
+/**
+ * \brief Exchange cell attrs of global leaves
+ */
+template<class TSP>
+void ExchangeGlobalLeafAttrs(typename Cell<TSP>::CellHashTable &gtree,
+                             const typename Cell<TSP>::KeySet &lroots) {
+  // data.gleaves_ is unnecessary?
+  using KeyType = typename Cell<TSP>::KeyType;
+  using AttrType = typename Cell<TSP>::AttrType;
+  
+  std::vector<KeyType> keys_send(lroots.begin(), lroots.end());
+  std::vector<KeyType> keys_recv;
+  std::vector<AttrType> attr_send;
+  std::vector<AttrType> attr_recv;
+  
+  auto &data = gtree[0]->data();
+
+  for(size_t i = 0; i < keys_send.size(); i++) {
+    KeyType k = keys_send[i];
+    TAPAS_ASSERT(data.ht_.count(k) == 1);
+    attr_send.push_back(data.ht_[k]->attr());
+  }
+
+  tapas::mpi::Allgatherv(keys_send, keys_recv, MPI_COMM_WORLD);
+  tapas::mpi::Allgatherv(attr_send, attr_recv, MPI_COMM_WORLD);
+
+  for (size_t i = 0; i < keys_recv.size(); i++) {
+    KeyType key = keys_recv[i];
+    TAPAS_ASSERT(gtree.count(key) == 1);
+    gtree[key]->attr() = attr_recv[i];
+  }
+
+  TAPAS_ASSERT(keys_recv.size() == attr_recv.size());
+}
+
+template<class TSP>
+void GlobalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
+  using KeyType = typename Cell<TSP>::KeyType;
+  using SFC = typename Cell<TSP>::SFC;
+  auto &data = c.data();
+  KeyType k = c.key();
+
+  // c must be in the global tree hash table.
+  TAPAS_ASSERT(data.ht_gtree_.count(k) == 1);
+
+  // There are only two cases:
+  // 1.  All the children of the cell c are in the global tree.
+  //     This means c is not global-leaf cell.
+  // 2.  None of the children of the cell c is in the global tree.
+  //     This means c is a global-leaf.
+
+  {
+    Stderr e("global_upward");
+    e.out() << SFC::Simplify(k) << " "
+            << SFC::Decode(k) << " "
+            << k << std::endl;
+    if (data.gleaves_.count(k) > 0) {
+      e.out() << "\t" << "This cell is a global leaf. return." << std::endl;
+    }
+    else {
+      e.out() << "\t" << "This cell is not a global leaf. Computing." << std::endl;
+    }
+  }
+
+  if (data.gleaves_.count(k) > 0) {
+    // the cell c is a global leaf. The attr value is already calculated
+    // as a local root in its owner process.
+    return;
+  }
+
+  KeyType chkey = Cell<TSP>::SFC::Child(k, 0);
+
+  TAPAS_ASSERT(data.ht_gtree_.count(chkey) > 0);
+  
+  // c is not a global leaf.
+  int nc = c.nsubcells();
+  for (int ci = 0; ci < nc; ci++) {
+    KeyType chk = SFC::Child(c.key(), ci);
+    Cell<TSP> *child = data.ht_gtree_.at(chk);
+    GlobalUpwardTraversal(*child, f);
+  }
+
+  {
+    Stderr e("global_upward");
+    e.out() << "\t" << "Calling f to " << SFC::Decode(k) << std::endl;
+  }
+
+  f(c);
+}
+
+template<class TSP>
+void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
+  auto &data = c.data();
+  
+  // perform post-order (upward) traverse
+  // algorithm:
+  //   if c is in the global tree:
+  //     for lr in local roots:
+  //       perform local upward up to lr
+  //     end for
+  //     exchange global leaves
+  //     perform global upward up to c
+  //   else
+  //     perform local upward up to c
+  //   end if
+  //
+  //
+  //
+  
+  if (data.ht_gtree_.count(c.key()) > 0) {
+    // c is in the global tree. We need to
+    // 1. calculate local roots in each process,
+    // 2. allgatherv the results
+    // 3. culculate the global tree in each process
+    
+    for (auto && key_lr : data.lroots_) {
+      TAPAS_ASSERT(data.ht_.count(key_lr) == 1);
+      auto *cell = data.ht_[key_lr];
+      
+      {
+        using SFC = typename Cell<TSP>::SFC;
+        using KeyType = typename Cell<TSP>::KeyType;
+        KeyType k = cell->key();
+        Stderr e("local_upward_traversal");
+        e.out() << SFC::Simplify(k) << " "
+                << SFC::Decode(k) << " "
+                << k << std::endl;
+      }
+  
+      LocalUpwardTraversal(*cell, f);
+    }
+
+    ExchangeGlobalLeafAttrs<TSP>(data.ht_gtree_, data.lroots_);
+
+    GlobalUpwardTraversal(c, f);
+  } else {
+    // c is not in the global tree, which means c's subtree is perfectly local.
+    LocalUpwardTraversal(c, f);
+  }
+
+  {
+    using SFC = typename Cell<TSP>::SFC;
+    using KeyType = typename Cell<TSP>::KeyType;
+    Stderr e("approx");
+    for (auto &&iter : data.ht_) {
+      KeyType key = iter.first;
+      auto attr = iter.second->attr();
+      e.out() << key << " ";
+      e.out() << std::scientific << attr.x << " ";
+      e.out() << std::scientific << attr.y << " ";
+      e.out() << std::scientific << attr.z << " ";
+      e.out() << std::scientific << attr.w << " ";
+      e.out() << std::endl;
+      //e.out() << SFC::Simplify(k) << " " << SFC::Decode(k) << " " << k << std::endl;
+    }
+  }
+}
+
+template<class TSP>
+void Cell<TSP>::UpwardMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
+  Cell<TSP>::PostOrderMap(c, f);
+}
+
 template <class TSP>
 bool Cell<TSP>::operator==(const Cell &c) const {
   return key_ == c.key_;
@@ -1155,6 +1354,7 @@ template <class TSP>
 bool Cell<TSP>::IsRoot() const {
   return SFC::GetDepth(key_) == 0;
 }
+
 
 template <class TSP>
 bool Cell<TSP>::IsLeaf() const {
@@ -1221,8 +1421,8 @@ template <class TSP>
 Cell<TSP> *Cell<TSP>::Lookup(KeyType k) const {
   // Try the local hash.
   auto &ht = data_->ht_;
-  auto &ht_gtree = data_->ht_gtree_;
   auto &ht_let = data_->ht_let_;
+  auto &ht_gtree = data_->ht_gtree_;
   
   auto i = ht.find(k);
   if (i != ht.end()) {
@@ -1242,6 +1442,13 @@ Cell<TSP> *Cell<TSP>::Lookup(KeyType k) const {
   //       If a cell exists only in ht_gtree, only the value of attr of the cell matters
   //       and whether the cell is leaf or not.
   //       Thus, cells in ht_gtree are not used in dual tree traversal.
+  i = ht_gtree.find(k);
+  // If the key is not in local hash, next try LET hash.
+  if (i != ht_gtree.end()) {
+    assert(i->second != nullptr);
+    return i->second;
+  }
+
   
   return nullptr;
 }
@@ -1797,66 +2004,173 @@ void GenerateLeaves(int num_bodies,
   tapas::mpi::Allreduce(&tmp_max_depth, &max_depth, 1, MPI_SUM, MPI_COMM_WORLD);
 }
 
-template<class HotData>
-void FindGlobalLeaves(typename HotData::KeyType key,
-                      typename HotData::CellHashTable &ht,
-                      typename HotData::KeySet   &gleaves) {
-  using CellType = typename HotData::CellType;
-  using KeyType = typename HotData::KeyType;
-  using SFC = typename HotData::SFC;
-
-  TAPAS_ASSERT(ht.count(key) == 1);
-
-  CellType *c = ht[key];
-
+/**
+ * \brief An functional utility that provides upward reudce of a local tree for internal use.
+ *
+ * Non-local cells are just ignored.
+ * Values of member variables (memvp) of child cells are reduce using function f and
+ * assigned into parent's memvp value.
+ * If c is a leaf, c.*memvp is set to `init`
+ * 
+ * \tparam T    Type of target member values.
+ * \tparam Funct Type of the reducing function f. It is expected to be T(T, KeType, const CellType*c).
+ * \param c     Starting root cell
+ * \param memvp A member variable pointer (obtained by &Class::member)
+ * \param init  Initial value
+ * \param f     A reducing function of type (T, KeyType, const Cell*) -> T. If a child cell is local, 
+ *              KeyType and Cell* are both given. If a child is not local, the pointer is nullptr.
+ */
+template<class TSP, class T, class Funct>
+void LocalUpwardReduce(Cell<TSP> *c, T Cell<TSP>::*memvp, T init, Funct f) {
+  using KeyType = typename Cell<TSP>::KeyType;
+  using SFC = typename Cell<TSP>::SFC;
+  
   if (c->IsLeaf()) {
-    // If c is leaf, c is a global leaf
-    gleaves.insert(key);
+    // If c is a leaf, just assign the value `init` to `memvp` member variable.
+    c->*memvp = init;
   } else {
-    auto chld = SFC::GetChildren(key);
+    // c is a non-leaf cell. Reduce children's value and assign it into c->*memvp
+    auto &data = c->data();
+    KeyType key = c->key();
+    auto children_keys = SFC::GetChildren(key);
 
-    // if c's children are all local, c is a global leaf.
-    bool is_global_leaf = std::all_of(chld.begin(), chld.end(), [&ht](KeyType k) {
-        return ht.count(k) > 0;
-      });
+    T val = init;
+    
+    for (auto chk : children_keys) {
+      if (data.ht_.count(chk) > 0) {
+        Cell<TSP> *cc = data.ht_.at(chk);
+        LocalUpwardReduce(cc, memvp, init, f);
+        val = f(val, chk, const_cast<const Cell<TSP>*>(cc));
+      } else {
+        val = f(val, chk, nullptr);
+      }
+    }
+    
+    c->*memvp = val; // assign reduced value.
+  }
+}
 
-    if (is_global_leaf) {
-      // If all the children are local, then the `key` is a global leaf (= local tree)
-      gleaves.insert(key);
-    } else {
-      for (auto &&chk : chld) {
-        if (ht.count(chk) > 0) {
-          FindGlobalLeaves<HotData>(chk, ht, gleaves);
-        }
+/**
+ * \brief Performs pre-order traversal for local cells.
+ * \tparam TSP TSP.
+ * \tparam Funct A callback function called for each cell. Expected to be <bool (CellType*)>.
+ * \param c A cell to start traversal
+ * \param f A callback function. If f returns false for a cell, then its children are not visited.
+ */
+template<class TSP, class Funct>
+void LocalPreOrderTraverse(Cell<TSP> *c, Funct f) {
+  using SFC = typename Cell<TSP>::SFC;
+  
+  TAPAS_ASSERT(c->IsLocal());
+
+  auto &data = c->data();
+
+  bool cont = f(c);
+  if (!cont) return;
+
+  if (!c->IsLeaf()) {
+    auto child_keys = SFC::GetChildren(c->key());
+    for (auto chk : child_keys) {
+      if (data.ht_.count(chk) > 0) {
+        Cell<TSP> *cc = data.ht_.at(chk);
+        LocalPreOrderTraverse(cc, f);
       }
     }
   }
 }
 
-template<class HotData>
-void ExchangeGlobalLeaves(typename HotData::KeySet &gleaves) {
-  using KeyType = typename HotData::KeyType;
+/**
+ * \brief A reducing function used with LocalUpwardReduce, to check if a cell is a local subtree.
+ */
+template<class KeyType, class CellType>
+bool ReduceLocality(bool b, KeyType k, const CellType *c) {
+  {
+    using SFC = typename CellType::SFC;
+    Stderr e("local_reduce");
+    e.out() << "key " << SFC::Simplify(k) << " " << SFC::Decode(k) << " " << k << std::endl;
+    e.out() << "b = " << b << std::endl;
+    e.out() << "c != nullptr : " << (c != nullptr) << std::endl;
+    e.out() << "c->IsLocal() = " << (c ? c->IsLocal() : -1)<< std::endl;
+    e.out() << "result = " << (b && c != nullptr && c->IsLocal()) << std::endl;
+    e.out() << std::endl;
+  }
+  return b && c != nullptr && c->IsLocal();
+}
 
-  std::vector<KeyType> gl_keys_send(gleaves.begin(), gleaves.end()); // global leaf keys
+template<class TSP>
+void FindLocalRoots(typename Cell<TSP>::KeyType key,
+                    const typename Cell<TSP>::CellHashTable &ht,
+                    typename Cell<TSP>::KeySet   &lroots) {
+  using CellType = Cell<TSP>;
+  using KeyType = typename CellType::KeyType;
+  using SFC = typename CellType::SFC;
+
+  TAPAS_ASSERT(ht.count(key) == 1);
+
+  CellType *c = ht.at(key);
+
+  LocalUpwardReduce(c, &CellType::is_local_subtree_, true, ReduceLocality<KeyType, CellType>);
+
+  // Create a closure to find all local roots.
+  auto local_root_collector = [&lroots] (const CellType *c) -> bool {
+    if (c->is_local_subtree_) {
+      lroots.insert(c->key());
+      
+      {
+        KeyType k = c->key();
+        Stderr e("local_roots");
+        e.out() << SFC::Simplify(k) << " "
+                << SFC::Decode(k) << " "
+                << k << std::endl;
+      }
+      
+      return false;
+    } else {
+      return true;
+    }
+  };
+  
+  // Find all local subtree roots.
+  LocalPreOrderTraverse(c, local_root_collector);
+}
+
+template<class TSP>
+void ExchangeGlobalLeafKeys(const typename Cell<TSP>::KeySet &lroots,
+                            typename Cell<TSP>::KeySet &gleaves) {
+  using KeyType = typename Cell<TSP>::KeyType;
+
+  std::vector<KeyType> gl_keys_send(lroots.begin(), lroots.end()); // global leaf keys
   std::vector<KeyType> gl_keys_recv;
   tapas::mpi::Allgatherv(gl_keys_send, gl_keys_recv, MPI_COMM_WORLD);
   
   gleaves.insert(gl_keys_recv.begin(), gl_keys_recv.end());
+
+  {
+    Stderr e("global_leaves");
+    using SFC = typename Cell<TSP>::SFC;
+    for (auto &&k : gleaves) {
+      e.out() << SFC::Simplify(k) << " "
+              << SFC::Decode(k) << " "
+              << k << std::endl;
+    }
+  }
 }
 
-template<class HotData>
-void GrowGlobalTree(const typename HotData::KeySet &gleaves,
-                    const typename HotData::CellHashTable &ht,
-                    typename HotData::CellHashTable &ht_gtree) {
-  using CellType = typename HotData::CellType;
-  using KeyType = typename HotData::KeyType;
-  using SFC = typename HotData::SFC;
-  std::shared_ptr<HotData> dp = ht.at(0)->data_ptr();
+template<class TSP>
+void GrowGlobalTree(const typename Cell<TSP>::KeySet &gleaves,
+                    const typename Cell<TSP>::CellHashTable &ht,
+                    typename Cell<TSP>::CellHashTable &ht_gtree) {
+  using CellType = Cell<TSP>;
+  using KeyType = typename CellType::KeyType;
+  using SFC = typename CellType::SFC;
+  using Data = HotData<TSP, SFC>;
+  
+  std::shared_ptr<Data> dp = ht.at(0)->data_ptr();
 
   for (auto && key : gleaves) {
     for (KeyType k = key; k != 0; k = SFC::Parent(k)) {
       if (ht_gtree.count(k) > 0) {
-        continue;
+        break; // break to outer loop
       } else if (ht.count(k) > 0) {
         ht_gtree[k] = ht.at(k);
       } else {
@@ -1864,6 +2178,7 @@ void GrowGlobalTree(const typename HotData::KeySet &gleaves,
       }
     }
   }
+  ht_gtree[0] = ht.at(0);
 }
 
 /**
@@ -1872,26 +2187,27 @@ void GrowGlobalTree(const typename HotData::KeySet &gleaves,
  * 2. Exchange global leaves using Alltoallv
  * 3. Build global tree locally
  */
-template<class HotData>
-void BuildGlobalTree(HotData &data) {
+template<class TSP>
+void BuildGlobalTree(HotData<TSP, typename Cell<TSP>::SFC> &data) {
   // Traverse from root and mark global leaves
-  using HT = typename HotData::CellHashTable;
-  using ST = typename HotData::KeySet;
-  using KeyType = typename HotData::KeyType;
+  using HT = typename Cell<TSP>::CellHashTable;
+  using ST = typename Cell<TSP>::KeySet;
+  using KeyType = typename Cell<TSP>::KeyType;
 
   HT &ltree = data.ht_;       // hash table for the local tree
   HT &gtree = data.ht_gtree_; // hash table for the global tree
   ST &gleaves = data.gleaves_;
+  ST &lroots = data.lroots_;
 
   gtree.clear();
 
-  FindGlobalLeaves<HotData>(0, ltree, gleaves);
+  FindLocalRoots<TSP>(0, ltree, lroots);
 
   // Exchange global leaves using Allgatherv
-  ExchangeGlobalLeaves<HotData>(gleaves);
+  ExchangeGlobalLeafKeys<TSP>(lroots, gleaves);
 
   // Glow the global tree locally in each process
-  GrowGlobalTree<HotData>(gleaves, data.ht_, data.ht_gtree_);
+  GrowGlobalTree<TSP>(gleaves, data.ht_, data.ht_gtree_);
 }
 
 
