@@ -177,8 +177,9 @@ void PostOrderMap(Funct f, T &x, Args...args) {
 
 template<class Funct, class T, class...Args>
 void UpwardMap(Funct f, T &x, Args...args) {
-  std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
-  T::PostOrderMap(x, lambda);
+  PostOrderMap(f, x, args...);
+  //std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
+  //T::PostOrderMap(x, lambda);
 }
 
 

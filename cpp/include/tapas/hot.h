@@ -1241,19 +1241,6 @@ void GlobalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
   // 2.  None of the children of the cell c is in the global tree.
   //     This means c is a global-leaf.
 
-  {
-    Stderr e("global_upward");
-    e.out() << SFC::Simplify(k) << " "
-            << SFC::Decode(k) << " "
-            << k << std::endl;
-    if (data.gleaves_.count(k) > 0) {
-      e.out() << "\t" << "This cell is a global leaf. return." << std::endl;
-    }
-    else {
-      e.out() << "\t" << "This cell is not a global leaf. Computing." << std::endl;
-    }
-  }
-
   if (data.gleaves_.count(k) > 0) {
     // the cell c is a global leaf. The attr value is already calculated
     // as a local root in its owner process.
@@ -1271,12 +1258,7 @@ void GlobalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
     Cell<TSP> *child = data.ht_gtree_.at(chk);
     GlobalUpwardTraversal(*child, f);
   }
-
-  {
-    Stderr e("global_upward");
-    e.out() << "\t" << "Calling f to " << SFC::Decode(k) << std::endl;
-  }
-
+  
   f(c);
 }
 
@@ -1295,9 +1277,7 @@ void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
   //   else
   //     perform local upward up to c
   //   end if
-  //
-  //
-  //
+
   
   if (data.ht_gtree_.count(c.key()) > 0) {
     // c is in the global tree. We need to
@@ -1322,23 +1302,6 @@ void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
     
     assert(false); // for debug
     LocalUpwardTraversal(c, f);
-  }
-
-  {
-    using SFC = typename Cell<TSP>::SFC;
-    using KeyType = typename Cell<TSP>::KeyType;
-    Stderr e("approx");
-    for (auto &&iter : data.ht_) {
-      KeyType key = iter.first;
-      auto attr = iter.second->attr();
-      e.out() << key << " ";
-      e.out() << std::scientific << attr.x << " ";
-      e.out() << std::scientific << attr.y << " ";
-      e.out() << std::scientific << attr.z << " ";
-      e.out() << std::scientific << attr.w << " ";
-      e.out() << std::endl;
-      //e.out() << SFC::Simplify(k) << " " << SFC::Decode(k) << " " << k << std::endl;
-    }
   }
 }
 

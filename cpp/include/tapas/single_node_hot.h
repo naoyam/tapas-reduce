@@ -105,6 +105,9 @@ class Cell: public tapas::BasicCell<TSP> {
   static void Map(BodyIter &b1, BodyIter &b2,
                   std::function<void(BodyIter&, BodyIter&)> f);
 
+  static void PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
+  static void UpwardMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
+  
     KeyType key() const { return key_; }
 
     bool operator==(const Cell &c) const;
@@ -350,6 +353,20 @@ void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
 template <class TSP>
 void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2, std::function<void(Cell<TSP>&, Cell<TSP>&)> f) {
   f(c1, c2);
+}
+
+template <class TSP>
+void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
+  for (int i = 0; i < c.nsubcells(); i++) {
+    auto &chld = c.subcell(i);
+    PostOrderMap(chld, f);
+  }
+  f(c);
+}
+
+template <class TSP>
+void Cell<TSP>::UpwardMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
+  PostOrderMap(c, f);
 }
 
 template <class TSP>
