@@ -40,10 +40,10 @@ struct ThreadSpawnThreshold {
  */
 template<class C1, class C2>
 struct AllowMutual {
-    static bool value(C1 c1, C2 c2) {
-        // Generally, two elements of different types are not mutual interactive.
-        return false;
-    }
+  static bool value(C1, C2) {
+    // Generally, two elements of different types are not mutual interactive.
+    return false;
+  }
 };
 
 /** 
@@ -104,6 +104,8 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
     }
   }
 }
+
+
 
 /**
  * Map function f over product of two iterators

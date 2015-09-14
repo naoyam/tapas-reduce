@@ -19,7 +19,7 @@ endif
 
 CXX = clang++
 MPICXX = mpicxx -cxx=clang++ -DUSE_MPI
-CXXFLAGS := -std=c++11 -fcolor-diagnostics -Wall -Wextra
+CXXFLAGS := -std=c++11 -fcolor-diagnostics -Wall -Wextra -Wno-unused-local-typedef
 CXXFLAGS += -Wall -fno-elide-constructors
 
 CXXFLAGS += -DS=$(S)

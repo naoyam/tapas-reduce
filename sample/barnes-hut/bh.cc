@@ -92,12 +92,14 @@ void P2P(f4vec &tattrs, f4vec &tbodies, f4vec &source, float eps2) {
   }
 }
 
+#if 0 // unsed. commented cout to supress 'unsed function' warnings.
 static real_t distR2(const float4 &p, const float4 &q) {
   real_t dx = q.x - p.x;
   real_t dy = q.y - p.y;
   real_t dz = q.z - p.z;
   return dx * dx + dy * dy + dz * dz;
 }
+#endif
 
 static real_t distR2(const tapas::Vec<3, double> &p, const float4 &q) {
   real_t dx = q.x - p[0];
@@ -237,10 +239,12 @@ void LoadApproximate(Tapas::Cell *root) {
       ht[k]->attr() = v;
     }
   }
+#else
+  (void)root; //hack: disable "unused parameter" warnings.
 #endif
 }
 
-f4vec calc(f4vec &source, size_t np) {
+f4vec calc(f4vec &source) {
   Tapas::Region r(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 1.0, 1.0));
   Tapas::Cell *root = Tapas::Partition(source.data(), source.size(), r, 1);
 
@@ -351,7 +355,7 @@ void CheckResult(int np_check,
 #endif
 
 #ifdef USE_MPI
-  tapas::hot::BarrierExec([&tattrs](int rank, int size) {
+  tapas::hot::BarrierExec([&tattrs](int, int) {
       std::stringstream ss;
       ss << "direct_" << mpi_size << ".dat";
       std::ofstream ofs(ss.str().c_str());
@@ -363,7 +367,7 @@ void CheckResult(int np_check,
       }
       ofs.close();
     });
-#else // USE_MPI
+#else // ifdef USE_MPI
   std::stringstream ss;
   ss << "direct.dat";
   std::ofstream ofs(ss.str().c_str());
@@ -453,7 +457,7 @@ int main(int argc, char **argv) {
 
   // ------ Force evalution by Tapas
   double tic = get_time();
-  f4vec targetTapas = calc(sourceHost, N);
+  f4vec targetTapas = calc(sourceHost);
   double toc = get_time();
   std::cout << "time total_calc "   << std::scientific << toc-tic << " s" << std::endl;
   std::cout << "time total_gflops " << std::scientific << OPS / (toc-tic) << " GFlops" << std::endl;

@@ -187,6 +187,11 @@ static void Dump(const T1 &bodies, const T2 &keys, std::ostream & strm) {
          << std::fixed << std::setw(10) << keys[i]
          << std::endl;
   }
+#else
+  // hack to avoid 'unused parameter' warnings
+  (void) bodies;
+  (void) keys;
+  (void) strm;
 #endif
 }
 
@@ -467,7 +472,7 @@ class Cell: public tapas::BasicCell<TSP> {
   KeyType key_; //!< Key of the cell
   bool is_leaf_;
   std::shared_ptr<Data> data_;
-
+  
   int nb_; //!< number of bodies in the local process (not bodies under this cell).
   
   std::shared_ptr<CellHashTable> ht_; //!< Hash table of KeyType -> Cell*
@@ -528,9 +533,6 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
             << std::endl;
   }
 #endif
-
-  // debug
-  bool is_debug = false;
 
   if (is_local_leaf) {
 #ifdef TAPAS_DEBUG
@@ -646,9 +648,9 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
 template<class TSP>
 void ExchangeLET(Cell<TSP> &root) {
   using BodyType = typename Cell<TSP>::BodyType;
-  using BodyAttrType = typename Cell<TSP>::BodyAttrType;
+  //using BodyAttrType = typename Cell<TSP>::BodyAttrType;
   using CellAttrType = typename Cell<TSP>::attr_type;
-  using SFC = typename Cell<TSP>::SFC;
+  //using SFC = typename Cell<TSP>::SFC;
   using KeyType = typename Cell<TSP>::KeyType;
   using KeySet = typename Cell<TSP>::SFC::KeySet;
 
@@ -1134,17 +1136,11 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
 }
 
 /**
- * @brief 1-parameter Map function for 
+ * @brief 1-parameter Map function for (deprecated)
  */
 template <class TSP>
 void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
-#if 1 // debug
   f(cell);
-#else
-  if (cell.IsLocal()) {
-    f(cell);
-  }
-#endif
 }
 
 /**
@@ -1155,8 +1151,6 @@ void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
                     std::function<void(Cell<TSP>&, Cell<TSP>&)> f) {
 #ifdef TAPAS_BH
   if (c1.key() == 0 && c2.key() == 0) {
-    int rank = c1.data_->mpi_rank_;
-    
     ExchangeLET<TSP>(c1);
   }
 #endif
@@ -1246,8 +1240,6 @@ void GlobalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
     // as a local root in its owner process.
     return;
   }
-
-  KeyType chkey = Cell<TSP>::SFC::Child(k, 0);
 
   TAPAS_ASSERT(data.ht_gtree_.count(chkey) > 0);
   
@@ -1913,6 +1905,9 @@ void GenerateLeaves(int num_bodies,
   // Sort local bodies using SFC  keys
   using HN = HelperNode<TSP>;
   using SFC = typename Cell<TSP>::SFC;
+  (void) region; // to avoid unsed parameter warnings.
+  (void) b;
+  (void) num_bodies;
   
   std::sort(hn.begin(), hn.end(),
             [](const HN &lhs, const HN &rhs) { return lhs.key < rhs.key; });
@@ -2053,7 +2048,7 @@ void LocalPreOrderTraverse(Cell<TSP> *c, Funct f) {
  * \brief A reducing function used with LocalUpwardReduce, to check if a cell is a local subtree.
  */
 template<class KeyType, class CellType>
-bool ReduceLocality(bool b, KeyType k, const CellType *c) {
+bool ReduceLocality(bool b, KeyType, const CellType *c) {
   return b && c != nullptr && c->IsLocalSubtree();
 }
 
@@ -2063,7 +2058,7 @@ void FindLocalRoots(typename Cell<TSP>::KeyType key,
                     typename Cell<TSP>::KeySet   &lroots) {
   using CellType = Cell<TSP>;
   using KeyType = typename CellType::KeyType;
-  using SFC = typename CellType::SFC;
+  //using SFC = typename CellType::SFC;
 
   TAPAS_ASSERT(ht.count(key) == 1);
 
@@ -2134,7 +2129,7 @@ void BuildGlobalTree(HotData<TSP, typename Cell<TSP>::SFC> &data) {
   // Traverse from root and mark global leaves
   using HT = typename Cell<TSP>::CellHashTable;
   using ST = typename Cell<TSP>::KeySet;
-  using KeyType = typename Cell<TSP>::KeyType;
+  //using KeyType = typename Cell<TSP>::KeyType;
 
   HT &ltree = data.ht_;       // hash table for the local tree
   HT &gtree = data.ht_gtree_; // hash table for the global tree

@@ -92,7 +92,7 @@ template<class T>
 std::string join(const char *glue, const std::vector<T>& v) {
   std::stringstream ss;
   for (size_t i = 0; i < v.size(); i++) {
-    ss << v[i] << (i == v.size()-1 ? "" : " ");
+    ss << v[i] << (i == v.size()-1 ? "" : glue);
   }
   return ss.str();
 }

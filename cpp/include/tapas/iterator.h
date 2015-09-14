@@ -72,7 +72,6 @@ class BodyIterator {
     // unconditionally returns false.
     // This function is created to support ExaFMM's mutual interaction behavior
     // but it is not supported in Tapas.
-    return false;
     return c_ == x.c_;
   }
 };
@@ -137,7 +136,6 @@ class CellIterator {
     return 1;
   }
   bool AllowMutualInteraction(const CellIterator &x) const {
-    return false;
     return c_ == x.c_;
   }
 }; // class CellIterator
@@ -217,7 +215,6 @@ class SubCellIterator {
   template <class T>
   bool operator==(const T &) const { return false; }
   bool AllowMutualInteraction(const SubCellIterator &x) const {
-    return false;
     return c_ == x.c_;
   }
 }; // class SubCellIterator
