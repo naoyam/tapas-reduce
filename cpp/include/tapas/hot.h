@@ -53,6 +53,7 @@ using tapas::mpi::MPI_DatatypeTraits;
 
 // fwd decl
 template<class TSP> class Cell;
+template<class TSP> class DummyCell;
 
 /**
  * \brief Struct to hold shared data among Cells
@@ -67,7 +68,7 @@ struct HotData {
   using KeySet = std::unordered_set<KeyType>;
   using BodyType = typename TSP::BT::type;
   using BodyAttrType = typename TSP::BT_ATTR;
-  
+
   CellHashTable ht_;
   CellHashTable ht_let_;
   CellHashTable ht_gtree_;  // Hsah table of the global tree.
@@ -347,9 +348,13 @@ class Cell: public tapas::BasicCell<TSP> {
   bool IsRoot() const;
   bool IsLocalSubtree() const;
 
-  static void Map(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
-  static void Map(Cell<TSP> &c1, Cell<TSP> &c2,
-                  std::function<void(Cell<TSP>&, Cell<TSP>&)> f);
+  // 1-parameter Map function
+  template <class Funct>
+  static void Map(Funct f, Cell<TSP> &c);
+
+  // 2-argument Map() function
+  template<class Funct>
+  static void Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2);
 
   static void PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
   static void UpwardMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
@@ -499,7 +504,7 @@ using uset = std::unordered_set<T>;
  */
 template<class TSP, class SetType>
 void TraverseLET(typename Cell<TSP>::BodyType &p,
-                 typename Cell<TSP>::KeyType key,
+                 typename Cell<TSP>::KeyType src_key,
                  typename Cell<TSP>::Data &data,
                  SetType &list_attr, SetType &list_body) {
   using CellType = Cell<TSP>;
@@ -515,67 +520,69 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
   // Maximum depth of the tree.
   const int max_depth = data.max_depth_;
 
-  bool is_local = ht.count(key) != 0;
-  bool is_local_leaf = is_local && ht[key]->IsLeaf();
-  bool is_remote_leaf = !is_local && SFC::GetDepth(key) >= max_depth;
+  bool is_src_local = ht.count(src_key) != 0;
+  bool is_src_local_leaf = is_src_local && ht[src_key]->IsLeaf();
+  bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= max_depth;
 
 #ifdef TAPAS_DEBUG
   {
     Stderr e("traverse_let");
-    for (int d = 0; d < SFC::GetDepth(key); d++) {
+    for (int d = 0; d < SFC::GetDepth(src_key); d++) {
       e.out() << "_ ";
     }
-    e.out() << SFC::Simplify(key) << " : started TraverseLET "
-            << "is_local=" << is_local << " "
-            << "is_local_leaf=" << is_local_leaf << " "
-            << "is_remote_leaf=" << is_remote_leaf << " "
+    e.out() << SFC::Simplify(src_key) << " : started TraverseLET "
+            << "is_src_local=" << is_src_local << " "
+            << "is_src_local_leaf=" << is_src_local_leaf << " "
+            << "is_src_remote_leaf=" << is_src_remote_leaf << " "
             << " to particle [" << p.x << "," << p.y << "," << p.z << "," << p.w << "]"
             << std::endl;
   }
 #endif
 
-  if (is_local_leaf) {
+  if (is_src_local_leaf) {
 #ifdef TAPAS_DEBUG
     {
       Stderr e("traverse_let");
-      for (int d = 0; d < SFC::GetDepth(key); d++) {
+      for (int d = 0; d < SFC::GetDepth(src_key); d++) {
         e.out() << "_ ";
       }
-      e.out() << SFC::Simplify(key) << " is a local leaf. return." << std::endl;
+      e.out() << SFC::Simplify(src_key) << " is a local leaf. return." << std::endl;
     }
 #endif
+    // if the source cell is a remote leaf, we need it (the cell is not longer splittable anyway).
     return;
   } 
-  else if (is_remote_leaf) {
+  else if (is_src_remote_leaf) {
 #ifdef TAPAS_DEBUG
     {
       Stderr e("traverse_let");
-      for (int d = 0; d < SFC::GetDepth(key); d++) {
+      for (int d = 0; d < SFC::GetDepth(src_key); d++) {
         e.out() << "_ ";
       }
-      e.out() << SFC::Simplify(key) << " is a remote leaf. marked. return." << std::endl;
+      e.out() << SFC::Simplify(src_key) << " is a remote leaf. marked. return." << std::endl;
     }
 #endif
-    list_attr.insert(key);
-    list_body.insert(key);
+    // If the source cell is a remote leaf, we need it (with it's bodies).
+    list_attr.insert(src_key);
+    list_body.insert(src_key);
     return;
   }
 
 #ifdef TAPAS_DEBUG
   {
     Stderr e("traverse_let");
-    for (int d = 0; d < SFC::GetDepth(key); d++) {
+    for (int d = 0; d < SFC::GetDepth(src_key); d++) {
       e.out() << "_ ";
     }
-    e.out() << SFC::Simplify(key) << " is a remote non-leaf cell. marked." << std::endl;
+    e.out() << SFC::Simplify(src_key) << " is a remote non-leaf cell. marked." << std::endl;
   }
 #endif
-  
-  list_attr.insert(key);
 
-  TAPAS_ASSERT(SFC::GetDepth(key) <= SFC::MAX_DEPTH);
-    
-  auto child_keys = SFC::GetChildren(key);
+  // the cell attributes is necessary (because traversal has come here.)
+  list_attr.insert(src_key);
+  TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
+
+  auto src_child_keys = SFC::GetChildren(src_key);
 
   // distance function closure, which returns distance from p
   auto distR2 = [&p](const Vec<TSP::Dim, FP> &v) -> FP {
@@ -597,10 +604,12 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
   };
 
   // Sort children according to their distance from p
-  std::sort(std::begin(child_keys), std::end(child_keys), comp);
+  std::sort(std::begin(src_child_keys), std::end(src_child_keys), comp);
 
-  for (size_t i = 0; i < child_keys.size(); i++) {
-    KeyType ckey = child_keys[i];
+  // ------ block starts here -------
+
+  for (size_t i = 0; i < src_child_keys.size(); i++) {
+    KeyType ckey = src_child_keys[i];
     auto ctr = CellType::CalcCenter(ckey, r);
 
     FP s = CellType::CalcRegion(ckey, r).width(0); // width
@@ -610,7 +619,7 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
 #ifdef TAPAS_DEBUG
       {
         Stderr e("traverse_let");
-        for (int d = 0; d < SFC::GetDepth(key); d++) {
+        for (int d = 0; d < SFC::GetDepth(src_key); d++) {
           e.out() << "_ ";
         }
         e.out() << SFC::Simplify(key)  << " 's children "
@@ -623,25 +632,26 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
       // are also `far`. Thus we don't need to traverse them recursively
       // and just need their attributes(multipole)
       
-      for (size_t j = i; j < child_keys.size(); j++) {
-        KeyType ckey2 = child_keys[j];
+      for (size_t j = i; j < src_child_keys.size(); j++) {
+        KeyType ckey2 = src_child_keys[j];
         if (ht.count(ckey2) == 0) {
 #ifdef TAPAS_DEBUG
           {
             Stderr e("traverse_let");
-            for (int d = 0; d < SFC::GetDepth(key); d++) {
+            for (int d = 0; d < SFC::GetDepth(src_key); d++) {
               e.out() << "_ ";
             }
-            e.out() << SFC::Simplify(key) << " 's children " << SFC::Simplify(child_keys[j])
+            e.out() << SFC::Simplify(key) << " 's children " << SFC::Simplify(src_child_keys[j])
                     << " is far enough.. done." << std::endl;
           }
 #endif
-          list_attr.insert(child_keys[j]);
+          list_attr.insert(src_child_keys[j]);
         }
       }
       break;
     }
   }
+  // ------ block ends here -------
   return;
 }
 
@@ -1139,7 +1149,8 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
  * @brief 1-parameter Map function for (deprecated)
  */
 template <class TSP>
-void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
+template <class Funct>
+void Cell<TSP>::Map(Funct f, Cell<TSP> &cell) {
   f(cell);
 }
 
@@ -1147,8 +1158,8 @@ void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
  * 2-parameter Map function over cells (apply user function to products of cells)
  */
 template<class TSP>
-void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2,
-                    std::function<void(Cell<TSP>&, Cell<TSP>&)> f) {
+template<class Funct>
+void Cell<TSP>::Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2) {
 #ifdef TAPAS_BH
   if (c1.key() == 0 && c2.key() == 0) {
     ExchangeLET<TSP>(c1);
@@ -2483,6 +2494,11 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 }
 
 } // namespace hot
+
+#ifdef _F
+# warning "Tapas function macro _F is already defined. "                \
+  "Maybe it is conflicting other libraries or you included incompatible tapas headers."
+#endif
 
 template <class TSP, class T2>
 ProductIterator<CellIterator<hot::Cell<TSP>>, T2>

@@ -97,11 +97,15 @@ class Cell: public tapas::BasicCell<TSP> {
             tapas::BasicCell<TSP>(region, bid, nb), key_(key),
             ht_(ht), nb_(nb), bodies_(bodies), body_attrs_(body_attrs),
             is_leaf_(true) {}
-    
-  static void Map(Cell<TSP> &cell,
-                  std::function<void(Cell<TSP>&)> f);
-  static void Map(Cell<TSP> &c1, Cell<TSP> &c2,
-                  std::function<void(Cell<TSP>&, Cell<TSP>&)> f);
+
+  // 1-parameter Map function()
+  template <class Funct>
+  static void Map(Funct f, Cell<TSP> &cell);
+  
+  // 2-parameter Map function()
+  template<class Funct>
+  static void Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2);
+  
   static void Map(BodyIter &b1, BodyIter &b2,
                   std::function<void(BodyIter&, BodyIter&)> f);
 
@@ -346,12 +350,14 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
 }
 
 template <class TSP>
-void Cell<TSP>::Map(Cell<TSP> &cell, std::function<void(Cell<TSP>&)> f) {
+template <class Funct>
+void Cell<TSP>::Map(Funct f, Cell<TSP> &cell) {
   f(cell);
 }
 
 template <class TSP>
-void Cell<TSP>::Map(Cell<TSP> &c1, Cell<TSP> &c2, std::function<void(Cell<TSP>&, Cell<TSP>&)> f) {
+template <class Funct>
+void Cell<TSP>::Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2) {
   f(c1, c2);
 }
 

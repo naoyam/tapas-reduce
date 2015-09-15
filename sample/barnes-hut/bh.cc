@@ -123,7 +123,7 @@ static void ComputeForce(Tapas::BodyIterator &p1,
   p1.attr().w += invR * approx.w;
 }
 
-static void approximate(Tapas::Cell &c) {
+void approximate(Tapas::Cell &c) {
   if (c.IsLeaf()) {
     if (c.nb() == 0) {
       c.attr().w = 0.0;
@@ -155,35 +155,38 @@ static void approximate(Tapas::Cell &c) {
   }
 }
 
-static void interact(Tapas::Cell &c1, Tapas::Cell &c2, real_t theta) {
-  if (!c1.IsLeaf()) {
-    tapas::Map(interact, tapas::Product(c1.subcells(), c2), theta);
-  } else if (c1.IsLeaf() && c1.nb() == 0) {
-    return;
-  } else if (c2.IsLeaf()) {
-    if (c2.nb() == 0) {
+struct interact {
+  template<class Cell>
+  void operator()(Cell &c1, Cell &c2, real_t theta) {
+    if (!c1.IsLeaf()) {
+      tapas::Map(interact(), tapas::Product(c1.subcells(), c2), theta);
+    } else if (c1.IsLeaf() && c1.nb() == 0) {
       return;
+    } else if (c2.IsLeaf()) {
+      if (c2.nb() == 0) {
+        return;
+      } else {
+        // Both of c1 and c2 are leaves.
+        // c1 and c2 have only one particle each. Calculate direct force.
+        tapas::Map(ComputeForce, c1.bodies(), c2.body(0), EPS2);
+      }
     } else {
-      // Both of c1 and c2 are leaves.
-      // c1 and c2 have only one particle each. Calculate direct force.
-      tapas::Map(ComputeForce, c1.bodies(), c2.body(0), EPS2);
-    }
-  } else {
-    assert(c1.IsLeaf() && !c2.IsLeaf());
+      assert(c1.IsLeaf() && !c2.IsLeaf());
     
-    // use apploximation
-    const float4 &p1 = c1.body(0);
-    real_t d = std::sqrt(distR2(c2.center(), p1));
-    //real_t d = std::sqrt(distR2(c2.attr(), p1));
-    real_t s = c2.width(0);
-
-    if ((s/ d) < theta) {
-      tapas::Map(ComputeForce, c1.bodies(), c2.attr(), EPS2);
-    } else {
-      tapas::Map(interact, tapas::Product(c1, c2.subcells()), theta);
+      // use apploximation
+      const float4 &p1 = c1.body(0);
+      real_t d = std::sqrt(distR2(c2.center(), p1));
+      //real_t d = std::sqrt(distR2(c2.attr(), p1));
+      real_t s = c2.width(0);
+    
+      if ((s/ d) < theta) {
+        tapas::Map(ComputeForce, c1.bodies(), c2.attr(), EPS2);
+      } else {
+        tapas::Map(interact(), tapas::Product(c1, c2.subcells()), theta);
+      }
     }
   }
-}
+};
 
 typedef tapas::Vec<DIM, real_t> Vec3;
 
@@ -196,7 +199,7 @@ void DumpApproximate(Tapas::Cell *root) {
   assert(out.good());
   out << seed << std::endl;
   out << N_total << std::endl;
-  
+
   std::function<void (Tapas::Cell&)> dumper = [&out, &dumper](Tapas::Cell &cell) {
     out << cell.key() << " ";
     out << std::scientific << cell.attr().x << " ";
@@ -208,7 +211,7 @@ void DumpApproximate(Tapas::Cell *root) {
       tapas::Map(dumper, cell.subcells());
     }
   };
-
+  
   tapas::Map(dumper, *root);
 
   out.close();
@@ -255,7 +258,7 @@ f4vec calc(f4vec &source) {
 #endif
   
   real_t theta = 0.5;
-  tapas::Map(interact, tapas::Product(*root, *root), theta);
+  tapas::Map(interact(), tapas::Product(*root, *root), theta);
 
   // Get the evaluation result from Tapas
   int nb = root->local_nb();

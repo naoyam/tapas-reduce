@@ -4,17 +4,44 @@
 #include <cmath>
 #include <vector>
 #include <algorithm>
+#include <tuple>
 #include <functional>
 
 #include "tapas/cell.h"
 #include "tapas/iterator.h"
 
+
 namespace tapas {
 
-namespace {
+// Utility classes to wrap a user's function and arguments
+// into a simple function object that takes only cells.
+template<int ...SS>
+struct Seq { };
 
+template<int N, int...SS>
+struct GenSeq : GenSeq<N-1, N-1, SS...> { };
 
-} // anon namespace
+template<int...SS>
+struct GenSeq<0, SS...> {
+  typedef Seq<SS...> type;
+};
+
+template<class Funct, class CellType1, class CellType2, class ...Args>
+struct CallbackWrapper {
+  Funct f_;
+  std::tuple<Args...> args_;
+
+  CallbackWrapper(Funct f, Args... args) : f_(f), args_(args...) {}
+  
+  void operator()(CellType1 &c1, CellType2 &c2) {
+    dispatch(c1, c2, typename GenSeq<sizeof...(Args)>::type());
+  }
+  
+  template<int...SS>
+  void dispatch(CellType1 &c1, CellType2 &c2, Seq<SS...>) {
+    f_(c1, c2, std::get<SS>(args_)...);
+  }
+};
 
 /**
  * @brief A threshold to stop recursive tiling parallelization
@@ -51,9 +78,9 @@ struct AllowMutual {
  */
 template<class C1>
 struct AllowMutual<C1, C1> {
-    static bool value(C1 c1, C1 c2) {
-        return c1.AllowMutualInteraction(c2);
-    }
+  static bool value(C1 c1, C1 c2) {
+    return c1.AllowMutualInteraction(c2);
+  }
 };
 
 template<class T1_Iter, class T2_Iter, class Funct, class...Args>
@@ -67,13 +94,16 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
   using C2 = typename T2_Iter::value_type;
   using Th = typename CellType::Threading;
 
+  using Callback = CallbackWrapper<Funct, C1, C2, Args...>;
+  Callback callback(f, args...);
+  
   if (end1 - beg1 <= ThreadSpawnThreshold<T1_Iter>::Value ||
       end2 - beg2 <= ThreadSpawnThreshold<T2_Iter>::Value) {
     // The two ranges (beg1,end1) and (beg2,end2) are fine enough to apply f in a serial manner.
 
     // Create a function object to be given to the Container's Map function.
-    typedef std::function<void(C1&, C2&)> Callback;
-    Callback g = [=](C1 &c1, C2 &c2) { f(c1, c2, args...); };
+    //typedef std::function<void(C1&, C2&)> Callback;
+    //Callback g = [&args...](C1 &c1, C2 &c2) { f()(c1, c2, args...); };
 
     for(int i = beg1; i < end1; i++) {
       for(int j = beg2; j < end2; j++) {
@@ -81,7 +111,7 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
         bool am = AllowMutual<T1_Iter, T2_Iter>::value(iter1, iter2);
         if ((am && i <= j) || !am) {
           if (iter1.IsLocal()) {
-            CellType::Map(*(iter1+i), *(iter2+j), g);
+            CellType::template Map<Callback>(callback, *(iter1+i), *(iter2+j));
           }
         }
       }
@@ -105,8 +135,6 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
   }
 }
 
-
-
 /**
  * Map function f over product of two iterators
  */
@@ -114,6 +142,7 @@ template <class Funct, class T1_Iter, class T2_Iter, class... Args>
 void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
   TAPAS_LOG_DEBUG() << "map product iterator size: "
                     << prod.size() << std::endl;
+      
   product_map(prod.t1_, 0, prod.t1_.size(),
               prod.t2_, 0, prod.t2_.size(),
               f, args...);
@@ -138,8 +167,8 @@ void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
               f, args...);
 #else
   for (index_t i = 0; i < prod.size(); ++i) {
-      f(prod.first(), prod.second(), args...);
-      prod++;
+    f(prod.first(), prod.second(), args...);
+    prod++;
   }
 #endif
 }
@@ -152,10 +181,10 @@ void Map(Funct f, SubCellIterator<CellType> iter, Args...args) {
 
   // pack args... into a lambda closure
   std::function<void(CellType&)> lambda = [=](CellType &cell) { f(cell, args...); };
-
+  
   typename Th::TaskGroup tg;
   for (int i = 0; i < iter.size(); i++) {
-    tg.createTask([&]() { CellType::Map(*iter, lambda); });
+    tg.createTask([&]() { CellType::Map(lambda, *iter); });
     iter++;
   } 
   tg.wait();
@@ -188,8 +217,9 @@ void UpwardMap(Funct f, T &x, Args...args) {
 template <class Funct, class T, class... Args>
 void Map(Funct f, T &x, Args...args) {
   TAPAS_LOG_DEBUG() << "map non-iterator" << std::endl;
+
   std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
-  T::Map(x, lambda);
+  T::Map(lambda, x);
 }
 
 } // namespace tapas
