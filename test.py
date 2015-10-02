@@ -18,9 +18,6 @@ def find_exec(exe):
     else:
         return found
 
-def get_compiler():
-    cxx = os.environ.get('CXX') or find_exec('clang++') or find_exec('g++')
-
 class TestCppUnitTests(unittest.TestCase):
     def test_units(self):
         tests = glob.glob(os.path.join(BuildRoot, "cpp", "tests", "test_*"))
@@ -72,7 +69,6 @@ class TestBH(unittest.TestCase):
 
 class TestExaFMM(unittest.TestCase):
     def setUp(self):
-        self.serial_tapas_mt = os.path.join(BuildRoot, 'sample', 'exafmm-dev-13274dd4ac68', 'examples', 'serial_tapas_mt')
         self.serial_tapas = os.path.join(BuildRoot, 'sample', 'exafmm-dev-13274dd4ac68', 'examples', 'serial_tapas')
 
     def test_fmm(self):
@@ -111,4 +107,4 @@ if __name__ == "__main__":
     finally:
         sys.stderr.write("Removing temporary build directory: " + BuildRoot + "\n")
         shutil.rmtree(BuildRoot, True)
-        
+
