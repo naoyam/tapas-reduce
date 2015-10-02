@@ -102,7 +102,7 @@ if __name__ == "__main__":
                     '-DCMAKE_BUILD_TYPE=Release',
                     '-DEXAFMM_EXPANSION=6',
                     '-DEXAFMM_ENABLE_MT=no'], cwd=BuildRoot)
-        check_call(['make'], cwd=BuildRoot)
+        check_call(['make', 'VERBOSE=1'], cwd=BuildRoot)
 
         # Run tests
         unittest.main(verbosity=3)
