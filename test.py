@@ -98,7 +98,10 @@ if __name__ == "__main__":
     try:
         # Build the source tree
         # We use P=6 to make the test clearer.
-        check_call(['cmake', SourceRoot, '-DCMAKE_BUILD_TYPE=Release', '-DEXAFMM_EXPANSION=6'], cwd=BuildRoot)
+        check_call(['cmake', SourceRoot,
+                    '-DCMAKE_BUILD_TYPE=Release',
+                    '-DEXAFMM_EXPANSION=6',
+                    '-DEXAFMM_ENABLE_MT=no'], cwd=BuildRoot)
         check_call(['make'], cwd=BuildRoot)
 
         # Run tests
