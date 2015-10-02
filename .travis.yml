@@ -12,4 +12,4 @@ before_install:
 branches:
   only:
     - feature-barnes-hut-LET
-script: sh ./test.sh
+script: bash ./test.sh
