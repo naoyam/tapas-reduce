@@ -494,9 +494,6 @@ using uset = std::unordered_set<T>;
 
 #ifdef TAPAS_BH
 
-// New TraverseLET
-#if 0
-
 enum class SplitType {
   Approx,       // Compute using right cell's attribute
   Body,         // Compute using right cell's bodies
@@ -507,13 +504,16 @@ enum class SplitType {
 template<class TSP>
 struct InteractionPred {
   using FP = typename TSP::FP;
-  using CT = typename Cell<TSP>;
+  using CT = Cell<TSP>;
   using BT = typename CT::BodyType;
-  using VT = Vec<TSP::Dim, FP>;
   using KT = typename Cell<TSP>::KeyType;
+  using DT = typename Cell<TSP>::Data;
+  using VT = Vec<TSP::Dim, FP>;
   using SFC = typename Cell<TSP>::SFC;
 
-  Cell<TSP>::Data &data_;
+  const DT &data_;
+
+  InteractionPred(const DT &data) : data_(data) {} 
 
   FP distR2(const VT& v1, const VT& v2) {
     FP dx = v1[0] - v2[0];
@@ -537,51 +537,53 @@ struct InteractionPred {
     return distR2(c.center(), t);
   }
 
-  template<calss T1>
+  template<class T1>
   FP distR2(const T1 &v1, KT k2) {
     const auto &r = data_.region_;
     distR2(v1, CT::CalcCenter(k2, r));
   }
 
-  template<calss T2>
+  template<class T2>
   FP distR2(KT k1, const T2 &v2) {
-    distR2(CT::CalcCenter(k1, region_), v2);
+    distR2(CT::CalcCenter(k1, data_.region_), v2);
   }
 
   bool IsLeaf(KT k) {
-    return data.max_depth_ <= SFC::GetDepth(k);
+    if (data_.ht_.count(k) > 0) {
+      return data_.ht_.at(k)->IsLeaf();
+    } else {
+      return data_.max_depth_ <= SFC::GetDepth(k);
+    }
   }
 
   int nb(KT k) { return 1; } // nb() method for remote cell always returns '1' in LET mode
   
-  SplitType operator() (Cell<TSP> &c1, Cell<TSP>::KT k2) {
-    const constexpr int theta = 0.5;
+  SplitType operator() (CT &c1, KT k2) {
+    const constexpr FP theta = 0.5;
     
     if (!c1.IsLeaf()) {
       return SplitType::SplitLeft;
     } else if (c1.IsLeaf() && c1.nb() == 0) {
       return SplitType::Approx;
-    } else if (c2.IsLeaf()) { // c2.IsLeaf()
-      if (nb(k2) == 0) { // Note: nb(k2) always returns 1
+    } else if (IsLeaf(k2)) { // c2.IsLeaf()
+      if (nb(k2) == 0) { // Note: nb(k2) always returns 1 to be conservative
         return SplitType::Approx;
       } else {
         return SplitType::Body;
       }
     } else {
       const float &p1 = c1.body(0);
-      real_t d = std::sqrt(distR2(p1, c2));
-      real_t s = c2.width(0);
-
+      real_t d = std::sqrt(distR2(p1, k2));
+      real_t s = CT::CalcRegion(data_.region_, k2).width(0);
+      
       if ((s/d) < theta) {
         return SplitType::Approx;
       } else {
-        return Split::SplitRight;
+        return SplitType::SplitRight;
       }
     }
   }
 };
-
-#else // Old TraverseELT
 
 /**
  * \brief Traverse a virtual global tree and collect cells to be requested to other processes.
@@ -596,10 +598,17 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
                  typename Cell<TSP>::KeyType src_key,
                  typename Cell<TSP>::Data &data,
                  SetType &list_attr, SetType &list_body) {
+  // TraverseLET traverses the hypothetical global tree and constructs a list of
+  // necessary cells required by the local process.
   using CellType = Cell<TSP>;
   using FP = typename TSP::FP;
   using SFC = typename Cell<TSP>::SFC;
   using KeyType = typename Cell<TSP>::KeyType;
+
+  // Approx/Split branch
+  auto pred = InteractionPred<TSP>(data);
+
+  (void)pred;
 
   const constexpr double theta = 0.5;
 
@@ -612,11 +621,11 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
   bool is_src_local = ht.count(src_key) != 0;
   bool is_src_local_leaf = is_src_local && ht[src_key]->IsLeaf();
   bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= max_depth;
-
+  
   if (is_src_local_leaf) {
     // if the source cell is a remote leaf, we need it (the cell is not longer splittable anyway).
     return;
-  } 
+  }
   else if (is_src_remote_leaf) {
     // If the source cell is a remote leaf, we need it (with it's bodies).
     list_attr.insert(src_key);
@@ -679,8 +688,6 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
   // ------ block ends here -------
   return;
 }
-
-#endif
 
 template<class TSP>
 void ExchangeLET(Cell<TSP> &root) {
