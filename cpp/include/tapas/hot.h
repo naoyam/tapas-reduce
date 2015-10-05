@@ -494,6 +494,9 @@ using uset = std::unordered_set<T>;
 
 #ifdef TAPAS_BH
 
+/**
+ * Enum values of predicate function
+ */
 enum class SplitType {
   Approx,       // Compute using right cell's attribute
   Body,         // Compute using right cell's bodies
@@ -558,7 +561,7 @@ struct InteractionPred {
 
   int nb(KT k) { return 1; } // nb() method for remote cell always returns '1' in LET mode
   
-  SplitType operator() (CT &c1, KT k2) {
+  SplitType operator() (KT k1, KT k2) {
     const constexpr FP theta = 0.5;
     
     if (!c1.IsLeaf()) {
@@ -614,14 +617,14 @@ void TraverseLET(typename Cell<TSP>::KeyType trg_key,
   auto &r = data.region_;
   auto &ht = data.ht_;
 
-  // chck if the trg cell is local
+  // (A) check if the trg cell is local (kept in this function)
   if (ht.count(trg_key) == 0) {
     return;
   }
-
+  
   const CellType &trg_cell = *(ht[trg_key]);
 
-  // Go deeper until the target cell is a leaf
+  // (B) Go deeper until the target cell is a leaf
   if (!trg_cell.IsLeaf()) {
     auto children = SFC::GetChildren(trg_key);
     for (KeyType ch : children) {
@@ -642,19 +645,21 @@ void TraverseLET(typename Cell<TSP>::KeyType trg_key,
   bool is_src_local = ht.count(src_key) != 0;
   bool is_src_local_leaf = is_src_local && ht[src_key]->IsLeaf();
   bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= max_depth;
-  
+
+  // (C)
   if (is_src_local_leaf) {
-    // if the source cell is a remote leaf, we need it (the cell is not longer splittable anyway).
     return;
   }
-  else if (is_src_remote_leaf) {
+
+  // (D)
+  if (is_src_remote_leaf) {
     // If the source cell is a remote leaf, we need it (with it's bodies).
     list_attr.insert(src_key);
     list_body.insert(src_key);
     return;
   }
 
-  // the cell attributes is necessary (because traversal has come here.)
+  // (E) the cell attributes is necessary (because traversal has come here.)
   list_attr.insert(src_key);
   TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
 
@@ -679,6 +684,7 @@ void TraverseLET(typename Cell<TSP>::KeyType trg_key,
     return d1 < d2;
   };
 
+  // (F) sort child nodes
   // Sort children according to their distance from p
   // If a certain child is "approximated", the farer children are all "approximated."
   std::sort(std::begin(src_child_keys), std::end(src_child_keys), comp);
