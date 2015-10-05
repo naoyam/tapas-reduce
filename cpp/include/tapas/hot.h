@@ -594,7 +594,7 @@ struct InteractionPred {
  * \param list_body (output) Set of request keys of which bodies are to be sent
  */
 template<class TSP, class SetType>
-void TraverseLET(typename Cell<TSP>::BodyType &p,
+void TraverseLET(typename Cell<TSP>::KeyType trg_key,
                  typename Cell<TSP>::KeyType src_key,
                  typename Cell<TSP>::Data &data,
                  SetType &list_attr, SetType &list_body) {
@@ -607,13 +607,34 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
 
   // Approx/Split branch
   auto pred = InteractionPred<TSP>(data);
-
   (void)pred;
 
   const constexpr double theta = 0.5;
 
   auto &r = data.region_;
   auto &ht = data.ht_;
+
+  // chck if the trg cell is local
+  if (ht.count(trg_key) == 0) {
+    return;
+  }
+
+  const CellType &trg_cell = *(ht[trg_key]);
+
+  // Go deeper until the target cell is a leaf
+  if (!trg_cell.IsLeaf()) {
+    auto children = SFC::GetChildren(trg_key);
+    for (KeyType ch : children) {
+      if (ht.count(ch) > 0) {
+        TraverseLET<TSP, SetType>(ch, src_key, data, list_attr, list_body);
+      }
+    }
+    return;
+  }
+
+  TAPAS_ASSERT(trg_cell.IsLeaf());
+
+  const auto &p = trg_cell.body(0);
 
   // Maximum depth of the tree.
   const int max_depth = data.max_depth_;
@@ -669,8 +690,8 @@ void TraverseLET(typename Cell<TSP>::BodyType &p,
     FP s = CellType::CalcRegion(ckey, r).width(0); // width
     FP d = std::sqrt(distR2(ctr));
 
-    if (s/d > theta) { // if the cell(ckey) is close
-      TraverseLET<TSP, SetType>(p, ckey, data, list_attr, list_body);
+    if (s/d > theta) { // if the cell(ckey) is close, call TraverseLET recursively 
+      TraverseLET<TSP, SetType>(trg_key, ckey, data, list_attr, list_body);
     } else {
       // If i-th children is far enough from `cell`, the rest of children
       // are also `far`. Thus we don't need to traverse them recursively
@@ -718,10 +739,11 @@ void ExchangeLET(Cell<TSP> &root) {
   req_keys_attr.insert(root.key());
 
   // Construct request lists of necessary cells
-  for (int bi = 0; bi < root.local_nb(); bi++) {
-    BodyType &b = root.local_body(bi);
-    TraverseLET<TSP, KeySet>(b, root.key(), root.data(), req_keys_attr, req_keys_body);
-  }
+  TraverseLET<TSP, KeySet>(root.key(), root.key(), root.data(), req_keys_attr, req_keys_body);
+  // for (int bi = 0; bi < root.local_nb(); bi++) {
+  //   BodyType &b = root.local_body(bi);
+  //   TraverseLET<TSP, KeySet>(b, root.key(), root.data(), req_keys_attr, req_keys_body);
+  // }
 
 #ifdef TAPAS_MEASURE
   end_trv = MPI_Wtime();
