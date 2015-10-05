@@ -563,6 +563,8 @@ struct InteractionPred {
   
   SplitType operator() (KT k1, KT k2) {
     const constexpr FP theta = 0.5;
+    TAPAS_ASSERT(data_.ht_.count(k1) > 0);
+    const auto &c1 = data_.ht_[k1];
     
     if (!c1.IsLeaf()) {
       return SplitType::SplitLeft;
