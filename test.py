@@ -5,10 +5,12 @@ import unittest
 import tempfile
 import shutil
 import glob
+import datetime
 from subprocess import Popen, PIPE, check_call, CalledProcessError, STDOUT
 
 SourceRoot = os.path.dirname(os.path.abspath(__file__))
 BuildRoot = tempfile.mkdtemp()
+LogFile = None
 
 def find_exec(exe):
     p = Popen('which %s' % exe, shell=True, stdout=PIPE, stderr=PIPE)
@@ -23,7 +25,7 @@ class TestCppUnitTests(unittest.TestCase):
         tests = glob.glob(os.path.join(BuildRoot, "cpp", "tests", "test_*"))
         for t in tests:
             try:
-                retcode = check_call(t, stderr=PIPE, stdout=PIPE)
+                retcode = check_call(t, stderr=LogFile, stdout=LogFile)
                 self.assertEqual(retcode, 0, msg=t)
             except CalledProcessError as e:
                 self.fail(msg = str(e))
@@ -38,7 +40,7 @@ class TestBH(unittest.TestCase):
         except:
             pass
         check_call(['make', 'VERBSE=1', 'MODE=release',
-                    '-C', self.srcdir, 'clean', 'all'], cwd = self.bindir)
+                    '-C', self.srcdir, 'clean', 'all'], cwd = self.bindir, stdout=LogFile, stderr=LogFile)
     def test_bh(self):
         for np in range(1, 6):
             for nb in [1000, 2000]:
@@ -65,7 +67,7 @@ class TestBH(unittest.TestCase):
                 self.assertTrue(err < 1e-2, "F ERR check for NB=%d, NP=%d" % (nb, np))
 
     def tearDown(self):
-        check_call(['make', '-C', self.srcdir, 'clean'], cwd = self.bindir)
+        check_call(['make', '-C', self.srcdir, 'clean'], cwd = self.bindir, stdout=LogFile, stderr=STDOUT)
 
 class TestExaFMM(unittest.TestCase):
     def setUp(self):
@@ -76,9 +78,9 @@ class TestExaFMM(unittest.TestCase):
         for dist in ['c', 'p', 'l']:
             for nb in [1000]:
                 for ncrit in ['16', '64']:
-                    p = Popen([self.serial_tapas, '-n', str(nb), '-c', ncrit, '-d', dist], stdout=PIPE, stderr=PIPE)
+                    p = Popen([self.serial_tapas, '-n', str(nb), '-c', ncrit, '-d', dist], stdout=PIPE, stderr=STDOUT)
                     out,err = p.communicate()
-                    out = out + err
+                    out = out
                     self.assertEqual(p.returncode, 0)
 
                     m = re.search(r'Rel. L2 Error \(pot\)  : (\S*)$', out, re.MULTILINE)
@@ -95,14 +97,18 @@ if __name__ == "__main__":
     sys.stderr.write("SourceRoot = " + SourceRoot + "\n")
     sys.stderr.write("BuildRoot = " + BuildRoot + "\n")
 
+    t = datetime.datetime.now()
+    logfile_name = t.strftime("test-%Y%m%d-%H%M%S-%f.log")
+    LogFile = open(logfile_name, 'w')
+
     try:
         # Build the source tree
         # We use P=6 to make the test clearer.
         check_call(['cmake', SourceRoot,
                     '-DCMAKE_BUILD_TYPE=Release',
                     '-DEXAFMM_EXPANSION=6',
-                    '-DEXAFMM_ENABLE_MT=no'], cwd=BuildRoot)
-        check_call(['make', 'VERBOSE=1'], cwd=BuildRoot)
+                    '-DEXAFMM_ENABLE_MT=no'], cwd=BuildRoot, stdout=LogFile, stderr=LogFile)
+        check_call(['make', 'VERBOSE=1'], cwd=BuildRoot, stdout=LogFile, stderr=LogFile)
 
         # Run tests
         unittest.main(verbosity=3)
@@ -110,4 +116,6 @@ if __name__ == "__main__":
     finally:
         sys.stderr.write("Removing temporary build directory: " + BuildRoot + "\n")
         shutil.rmtree(BuildRoot, True)
+        if LogFile:
+            LogFile.close()
 
