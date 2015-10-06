@@ -494,6 +494,18 @@ using uset = std::unordered_set<T>;
 
 #ifdef TAPAS_BH
 
+template<class TSP>
+std::string k2s(typename Cell<TSP>::KeyType k) {
+  std::stringstream ss;
+  using SFC = typename Cell<TSP>::SFC;
+#if 0
+  ss << SFC::Simplify(k) << " " << SFC::Decode(k);
+#else
+  ss << SFC::Simplify(k);
+#endif
+  return ss.str();
+}
+
 /**
  * Enum values of predicate function
  */
@@ -502,6 +514,7 @@ enum class SplitType {
   Body,         // Compute using right cell's bodies
   SplitLeft,    // Split Left (local) cell
   SplitRight,   // Split Right (remote) cell
+  None,         // Nothing. Use when a target cell isn't local in TraverseLET
 };
 
 template<class TSP>
@@ -518,7 +531,7 @@ struct InteractionPred {
 
   InteractionPred(const DT &data) : data_(data) {} 
 
-  FP distR2(const VT& v1, const VT& v2) {
+  static FP distR2(const VT& v1, const VT& v2) {
     FP dx = v1[0] - v2[0];
     FP dy = v1[1] - v2[1];
     FP dz = v1[2] - v2[2];
@@ -543,12 +556,17 @@ struct InteractionPred {
   template<class T1>
   FP distR2(const T1 &v1, KT k2) {
     const auto &r = data_.region_;
-    distR2(v1, CT::CalcCenter(k2, r));
+    return distR2(v1, CT::CalcCenter(k2, r));
   }
 
   template<class T2>
   FP distR2(KT k1, const T2 &v2) {
-    distR2(CT::CalcCenter(k1, data_.region_), v2);
+    return distR2(CT::CalcCenter(k1, data_.region_), v2);
+  }
+
+  FP distR2(KT k1, KT k2) {
+    return distR2(CT::CalcCenter(k1, data_.region_),
+                  CT::CalcCenter(k2, data_.region_));
   }
 
   bool IsLeaf(KT k) {
@@ -590,6 +608,177 @@ struct InteractionPred {
   }
 };
 
+#define NEW_TRAVERSE_LET
+
+#ifdef NEW_TRAVERSE_LET
+
+// new TraverseLET
+template<class TSP, class SetType>
+void TraverseLET(std::vector<typename Cell<TSP>::KeyType> &trg_keys,
+                 typename Cell<TSP>::KeyType src_key,
+                 typename Cell<TSP>::Data &data,
+                 SetType &list_attr, SetType &list_body) {
+  using CellType = Cell<TSP>;
+  using KeyType = typename CellType::KeyType;
+  
+  auto pred = InteractionPred<TSP>(data);
+  auto src_ctr = CellType::CalcCenter(src_key, data.region_);
+
+  // Traverse target cells in trg_keys vector with the source cell src_key.
+  
+  // First, sort trg_keys accoding to their distance from the soruce cell.
+  std::sort(trg_keys.begi(), trg_keys.end(), [src_key, &pred](KeyType k1, KeyType k2) {
+      return pred.distR2(k1, src_key) < pred.distR2(k2, src_key);
+    });
+
+  // Apply TraverseLET for each keys in trg_keys. If interaction between trg_keys[i] and src_key is 'approximate',
+  // trg_keys[i+1...] will be all 'approximate'.
+  for (size_t i = 0; i < trg_keys.size(); i++) {
+    auto cond = TraverseLET<TSP, SetType>(trg_keys[i], src_key, data, list_attr, list_body);
+
+#if 0
+    if (cond == SplitType::Approx) {
+      // The rest of the trg_keys are all 'Approx'. however, unlike src_keys[] below, we don't need to add trg_cells to list_attr,
+      // because trg_keys are all expected to be local.
+      break;
+    }
+#endif
+  }
+}
+
+// new TraverseLET
+template<class TSP, class SetType>
+void TraverseLET(typename Cell<TSP>::KeyType trg_key,
+                 std::vector<typename Cell<TSP>::KeyType> src_keys,
+                 typename Cell<TSP>::Data &data,
+                 SetType &list_attr, SetType &list_body) {
+  using CellType = Cell<TSP>;
+  using KeyType = typename CellType::KeyType;
+  
+  auto pred = InteractionPred<TSP>(data);
+
+  // Traverse target cells in trg_keys vector with the source cell src_key.
+  
+  // First, sort trg_keys accoding to their distance from the soruce cell.
+  std::sort(src_keys.begin(), src_keys.end(), [trg_key, &pred](KeyType k1, KeyType k2) {
+      return pred.distR2(trg_key, k1) < pred.distR2(trg_key, k2);
+    });
+
+  // Apply TraverseLET for each keys in src_keys.
+  // If interaction between trg_key and src_keys[i] is 'approximate', trg_keys[i+1...] will be all 'approximate'.
+  for (size_t i = 0; i < src_keys.size(); i++) {
+    // auto cond = 
+    TraverseLET<TSP, SetType>(trg_key, src_keys[i], data, list_attr, list_body);
+
+#if 0
+    // This optimization code is temporarily disabled.
+    // The "distance" must be the "shortest" distance between cells ??
+    if (cond == SplitType::Approx) {
+      // The rest of src_keys are all 'Approx'
+      for (i++; i < src_keys.size(); i++) {
+        list_attr.insert(src_keys[i]);
+        KeyType pkey = SFC::Parent(src_keys[i]); // parent
+      }
+      return;
+    }
+#endif
+  }
+}
+
+// new TraverseLET
+/**
+ * \brief Traverse a virtual global tree and collect cells to be requested to other processes.
+ * \param p Traget particle
+ * \param key Source cell key
+ * \param data Data
+ * \param list_attr (output) Set of request keys of which attrs are to be sent
+ * \param list_body (output) Set of request keys of which bodies are to be sent
+ */
+template<class TSP, class SetType>
+SplitType TraverseLET(typename Cell<TSP>::KeyType trg_key,
+                      typename Cell<TSP>::KeyType src_key,
+                      typename Cell<TSP>::Data &data,
+                      SetType &list_attr, SetType &list_body) {
+  // TraverseLET traverses the hypothetical global tree and constructs a list of
+  // necessary cells required by the local process.
+  using CellType = Cell<TSP>;
+  using FP = typename TSP::FP;
+  using SFC = typename Cell<TSP>::SFC;
+  using KeyType = typename Cell<TSP>::KeyType;
+
+  // Approx/Split branch
+  auto pred = InteractionPred<TSP>(data);
+
+  const constexpr double theta = 0.5;
+
+  auto &r = data.region_;
+  auto &ht = data.ht_;
+  
+  // (A) check if the trg cell is local (kept in this function)
+  if (ht.count(trg_key) == 0) {
+    return SplitType::None;
+  }
+  
+  const CellType &trg_cell = *(ht[trg_key]);
+
+  // (B) Go deeper until the target cell is a leaf
+  if (!trg_cell.IsLeaf()) {
+    auto children = SFC::GetChildren(trg_key);
+    for (KeyType ch : children) {
+      if (ht.count(ch) > 0) {
+        TraverseLET<TSP, SetType>(ch, src_key, data, list_attr, list_body);
+      }
+    }
+    return SplitType::SplitLeft;
+  }
+
+  // Maximum depth of the tree.
+  const int max_depth = data.max_depth_;
+
+  bool is_src_local = ht.count(src_key) != 0;
+  bool is_src_local_leaf = is_src_local && ht[src_key]->IsLeaf();
+  bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= max_depth;
+
+  // (C)
+  if (is_src_local_leaf) {
+    // the cell is local. everythig's fine. nothing to do.
+    return SplitType::None;
+  }
+
+  // CAUTION: even if is_src_local, the children are not necessarily all local. 
+
+  // (D)
+  if (is_src_remote_leaf) {
+    // If the source cell is a remote leaf, we need it (with it's bodies).
+    list_attr.insert(src_key); // <----- (1)
+    list_body.insert(src_key); // <----- (2)
+    return SplitType::Body;
+  }
+
+  // (E) the cell attributes is necessary (because traversal has reached here)
+  list_attr.insert(src_key);  // <----- (3)
+  TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
+
+  const auto &p = trg_cell.body(0);
+
+  FP s = CellType::CalcRegion(src_key, r).width(0);
+  FP d = std::sqrt(pred.distR2(p, src_key));
+
+  if (s/d < theta) {
+    // approx
+    list_attr.insert(src_key); // <----- (4)
+    return SplitType::Approx;
+  } else {
+    // split (trg cell and src cell are too close)
+    TraverseLET<TSP, SetType>(trg_key, SFC::GetChildren(src_key),
+                              data, list_attr, list_body);
+    return SplitType::SplitRight;
+  }
+}
+
+#else // NEW_TRAVERSE_LET
+
+// Old TraverseLET
 /**
  * \brief Traverse a virtual global tree and collect cells to be requested to other processes.
  * \param p Traget particle
@@ -623,7 +812,7 @@ void TraverseLET(typename Cell<TSP>::KeyType trg_key,
   if (ht.count(trg_key) == 0) {
     return;
   }
-  
+
   const CellType &trg_cell = *(ht[trg_key]);
 
   // (B) Go deeper until the target cell is a leaf
@@ -656,13 +845,13 @@ void TraverseLET(typename Cell<TSP>::KeyType trg_key,
   // (D)
   if (is_src_remote_leaf) {
     // If the source cell is a remote leaf, we need it (with it's bodies).
-    list_attr.insert(src_key);
-    list_body.insert(src_key);
+    list_attr.insert(src_key); // <---- (1)
+    list_body.insert(src_key); // <---- (2)
     return;
   }
 
   // (E) the cell attributes is necessary (because traversal has come here.)
-  list_attr.insert(src_key);
+  list_attr.insert(src_key); // <---- (3)
   TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
 
   auto src_child_keys = SFC::GetChildren(src_key);
@@ -679,7 +868,7 @@ void TraverseLET(typename Cell<TSP>::KeyType trg_key,
   auto comp = [&p, &r, &distR2](KeyType k1, KeyType k2) {
     auto ctr1 = CellType::CalcCenter(k1, r);
     auto ctr2 = CellType::CalcCenter(k2, r);
-    
+
     FP d1 = distR2(ctr1);
     FP d2 = distR2(ctr2);
 
@@ -698,17 +887,17 @@ void TraverseLET(typename Cell<TSP>::KeyType trg_key,
     FP s = CellType::CalcRegion(ckey, r).width(0); // width
     FP d = std::sqrt(distR2(ctr));
 
-    if (s/d > theta) { // if the cell(ckey) is close, call TraverseLET recursively 
+    if (s/d > theta) { // if the cell(ckey) is close, call TraverseLET recursively
       TraverseLET<TSP, SetType>(trg_key, ckey, data, list_attr, list_body);
     } else {
       // If i-th children is far enough from `cell`, the rest of children
       // are also `far`. Thus we don't need to traverse them recursively
       // and just need their attributes(multipole)
-      
+
       for (size_t j = i; j < src_child_keys.size(); j++) {
         KeyType ckey2 = src_child_keys[j];
         if (ht.count(ckey2) == 0) {
-          list_attr.insert(src_child_keys[j]);
+          list_attr.insert(src_child_keys[j]); //<---- (4)
         }
       }
       break;
@@ -717,6 +906,10 @@ void TraverseLET(typename Cell<TSP>::KeyType trg_key,
   // ------ block ends here -------
   return;
 }
+
+#endif // NEW_TRAVERSE_LET
+
+
 
 template<class TSP>
 void ExchangeLET(Cell<TSP> &root) {
