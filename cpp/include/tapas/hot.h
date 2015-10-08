@@ -757,12 +757,7 @@ SplitType TraverseLET(typename Cell<TSP>::KeyType trg_key,
   using SFC = typename Cell<TSP>::SFC;
   using KeyType = typename Cell<TSP>::KeyType;
 
-  SplitType split_by_pred;
-
-  // Approx/Split branch
-  auto pred = InteractionPred<TSP>(data);
-
-  const constexpr double theta = 0.5;
+  //const constexpr double theta = 0.5;
 
   auto &r = data.region_;
   auto &ht = data.ht_;
@@ -796,46 +791,41 @@ SplitType TraverseLET(typename Cell<TSP>::KeyType trg_key,
   TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
   list_attr.insert(src_key);
 
-  split_by_pred = pred(trg_key, src_key);
+  // Approx/Split branch
+  auto pred = InteractionPred<TSP>(data); // predicator objectd
 
-  // CAUTION: even if is_src_local, the children are not necessarily all local. 
+  SplitType split = pred(trg_key, src_key);
 
-  const CellType &trg_cell = *(ht[trg_key]);
+  // CAUTION: even if is_src_local, the children are not necessarily all local.
 
-  // (B) Go deeper until the target cell is a leaf
-  if (!trg_cell.IsLeaf()) {
-    ReportSplitType<TSP>(trg_key, src_key, split_by_pred, SplitType::SplitLeft);
-    auto children = SFC::GetChildren(trg_key);
-    for (KeyType ch : children) {
-      if (ht.count(ch) > 0) {
-        TraverseLET<TSP, SetType>(ch, src_key, data, list_attr, list_body);
+  switch(split) {
+    case SplitType::SplitLeft:
+      {
+        auto children = SFC::GetChildren(trg_key);
+        for (KeyType ch : children) {
+          if (ht.count(ch) > 0) {
+            TraverseLET<TSP, SetType>(ch, src_key, data, list_attr, list_body);
+          }
+        }
       }
-    }
-    return SplitType::SplitLeft;
+      break;
+
+    case SplitType::None:
+      break;
+
+    case SplitType::SplitRight:
+      {
+        TraverseLET<TSP, SetType>(trg_key, SFC::GetChildren(src_key),
+                                  data, list_attr, list_body);
+      }
+      break;
+
+    case SplitType::Approx:
+      {
+        list_attr.insert(src_key); // <----- (4)
+      }
   }
-
-  if (trg_cell.nb() == 0) {
-    return SplitType::None;
-  }
-
-  const auto &p = trg_cell.body(0);
-
-  FP s = CellType::CalcRegion(src_key, r).width(0);
-  FP d = std::sqrt(pred.distR2(p, src_key));
-
-  if (s/d < theta) {
-    // approx
-    list_attr.insert(src_key); // <----- (4)
-    ReportSplitType<TSP>(trg_key, src_key, split_by_pred, SplitType::Approx);
-    return SplitType::Approx;
-  } else {
-    e.out() << "SplitRight becuase s/d < theta (where s=" << s << ", d=" << d << ")" << std::endl;
-    ReportSplitType<TSP>(trg_key, src_key, split_by_pred, SplitType::SplitRight);
-    // split (trg cell and src cell are too close)
-    TraverseLET<TSP, SetType>(trg_key, SFC::GetChildren(src_key),
-                              data, list_attr, list_body);
-    return SplitType::SplitRight;
-  }
+  return split;
 }
 
 #else // NEW_TRAVERSE_LET
