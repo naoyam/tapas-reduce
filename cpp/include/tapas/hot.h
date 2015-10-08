@@ -584,25 +584,14 @@ struct InteractionPred {
     TAPAS_ASSERT(data_.ht_.count(k1) > 0);
     const auto &c1 = *(data_.ht_.at(k1));
     
-    Stderr e("pred");
-    e.out() << SFC::Simplify(k1) << " - " << SFC::Simplify(k2) << " : ";
-        
     if (!c1.IsLeaf()) {
-      // 1.
-      e.out() << "SplitLeft [1]" << std::endl;
       return SplitType::SplitLeft;
     } else if (c1.IsLeaf() && c1.nb() == 0) {
-      // 2.
-      e.out() << "SplitLeft [2], " << SFC::Simplify(k1) << " is a leaf" << std::endl;
       return SplitType::None;
     } else if (IsLeaf(k2)) { // c2.IsLeaf()
       if (nb(k2) == 0) { // Note: nb(k2) always returns 1 to be conservative
-        // 3.
-        e.out() << "SplitLeft [3]" << std::endl;
         return SplitType::Approx;
       } else {
-        // 4.
-        e.out() << "SplitLeft [4]" << std::endl;
         return SplitType::Body;
       }
     } else {
@@ -611,12 +600,8 @@ struct InteractionPred {
       real_t s = CT::CalcRegion(k2, data_.region_).width(0);
       
       if ((s/d) < theta) {
-        // 5.
-        e.out() << "SplitLeft [5] (where s=" << s << ", d=" << d << ", s/d=" << (s/d) << " < theta)" << std::endl;
         return SplitType::Approx;
       } else {
-        // 6.
-        e.out() << "SplitLeft [6] (where s=" << s << ", d=" << d << ", s/d=" << (s/d) << " > theta)" << std::endl;
         return SplitType::SplitRight;
       }
     }
@@ -752,18 +737,10 @@ SplitType TraverseLET(typename Cell<TSP>::KeyType trg_key,
                       SetType &list_attr, SetType &list_body) {
   // TraverseLET traverses the hypothetical global tree and constructs a list of
   // necessary cells required by the local process.
-  using CellType = Cell<TSP>;
-  using FP = typename TSP::FP;
   using SFC = typename Cell<TSP>::SFC;
   using KeyType = typename Cell<TSP>::KeyType;
 
-  //const constexpr double theta = 0.5;
-
-  auto &r = data.region_;
-  auto &ht = data.ht_;
-
-  Stderr e("orig");
-  e.out() << SFC::Simplify(trg_key) << " - " << SFC::Simplify(src_key) << " ";
+  auto &ht = data.ht_; // hash table
   
   // (A) check if the trg cell is local (kept in this function)
   if (ht.count(trg_key) == 0) {
@@ -773,7 +750,7 @@ SplitType TraverseLET(typename Cell<TSP>::KeyType trg_key,
   // Maximum depth of the tree.
   const int max_depth = data.max_depth_;
 
-  bool is_src_local = ht.count(src_key) != 0;
+  bool is_src_local = ht.count(src_key) != 0; // CAUTION: even if is_src_local, the children are not necessarily all local.
   bool is_src_local_leaf = is_src_local && ht[src_key]->IsLeaf();
   bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= max_depth;
 
@@ -796,16 +773,11 @@ SplitType TraverseLET(typename Cell<TSP>::KeyType trg_key,
 
   SplitType split = pred(trg_key, src_key);
 
-  // CAUTION: even if is_src_local, the children are not necessarily all local.
-
   switch(split) {
     case SplitType::SplitLeft:
-      {
-        auto children = SFC::GetChildren(trg_key);
-        for (KeyType ch : children) {
-          if (ht.count(ch) > 0) {
-            TraverseLET<TSP, SetType>(ch, src_key, data, list_attr, list_body);
-          }
+      for (KeyType ch : SFC::GetChildren(trg_key)) {
+        if (ht.count(ch) > 0) {
+          TraverseLET<TSP, SetType>(ch, src_key, data, list_attr, list_body);
         }
       }
       break;
@@ -814,16 +786,15 @@ SplitType TraverseLET(typename Cell<TSP>::KeyType trg_key,
       break;
 
     case SplitType::SplitRight:
-      {
-        TraverseLET<TSP, SetType>(trg_key, SFC::GetChildren(src_key),
-                                  data, list_attr, list_body);
-      }
+      TraverseLET<TSP, SetType>(trg_key, SFC::GetChildren(src_key),
+                                data, list_attr, list_body);
       break;
 
     case SplitType::Approx:
-      {
-        list_attr.insert(src_key); // <----- (4)
-      }
+      list_attr.insert(src_key); // <----- (4)
+      break;
+
+    default: assert(0); // Never happens
   }
   return split;
 }
