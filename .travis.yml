@@ -9,6 +9,7 @@ before_install:
   - sudo apt-get install -qq g++-4.9 g++-5
   - sudo apt-get install -qq libstdc++-4.9-dev libstdc++-5-dev
   - sudo apt-get install -qq clang-3.5
+  - sudo sh ./setup_travis.sh
 branches:
   only:
     - feature-barnes-hut-LET
