@@ -134,6 +134,8 @@ if __name__ == "__main__":
     sys.stderr.write("BuildRoot = " + BuildRoot + "\n")
     sys.stderr.write("Test Scale = " + Scale + "\n")
 
+    check_call(['cmake', '--version'])
+
     t = datetime.datetime.now()
     logfile_name = t.strftime("test-%Y%m%d-%H%M%S-%f.log")
     LogFile = open(logfile_name, 'w+')
