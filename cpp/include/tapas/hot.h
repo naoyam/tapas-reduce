@@ -39,6 +39,7 @@
 #include "tapas/sfc_morton.h"
 #include "tapas/threading/default.h"
 #include "tapas/mpi_util.h"
+#include "tapas/iterator.h"
 
 #define DEBUG_SENDRECV
 
@@ -247,7 +248,7 @@ template <class TSP> // TapasStaticParams
 class Cell: public tapas::BasicCell<TSP> {
   friend class Partitioner<TSP>;
   friend class BodyIterator<Cell>;
-  friend void ExchangeLET<TSP>(Cell<TSP> &root);
+  friend void ExchangeLET<TSP>(Cell<TSP> &);
 
   //========================================================
   // Typedefs 
@@ -489,6 +490,44 @@ class Cell: public tapas::BasicCell<TSP> {
   std::vector<BodyAttrType> remote_body_attrs_; //!< LET body attrs (If !is_local_)
 }; // class Cell
 
+template<class TSP>
+class LETProxyCell {
+ public:
+  using CellType = Cell<TSP>; // original Cell type
+  using KeyType = typename CellType::KeyType;
+  using Data = typename CellType::Data;
+
+  // ctor
+  LETProxyCell(KeyType self_key, KeyType other_key, const Data &data)
+      : self_key_(self_key), other_key_(other_key), data_(data), mark_split_(false)
+  {
+  }
+
+  // ただし再帰呼び出しをしない
+  template<class Funct>
+  static void Map(Funct f, SubCellIterator<LETProxyCell<TSP>> subcells) {
+    subcells.Parent().MarkSplit();
+  }
+  
+  // 判定関数として直接機能する関数
+  template<class Funct>
+  static void pred(Funct f, KeyType k1, KeyType k2, const Data &data) {
+    LETProxyCell<TSP> trg_cell(k1, k2, data);
+    LETProxyCell<TSP> src_cell(k2, k1, data);
+
+    f(trg_cell, src_cell);
+  }
+
+ protected:
+  void MarkSplit() { mark_split_ = true; }
+  
+ private:
+  KeyType self_key_;
+  KeyType other_key_;
+  const Data &data_;
+  bool mark_split_;
+};
+
 template<class T>
 using uset = std::unordered_set<T>;
 
@@ -607,10 +646,6 @@ struct InteractionPred {
     }
   }
 };
-
-#define NEW_TRAVERSE_LET
-
-#ifdef NEW_TRAVERSE_LET
 
 // new TraverseLET
 template<class TSP, class SetType>
@@ -798,139 +833,6 @@ SplitType TraverseLET(typename Cell<TSP>::KeyType trg_key,
   }
   return split;
 }
-
-#else // NEW_TRAVERSE_LET
-
-// Old TraverseLET
-/**
- * \brief Traverse a virtual global tree and collect cells to be requested to other processes.
- * \param p Traget particle
- * \param key Source cell key
- * \param data Data
- * \param list_attr (output) Set of request keys of which attrs are to be sent
- * \param list_body (output) Set of request keys of which bodies are to be sent
- */
-template<class TSP, class SetType>
-void TraverseLET(typename Cell<TSP>::KeyType trg_key,
-                 typename Cell<TSP>::KeyType src_key,
-                 typename Cell<TSP>::Data &data,
-                 SetType &list_attr, SetType &list_body) {
-  // TraverseLET traverses the hypothetical global tree and constructs a list of
-  // necessary cells required by the local process.
-  using CellType = Cell<TSP>;
-  using FP = typename TSP::FP;
-  using SFC = typename Cell<TSP>::SFC;
-  using KeyType = typename Cell<TSP>::KeyType;
-
-  // Approx/Split branch
-  auto pred = InteractionPred<TSP>(data);
-  (void)pred;
-
-  const constexpr double theta = 0.5;
-
-  auto &r = data.region_;
-  auto &ht = data.ht_;
-
-  // (A) check if the trg cell is local (kept in this function)
-  if (ht.count(trg_key) == 0) {
-    return;
-  }
-
-  const CellType &trg_cell = *(ht[trg_key]);
-
-  // (B) Go deeper until the target cell is a leaf
-  if (!trg_cell.IsLeaf()) {
-    auto children = SFC::GetChildren(trg_key);
-    for (KeyType ch : children) {
-      if (ht.count(ch) > 0) {
-        TraverseLET<TSP, SetType>(ch, src_key, data, list_attr, list_body);
-      }
-    }
-    return;
-  }
-
-  TAPAS_ASSERT(trg_cell.IsLeaf());
-
-  const auto &p = trg_cell.body(0);
-
-  // Maximum depth of the tree.
-  const int max_depth = data.max_depth_;
-
-  bool is_src_local = ht.count(src_key) != 0;
-  bool is_src_local_leaf = is_src_local && ht[src_key]->IsLeaf();
-  bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= max_depth;
-
-  // (C)
-  if (is_src_local_leaf) {
-    return;
-  }
-
-  // (D)
-  if (is_src_remote_leaf) {
-    // If the source cell is a remote leaf, we need it (with it's bodies).
-    list_attr.insert(src_key); // <---- (1)
-    list_body.insert(src_key); // <---- (2)
-    return;
-  }
-
-  // (E) the cell attributes is necessary (because traversal has come here.)
-  list_attr.insert(src_key); // <---- (3)
-  TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
-
-  auto src_child_keys = SFC::GetChildren(src_key);
-
-  // distance function closure, which returns distance from p
-  auto distR2 = [&p](const Vec<TSP::Dim, FP> &v) -> FP {
-    FP dx = p.x - v[0];
-    FP dy = p.y - v[1];
-    FP dz = p.z - v[2];
-    return dx * dx + dy * dy + dz * dz;
-  };
-
-  // compare function to sort cells by their distance from p
-  auto comp = [&p, &r, &distR2](KeyType k1, KeyType k2) {
-    auto ctr1 = CellType::CalcCenter(k1, r);
-    auto ctr2 = CellType::CalcCenter(k2, r);
-
-    FP d1 = distR2(ctr1);
-    FP d2 = distR2(ctr2);
-
-    return d1 < d2;
-  };
-
-  // (F) sort child nodes
-  // Sort children according to their distance from p
-  // If a certain child is "approximated", the farer children are all "approximated."
-  std::sort(std::begin(src_child_keys), std::end(src_child_keys), comp);
-
-  for (size_t i = 0; i < src_child_keys.size(); i++) {
-    KeyType ckey = src_child_keys[i];
-    auto ctr = CellType::CalcCenter(ckey, r);
-
-    FP s = CellType::CalcRegion(ckey, r).width(0); // width
-    FP d = std::sqrt(distR2(ctr));
-
-    if (s/d > theta) { // if the cell(ckey) is close, call TraverseLET recursively
-      TraverseLET<TSP, SetType>(trg_key, ckey, data, list_attr, list_body);
-    } else {
-      // If i-th children is far enough from `cell`, the rest of children
-      // are also `far`. Thus we don't need to traverse them recursively
-      // and just need their attributes(multipole)
-
-      for (size_t j = i; j < src_child_keys.size(); j++) {
-        KeyType ckey2 = src_child_keys[j];
-        if (ht.count(ckey2) == 0) {
-          list_attr.insert(src_child_keys[j]); //<---- (4)
-        }
-      }
-      break;
-    }
-  }
-  // ------ block ends here -------
-  return;
-}
-
-#endif // NEW_TRAVERSE_LET
 
 
 

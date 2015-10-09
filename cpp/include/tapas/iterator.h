@@ -185,6 +185,10 @@ class SubCellIterator {
     KeyType ck = SFC::Child(pk, idx_);
     return ck;
   }
+
+  Cell& Parent() {
+    return c_;
+  }
   
   // prefix increment operator
   SubCellIterator<CellType> &operator++() {
