@@ -3,6 +3,12 @@ cmake_minimum_required(VERSION 2.8)
 project(Tapas)
 
 find_package(MPI REQUIRED)
+message(STATUS "MPI_COMPILE_FLAGS=${MPI_COMPILE_FLAGS}")
+message(STATUS "MPI_CXX_COMPILE_FLAGS=${MPI_CXX_COMPILE_FLAGS}")
+message(STATUS "MPI_CXX_INCLUDE_PATH=${MPI_CXX_INCLUDE_PATH}")
+message(STATUS "MPI_LINK_FLAGS=${MPI_LINK_FLAGS}")
+message(STATUS "MPI_LIBRARIES=${MPI_LIBRARIES}")
+
 
 find_package(Doxygen)
 
@@ -90,3 +96,4 @@ add_test(
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/sample/exafmm-dev-13274dd4ac68/examples
   COMMAND python test.py
   )
+
