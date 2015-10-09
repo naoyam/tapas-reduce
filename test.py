@@ -99,7 +99,7 @@ if __name__ == "__main__":
 
     t = datetime.datetime.now()
     logfile_name = t.strftime("test-%Y%m%d-%H%M%S-%f.log")
-    LogFile = open(logfile_name, 'w')
+    LogFile = open(logfile_name, 'w+')
 
     try:
         # Build the source tree
@@ -116,6 +116,10 @@ if __name__ == "__main__":
     finally:
         sys.stderr.write("Removing temporary build directory: " + BuildRoot + "\n")
         shutil.rmtree(BuildRoot, True)
+        if os.environ["TRAVIS"] and int(os.environ["TRAVIS"]) > 0:
+            LogFile.seek(0)
+            print LogFile.read()
         if LogFile:
             LogFile.close()
+            LogFile = None
 
