@@ -6,11 +6,24 @@ import tempfile
 import shutil
 import glob
 import datetime
+import traceback
 from subprocess import Popen, PIPE, check_call, CalledProcessError, STDOUT
 
 SourceRoot = os.path.dirname(os.path.abspath(__file__))
 BuildRoot = tempfile.mkdtemp()
 LogFile = None
+Scale = 'small' # test scale ('small', 'medium', 'large')
+
+assert Scale in ['small', 'medium', 'large']
+
+if 'SCALE' in os.environ:
+    s = os.environ['SCALE']
+    if re.match(r'^s(m(a(l(l)?)?)?)?$', s, re.I): # small
+        Scale = 'small'
+    elif re.match(r'^m(e(d(i(u(m)?)?)?)?)?$', s, re.I): # medium
+        Scale = 'medium'
+    elif re.match(r'^l(a(r(g(e)?)?)?)?$', s, re.I): # large
+        Scale = 'large'
 
 def find_exec(exe):
     p = Popen('which %s' % exe, shell=True, stdout=PIPE, stderr=PIPE)
@@ -42,8 +55,18 @@ class TestBH(unittest.TestCase):
         check_call(['make', 'VERBSE=1', 'MODE=release',
                     '-C', self.srcdir, 'clean', 'all'], cwd = self.bindir, stdout=LogFile, stderr=LogFile)
     def test_bh(self):
-        for np in range(1, 6):
-            for nb in [1000, 2000]:
+        if scale == 'small':
+            NP = [1,6];
+            NB = [1000]
+        elif scale == 'medium':
+            NP = range(1,6)
+            NB = [1000, 2000]
+        elif scale == 'large':
+            NP = [1,2,4,8,16,32]
+            NB = [1000, 2000, 4000, 8000, 16000]
+            
+        for np in NP:
+            for nb in NB:
                 nb_total = str(nb * np)
                 p = Popen(['mpirun', '-n', str(np), self.bin, '-s', nb_total], stdout=PIPE, stderr=STDOUT, cwd = self.bindir)
                 out,_ = p.communicate()
@@ -74,11 +97,24 @@ class TestExaFMM(unittest.TestCase):
         self.serial_tapas = os.path.join(BuildRoot, 'sample', 'exafmm-dev-13274dd4ac68', 'examples', 'serial_tapas')
 
     def test_fmm(self):
+        if Scale == 'small':
+            D = ['c']
+            NB = [1000]
+            NCRIT = [16]
+        elif Scale == 'medium':
+            D = ['c', 'p', 's', 'l']
+            NB = [1000, 2000]
+            NCRIT = [16, 64]
+        elif Scale == 'large':
+            D = ['c', 'p', 's', 'l']
+            NB = [1000, 2000, 4000, 8000, 16000]
+            NCRIT = [16, 64, 128]
+            
         # As of now Tapas port of ExaFMM only supports single process
-        for dist in ['c', 'p', 'l']:
-            for nb in [1000]:
+        for dist in D:
+            for nb in NB:
                 for ncrit in ['16', '64']:
-                    p = Popen([self.serial_tapas, '-n', str(nb), '-c', ncrit, '-d', dist], stdout=PIPE, stderr=STDOUT)
+                    p = Popen([self.serial_tapas, '-n', str(nb), '-c', str(ncrit), '-d', dist], stdout=PIPE, stderr=STDOUT)
                     out,err = p.communicate()
                     out = out
                     self.assertEqual(p.returncode, 0)
@@ -96,6 +132,7 @@ class TestExaFMM(unittest.TestCase):
 if __name__ == "__main__":
     sys.stderr.write("SourceRoot = " + SourceRoot + "\n")
     sys.stderr.write("BuildRoot = " + BuildRoot + "\n")
+    sys.stderr.write("Test Scale = " + Scale + "\n")
 
     t = datetime.datetime.now()
     logfile_name = t.strftime("test-%Y%m%d-%H%M%S-%f.log")
@@ -112,13 +149,13 @@ if __name__ == "__main__":
 
         # Run tests
         unittest.main(verbosity=3)
-        
+
     finally:
+        LogFile.seek(0)
+        print LogFile.read()
+        
         sys.stderr.write("Removing temporary build directory: " + BuildRoot + "\n")
         shutil.rmtree(BuildRoot, True)
-        if os.environ["TRAVIS"] and int(os.environ["TRAVIS"]) > 0:
-            LogFile.seek(0)
-            print LogFile.read()
         if LogFile:
             LogFile.close()
             LogFile = None
