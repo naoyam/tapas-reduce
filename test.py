@@ -55,13 +55,13 @@ class TestBH(unittest.TestCase):
         check_call(['make', 'VERBSE=1', 'MODE=release',
                     '-C', self.srcdir, 'clean', 'all'], cwd = self.bindir, stdout=LogFile, stderr=LogFile)
     def test_bh(self):
-        if scale == 'small':
+        if Scale == 'small':
             NP = [1,6];
             NB = [1000]
-        elif scale == 'medium':
+        elif Scale == 'medium':
             NP = range(1,6)
             NB = [1000, 2000]
-        elif scale == 'large':
+        elif Scale == 'large':
             NP = [1,2,4,8,16,32]
             NB = [1000, 2000, 4000, 8000, 16000]
             
