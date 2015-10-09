@@ -12,4 +12,5 @@ before_install:
 branches:
   only:
     - feature-barnes-hut-LET
+    - travis-ci
 script: bash ./test.sh
