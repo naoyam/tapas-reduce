@@ -159,7 +159,7 @@ struct interact {
   template<class Cell>
   void operator()(Cell &c1, Cell &c2, real_t theta) {
     if (!c1.IsLeaf()) {
-      tapas::Map(interact(), tapas::Product(c1.subcells(), c2), theta);
+      tapas::Map(*this, tapas::Product(c1.subcells(), c2), theta);
     } else if (c1.IsLeaf() && c1.nb() == 0) {
       return;
     } else if (c2.IsLeaf()) {
@@ -182,7 +182,7 @@ struct interact {
       if ((s/ d) < theta) {
         tapas::Map(ComputeForce, c1.bodies(), c2.attr(), EPS2);
       } else {
-        tapas::Map(interact(), tapas::Product(c1, c2.subcells()), theta);
+        tapas::Map(*this, tapas::Product(c1, c2.subcells()), theta);
       }
     }
   }
