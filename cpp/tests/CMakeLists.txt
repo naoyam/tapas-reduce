@@ -1,8 +1,5 @@
 include_directories(${CMAKE_SOURCE_DIR}/cpp/include)
 
-message(STATUS "MPI_CXX_COMPILE_FLAGS=${MPI_CXX_COMPILE_FLAGS}")
-message(STATUS "MPI_CXX_LINK_FLAGS=${MPI_CXX_LINK_FLAGS}")
-
 foreach(trg test_set test_morton_key test_allgatherv test_alltoallv)
   add_executable(${trg} ${trg}.cpp)
 
