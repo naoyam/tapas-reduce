@@ -35,11 +35,9 @@
 #include "tapas/bitarith.h"
 #include "tapas/logging.h"
 #include "tapas/debug_util.h"
-#include "tapas/iterator.h"
 #include "tapas/sfc_morton.h"
 #include "tapas/threading/default.h"
 #include "tapas/mpi_util.h"
-#include "tapas/iterator.h"
 
 #include "tapas/hot/let.h"
 
@@ -2084,6 +2082,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   "Maybe it is conflicting other libraries or you included incompatible tapas headers."
 #endif
 
+#if 0
 template <class TSP, class T2>
 ProductIterator<CellIterator<hot::Cell<TSP>>, T2>
 Product(hot::Cell<TSP> &c, T2 t2) {
@@ -2101,6 +2100,7 @@ ProductIterator<T1, CellIterator<hot::Cell<TSP>>>
     typedef CellIterator<CellType> CellIterType;
     return ProductIterator<T1, CellIterType>(t1, CellIterType(c));
 }
+#endif
 
 /**
  * @brief Constructs a ProductIterator for dual tree traversal of two trees

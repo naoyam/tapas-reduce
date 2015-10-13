@@ -26,13 +26,32 @@ struct GenSeq<0, SS...> {
   typedef Seq<SS...> type;
 };
 
+template<class Funct, class ...Args>
+struct CallbackWrapper {
+  Funct f_;
+  std::tuple<Args...> args_;
+
+  CallbackWrapper(Funct f, Args... args) : f_(f), args_(args...) {}
+
+  template<class CellType1, class CellType2>
+  void operator()(CellType1 &c1, CellType2 &c2) {
+    dispatch(c1, c2, typename GenSeq<sizeof...(Args)>::type());
+  }
+  
+  template<class CellType1, class CellType2, int...SS>
+  void dispatch(CellType1 &c1, CellType2 &c2, Seq<SS...>) {
+    f_(c1, c2, std::get<SS>(args_)...);
+  }
+};
+
+#if 0
 template<class Funct, class CellType1, class CellType2, class ...Args>
 struct CallbackWrapper {
   Funct f_;
   std::tuple<Args...> args_;
 
   CallbackWrapper(Funct f, Args... args) : f_(f), args_(args...) {}
-  
+
   void operator()(CellType1 &c1, CellType2 &c2) {
     dispatch(c1, c2, typename GenSeq<sizeof...(Args)>::type());
   }
@@ -42,6 +61,7 @@ struct CallbackWrapper {
     f_(c1, c2, std::get<SS>(args_)...);
   }
 };
+#endif
 
 /**
  * @brief A threshold to stop recursive tiling parallelization
@@ -90,11 +110,11 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
   assert(beg1 < end1 && beg2 < end2);
   
   using CellType = typename T1_Iter::CellType;
-  using C1 = typename T1_Iter::value_type; // Container type (actually Body or Cell)
-  using C2 = typename T2_Iter::value_type;
+  //using C1 = typename T1_Iter::value_type; // Container type (actually Body or Cell)
+  //using C2 = typename T2_Iter::value_type;
   using Th = typename CellType::Threading;
 
-  using Callback = CallbackWrapper<Funct, C1, C2, Args...>;
+  using Callback = CallbackWrapper<Funct, Args...>;
   Callback callback(f, args...);
   
   if (end1 - beg1 <= ThreadSpawnThreshold<T1_Iter>::Value ||

@@ -3,6 +3,8 @@
 
 #include<vector>
 
+#include <tapas/iterator.h>
+
 namespace tapas {
 namespace hot {
 
@@ -21,44 +23,6 @@ enum class SplitType {
 };
 
 
-template<class TSP>
-class LETProxyCell {
- public:
-  using CellType = Cell<TSP>; // original Cell type
-  using KeyType = typename CellType::KeyType;
-  using Data = typename CellType::Data;
-
-  // ctor
-  LETProxyCell(KeyType self_key, KeyType other_key, const Data &data)
-      : self_key_(self_key), other_key_(other_key), data_(data), mark_split_(false)
-  {
-  }
-
-  // ただし再帰呼び出しをしない
-  template<class Funct>
-  static void Map(Funct f, SubCellIterator<LETProxyCell<TSP>> subcells) {
-    (void) f;
-    subcells.Parent().MarkSplit();
-  }
-  
-  // 判定関数として直接機能する関数
-  template<class Funct>
-  static void pred(Funct f, KeyType k1, KeyType k2, const Data &data) {
-    LETProxyCell<TSP> trg_cell(k1, k2, data);
-    LETProxyCell<TSP> src_cell(k2, k1, data);
-
-    f(trg_cell, src_cell);
-  }
-
- protected:
-  void MarkSplit() { mark_split_ = true; }
-  
- private:
-  KeyType self_key_;
-  KeyType other_key_;
-  const Data &data_;
-  bool mark_split_;
-};
 
 template<class TSP>
 struct InteractionPred {
@@ -163,8 +127,88 @@ struct LET {
   using Data = typename CellType::Data;
   using KeySet = typename Cell<TSP>::SFC::KeySet;
   using BodyType = typename CellType::BodyType;
-  using CellAttrType = typename CellType::attr_type;
+  using attr_type = typename CellType::attr_type;
+  using CellAttrType = attr_type;
 
+  /**
+   * ProxyCell
+   */
+  class ProxyCell {
+   public:
+    // Export same type definitions as tapas::hot::Cell does.
+    using KeyType = KeyType;
+    using SFC = SFC;
+    using attr_type = attr_type;
+    static const constexpr int Dim = TSP::Dim;
+    using Threading = typename CellType::Threading;
+    
+    // ctor
+    ProxyCell(KeyType key, const Data &data)
+        : key_(key), data_(data), marked_split_(false), is_local_(false), cell_(nullptr)
+    {
+      if (data.ht_.count(key_) > 0) {
+        is_local_ = true;
+        cell_ = data.ht_.at(key_);
+      }
+    }
+
+    // ただし再帰呼び出しをしない
+    template<class Funct>
+    static void Map(Funct f, SubCellIterator<ProxyCell> subcells) {
+      (void) f;
+      subcells.Parent().MarkSplit();
+    }
+
+    template<class UserFunct>
+    static SplitType Pred(UserFunct f, KeyType trg_key, KeyType src_key, const Data &data) {
+      ProxyCell trg_cell(trg_key, data);
+      ProxyCell src_cell(src_key, data);
+    
+      f(trg_cell, src_cell);
+
+       if (trg_cell.marked_split_) {
+        return SplitType::SplitLeft;
+      } else if (src_cell.marked_split_) {
+        return SplitType::SplitRight;
+        // else if body
+      } else {
+        return SplitType::Approx;
+      }
+    }
+
+    unsigned size() const { return 1; } // BasicCell::size() in cell.h  (always returns 1)
+    bool IsLeaf() const {
+      if (is_local_) return cell_->IsLocal();
+      else           return data_.max_depth_ <= SFC::GetDepth(key_);
+    }
+
+    SubCellIterator<ProxyCell> subcells() {
+      return SubCellIterator<ProxyCell>(*this);
+    }
+
+    index_t nb() const {
+      if(is_local_) {
+        return cell_->nb();
+      } else {
+        TAPAS_ASSERT(!"Cannot obtain nb() of right hand side Cell for Map(Cell &lhs, Cell &rhs)");
+        return -1;
+      }
+    }
+
+    KeyType key() const { return key_; }
+    const Data &data() const { return data_; }
+
+   protected:
+    void MarkSplit() { marked_split_ = true; }
+  
+   private:
+    KeyType key_;
+    const Data &data_;
+    bool marked_split_;
+    bool is_local_;
+    Cell<TSP> *cell_;
+  }; // end of class ProxyCell
+  
   // Note for UserFunct template parameter:
   // The template parameter `UserFunct` is used between all the functions in LET class
   // and seems that it should be included in the class template parameter list along with TSP.
@@ -281,6 +325,7 @@ struct LET {
     auto pred = InteractionPred<TSP>(data); // predicator objectd
 
     SplitType split = pred(trg_key, src_key);
+    //(void)LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data);
 
     switch(split) {
       case SplitType::SplitLeft:

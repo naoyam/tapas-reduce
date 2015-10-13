@@ -684,6 +684,7 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
 
 } // namespace single_node_hot
 
+#if 0 // to be deleted (2015/10/13)
 template <class TSP, class T2>
 ProductIterator<CellIterator<single_node_hot::Cell<TSP>>, T2>
 Product(single_node_hot::Cell<TSP> &c, T2 t2) {
@@ -701,6 +702,7 @@ ProductIterator<T1, CellIterator<single_node_hot::Cell<TSP>>>
     typedef CellIterator<CellType> CellIterType;
     return ProductIterator<T1, CellIterType>(t1, CellIterType(c));
 }
+#endif
 
 /**
  * @brief Constructs a ProductIterator for dual tree traversal of two trees

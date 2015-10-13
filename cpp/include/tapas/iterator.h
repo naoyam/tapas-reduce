@@ -339,27 +339,55 @@ class ProductIterator<ITER, void> {
   }
 }; // class ProductIterator
 
-template <class T1, class T2>
-ProductIterator<T1, T2> Product(T1 t1, T2 t2) {
-  TAPAS_LOG_DEBUG() << "Product(X, X)" << std::endl;  
-  return ProductIterator<T1, T2>(t1, t2);
-}
+// template <class T1, class T2>
+// ProductIterator<T1, T2> Product(T1 t1, T2 t2) {
+//   return ProductIterator<T1, T2>(t1, t2);
+// }
 
-
+// <subcell, subcell>
 template <class CELL>
 ProductIterator<SubCellIterator<CELL>>
 Product(SubCellIterator<CELL> c1, SubCellIterator<CELL> c2) {
-  TAPAS_LOG_DEBUG() << "Product(SubCellIterator, SubCellIterator)" << std::endl;
   return ProductIterator<SubCellIterator<CELL>>(c1, c2);
 }
 
+// <subcell, cell>
 template <class CELL>
-ProductIterator<BodyIterator<CELL>> Product(
-    BodyIterator<CELL> c1, BodyIterator<CELL> c2) {
-  TAPAS_LOG_DEBUG() << "Product(BodyIterator, BodyIterator)" << std::endl;
+ProductIterator<SubCellIterator<CELL>, CellIterator<CELL>>
+Product(SubCellIterator<CELL> c1, CELL &c2) { // cand 1
+  return ProductIterator<SubCellIterator<CELL>,
+                         CellIterator<CELL>>(c1, c2);
+}
+
+// <cell, subcell>
+template <class CELL>
+ProductIterator<CellIterator<CELL>, SubCellIterator<CELL>>
+Product(CELL &c1, SubCellIterator<CELL> c2) { // cand 1
+  return ProductIterator<CellIterator<CELL>, SubCellIterator<CELL>>(c1, c2);
+}
+
+// <body, body>
+template <class CELL>
+ProductIterator<BodyIterator<CELL>>
+Product(BodyIterator<CELL> c1, BodyIterator<CELL> c2) {
   return ProductIterator<BodyIterator<CELL>>(c1, c2);
 }
 
+// cell, cell
+template <class Cell>
+ProductIterator<CellIterator<Cell>, CellIterator<Cell>>
+Product(Cell &c1, Cell &c2) {
+  typedef CellIterator<Cell> CellIterType;
+  return ProductIterator<CellIterType, CellIterType>(CellIterType(c1), CellIterType(c2));
+}
+
+// template <class T1, class Cell>
+// ProductIterator<T1, CellIterator<Cell>>
+//                          Product(T1 t1, Cell &c) {
+//     TAPAS_LOG_DEBUG() << "X-Cell product\n";
+//     typedef CellIterator<Cell> CellIterType;
+//     return ProductIterator<T1, CellIterType>(t1, CellIterType(c));
+// }
 
 } // namespace tapas
 
