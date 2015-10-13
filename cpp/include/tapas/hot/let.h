@@ -20,6 +20,46 @@ enum class SplitType {
   None,         // Nothing. Use when a target cell isn't local in Traverse
 };
 
+
+template<class TSP>
+class LETProxyCell {
+ public:
+  using CellType = Cell<TSP>; // original Cell type
+  using KeyType = typename CellType::KeyType;
+  using Data = typename CellType::Data;
+
+  // ctor
+  LETProxyCell(KeyType self_key, KeyType other_key, const Data &data)
+      : self_key_(self_key), other_key_(other_key), data_(data), mark_split_(false)
+  {
+  }
+
+  // ただし再帰呼び出しをしない
+  template<class Funct>
+  static void Map(Funct f, SubCellIterator<LETProxyCell<TSP>> subcells) {
+    (void) f;
+    subcells.Parent().MarkSplit();
+  }
+  
+  // 判定関数として直接機能する関数
+  template<class Funct>
+  static void pred(Funct f, KeyType k1, KeyType k2, const Data &data) {
+    LETProxyCell<TSP> trg_cell(k1, k2, data);
+    LETProxyCell<TSP> src_cell(k2, k1, data);
+
+    f(trg_cell, src_cell);
+  }
+
+ protected:
+  void MarkSplit() { mark_split_ = true; }
+  
+ private:
+  KeyType self_key_;
+  KeyType other_key_;
+  const Data &data_;
+  bool mark_split_;
+};
+
 template<class TSP>
 struct InteractionPred {
   using FP = typename TSP::FP;
@@ -118,17 +158,23 @@ template<class TSP>
 struct LET {
   // typedefs 
   using CellType = Cell<TSP>;
-  using SFC = typename CellType::SFC;
-  using BodyType = typename CellType::BodyType;
-  using CellAttrType = typename CellType::attr_type;
   using KeyType = typename CellType::KeyType;
+  using SFC = typename CellType::SFC;
   using Data = typename CellType::Data;
   using KeySet = typename Cell<TSP>::SFC::KeySet;
+  using BodyType = typename CellType::BodyType;
+  using CellAttrType = typename CellType::attr_type;
 
-  static void Traverse(std::vector<KeyType> &trg_keys,
-                       KeyType src_key,
-                       Data &data,
-                       KeySet &list_attr, KeySet &list_body) {
+  // Note for UserFunct template parameter:
+  // The template parameter `UserFunct` is used between all the functions in LET class
+  // and seems that it should be included in the class template parameter list along with TSP.
+  // However, it is actually not possible because LET class is declared as 'friend' in the Cell class
+  // only with TSP parameter. It's impossible to declare a partial specialization to be friend.
+  
+  // Supporting routine for Traverse(KeyType, KeyType, Data, KeySet, KeySet);
+  template<class UserFunct>
+  static void Traverse(UserFunct f, std::vector<KeyType> &trg_keys, KeyType src_key,
+                       Data &data, KeySet &list_attr, KeySet &list_body) {
     auto pred = InteractionPred<TSP>(data);
     auto src_ctr = CellType::CalcCenter(src_key, data.region_);
 
@@ -142,7 +188,7 @@ struct LET {
     // Apply Traverse for each keys in trg_keys. If interaction between trg_keys[i] and src_key is 'approximate',
     // trg_keys[i+1...] will be all 'approximate'.
     for (size_t i = 0; i < trg_keys.size(); i++) {
-      auto cond = Traverse(trg_keys[i], src_key, data, list_attr, list_body);
+      auto cond = Traverse(f, trg_keys[i], src_key, data, list_attr, list_body);
     
 #if 0
       // This optimization code is temporarily disabled.
@@ -156,10 +202,10 @@ struct LET {
     }
   }
 
-  static void Traverse(KeyType trg_key,
-                       std::vector<KeyType> src_keys,
-                       Data &data,
-                       KeySet &list_attr, KeySet &list_body) {
+  // Supporting routine for Traverse(KeyType, KeyType, Data, KeySet, KeySet);
+  template<class UserFunct>
+  static void Traverse(UserFunct f, KeyType trg_key, std::vector<KeyType> src_keys,
+                       Data &data, KeySet &list_attr, KeySet &list_body) {
     auto pred = InteractionPred<TSP>(data);
 
     // Traverse target cells in trg_keys vector with the source cell src_key.
@@ -173,7 +219,7 @@ struct LET {
     // If interaction between trg_key and src_keys[i] is 'approximate', trg_keys[i+1...] will be all 'approximate'.
     for (size_t i = 0; i < src_keys.size(); i++) {
       // auto cond = 
-      Traverse(trg_key, src_keys[i], data, list_attr, list_body);
+      Traverse(f, trg_key, src_keys[i], data, list_attr, list_body);
 
 #if 0
       // This optimization code is temporarily disabled.
@@ -198,7 +244,8 @@ struct LET {
    * \param list_attr (output) Set of request keys of which attrs are to be sent
    * \param list_body (output) Set of request keys of which bodies are to be sent
    */
-  static SplitType Traverse(KeyType trg_key, KeyType src_key, Data &data,
+  template<class UserFunct>
+  static SplitType Traverse(UserFunct f, KeyType trg_key, KeyType src_key, Data &data,
                             KeySet &list_attr, KeySet &list_body) {
     // Traverse traverses the hypothetical global tree and constructs a list of
     // necessary cells required by the local process.
@@ -239,7 +286,7 @@ struct LET {
       case SplitType::SplitLeft:
         for (KeyType ch : SFC::GetChildren(trg_key)) {
           if (ht.count(ch) > 0) {
-            Traverse(ch, src_key, data, list_attr, list_body);
+            Traverse(f, ch, src_key, data, list_attr, list_body);
           }
         }
         break;
@@ -248,7 +295,7 @@ struct LET {
         break;
 
       case SplitType::SplitRight:
-        Traverse(trg_key, SFC::GetChildren(src_key), data, list_attr, list_body);
+        Traverse(f, trg_key, SFC::GetChildren(src_key), data, list_attr, list_body);
         break;
 
       case SplitType::Approx:
@@ -260,7 +307,8 @@ struct LET {
     return split;
   }
 
-  static void Exchange(CellType &root) {
+  template<class UserFunct>
+  static void Exchange(UserFunct f, CellType &root) {
 #ifdef TAPAS_MEASURE
     double beg_all, end_all;
     double beg_trv, end_trv;
@@ -277,11 +325,11 @@ struct LET {
     beg_all = MPI_Wtime();
     beg_trv = MPI_Wtime();
 #endif
-    
+
     req_keys_attr.insert(root.key());
 
     // Construct request lists of necessary cells
-    Traverse(root.key(), root.key(), root.data(), req_keys_attr, req_keys_body);
+    Traverse(f, root.key(), root.key(), root.data(), req_keys_attr, req_keys_body);
   
     // for (int bi = 0; bi < root.local_nb(); bi++) {
     //   BodyType &b = root.local_body(bi);
