@@ -37,13 +37,13 @@ class BodyIterator {
     tmp += n;
     return tmp;
   }
-  typename CellType::BT::type *operator->() const {
+  typename CellType::BodyType *operator->() const {
     return &(c_.body(idx_));
   }
   void rewind(int idx) {
     idx_ = idx;
   }
-  typename CellType::BT_ATTR &attr() const {
+  typename CellType::BodyAttrType &attr() const {
     return c_.body_attr(idx_);
   }
 #if 0  
@@ -54,10 +54,10 @@ class BodyIterator {
   const CellType &cell() const {
     return c_;
   }
-  const typename CellType::BT::type &operator++() {
+  const typename CellType::BodyType &operator++() {
     return c_.body(++idx_);
   }
-  const typename CellType::BT::type &operator++(int) {
+  const typename CellType::BodyType &operator++(int) {
     return c_.body(idx_++);
   }
   bool operator==(const BodyIterator &x) const {

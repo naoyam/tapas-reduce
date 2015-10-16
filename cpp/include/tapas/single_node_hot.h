@@ -87,7 +87,7 @@ class Cell: public tapas::BasicCell<TSP> {
  protected:
   KeyType key_;
   HashTable *ht_;
-  int nb_; //!< number of local bodies of the process.
+  index_t nb_; //!< number of local bodies of the process.
  public:
     Cell(const Region<TSP> &region,
          index_t bid, index_t nb, KeyType key,
@@ -120,7 +120,7 @@ class Cell: public tapas::BasicCell<TSP> {
     bool IsRoot() const;
     bool IsLeaf() const;
     int nsubcells() const;
-    int local_nb() const { return nb_; } 
+    index_t local_nb() const { return nb_; } 
     Cell &subcell(int idx) const;
     Cell &parent() const;
   

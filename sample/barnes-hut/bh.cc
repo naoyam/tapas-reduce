@@ -109,19 +109,21 @@ static real_t distR2(const tapas::Vec<3, double> &p, const float4 &q) {
 }
 
 
-static void ComputeForce(Tapas::BodyIterator &p1, 
-                         float4 approx, real_t eps2) {
-  real_t dx = approx.x - p1->x;
-  real_t dy = approx.y - p1->y;
-  real_t dz = approx.z - p1->z;
-  real_t R2 = dx * dx + dy * dy + dz * dz + eps2;
-  real_t invR = 1.0 / std::sqrt(R2);
-  real_t invR3 = invR * invR * invR;
-  p1.attr().x += dx * invR3 * approx.w;
-  p1.attr().y += dy * invR3 * approx.w;
-  p1.attr().z += dz * invR3 * approx.w;
-  p1.attr().w += invR * approx.w;
-}
+struct ComputeForce {
+  template<class BodyIterator>
+  void operator()(BodyIterator &p1, float4 approx, real_t eps2) {
+    real_t dx = approx.x - p1->x;
+    real_t dy = approx.y - p1->y;
+    real_t dz = approx.z - p1->z;
+    real_t R2 = dx * dx + dy * dy + dz * dz + eps2;
+    real_t invR = 1.0 / std::sqrt(R2);
+    real_t invR3 = invR * invR * invR;
+    p1.attr().x += dx * invR3 * approx.w;
+    p1.attr().y += dy * invR3 * approx.w;
+    p1.attr().z += dz * invR3 * approx.w;
+    p1.attr().w += invR * approx.w;
+  }
+};
 
 void approximate(Tapas::Cell &c) {
   if (c.IsLeaf()) {
@@ -168,7 +170,7 @@ struct interact {
       } else {
         // Both of c1 and c2 are leaves.
         // c1 and c2 have only one particle each. Calculate direct force.
-        tapas::Map(ComputeForce, c1.bodies(), c2.body(0), EPS2);
+        tapas::Map(ComputeForce(), c1.bodies(), c2.body(0), EPS2);
       }
     } else {
       assert(c1.IsLeaf() && !c2.IsLeaf());
@@ -180,7 +182,7 @@ struct interact {
       real_t s = c2.width(0);
     
       if ((s/ d) < theta) {
-        tapas::Map(ComputeForce, c1.bodies(), c2.attr(), EPS2);
+        tapas::Map(ComputeForce(), c1.bodies(), c2.attr(), EPS2);
       } else {
         tapas::Map(*this, tapas::Product(c1, c2.subcells()), theta);
       }

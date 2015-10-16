@@ -257,11 +257,11 @@ class Cell: public tapas::BasicCell<TSP> {
   
   typedef std::unordered_map<KeyType, Cell*> CellHashTable;
   using KeySet = std::unordered_set<KeyType>;
+  using BodyIter = BodyIterator<Cell>;
   typedef typename TSP::ATTR attr_type;
   typedef typename TSP::ATTR AttrType;
   typedef typename TSP::BT::type BodyType;
   typedef typename TSP::BT_ATTR BodyAttrType;
-  typedef BodyIterator<Cell> BodyIter;
   typedef typename TSP::Threading Threading;
 
   using FP = typename TSP::FP;
@@ -437,13 +437,13 @@ class Cell: public tapas::BasicCell<TSP> {
    * It is not recommended to use local_nb() for your main computation.
    * because it exposes the underlying implementation details of Tapas runtime.
    */ 
-  int local_nb() const {
+  index_t local_nb() const {
     return (int) data_->local_bodies_.size();
   }
 
-  int nb() const {
+  index_t nb() const {
     if (!this->IsLeaf()) {
-      TAPAS_ASSERT(0 && "Cell::nb() is not allowed for non-leaf cells.");
+      TAPAS_ASSERT(!"Cell::nb() is not allowed for non-leaf cells.");
     }
 
     return nb_;
@@ -2082,7 +2082,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   "Maybe it is conflicting other libraries or you included incompatible tapas headers."
 #endif
 
-#if 0
+#if 0 // DOING
 template <class TSP, class T2>
 ProductIterator<CellIterator<hot::Cell<TSP>>, T2>
 Product(hot::Cell<TSP> &c, T2 t2) {

@@ -84,7 +84,7 @@ struct InteractionPred {
     }
   }
 
-  int nb(KT k) { return 1; } // nb() method for remote cell always returns '1' in LET mode
+  index_t nb(KT k) { return 1; } // nb() method for remote cell always returns '1' in LET mode
   
   SplitType operator() (KT k1, KT k2) {
     const constexpr FP theta = 0.5;
@@ -139,6 +139,10 @@ struct LET {
     using KeyType = KeyType;
     using SFC = SFC;
     using attr_type = attr_type;
+    using BodyAttrType = typename TSP::BT_ATTR;
+    using BodyType = typename TSP::BT::type;
+    using BodyIter = BodyIterator<ProxyCell>;
+    
     static const constexpr int Dim = TSP::Dim;
     using Threading = typename CellType::Threading;
     
@@ -151,12 +155,19 @@ struct LET {
         cell_ = data.ht_.at(key_);
       }
     }
-
-    // ただし再帰呼び出しをしない
+    
+#if 0
+    // Map funtion. It just marks the cells 'split', and never calls f recursively.
     template<class Funct>
     static void Map(Funct f, SubCellIterator<ProxyCell> subcells) {
       (void) f;
       subcells.Parent().MarkSplit();
+    }
+#endif
+
+    template<class Funct>
+    static void Map(Funct, ProxyCell &, ProxyCell &) {
+      // empty
     }
 
     template<class UserFunct>
@@ -166,8 +177,10 @@ struct LET {
     
       f(trg_cell, src_cell);
 
-       if (trg_cell.marked_split_) {
+      if (trg_cell.marked_split_) {
         return SplitType::SplitLeft;
+      } else if (src_cell.marked_body_) {
+        return SplitType::Body;
       } else if (src_cell.marked_split_) {
         return SplitType::SplitRight;
         // else if body
@@ -176,35 +189,57 @@ struct LET {
       }
     }
 
-    unsigned size() const { return 1; } // BasicCell::size() in cell.h  (always returns 1)
+    // TODO
+    unsigned size() const { return 0; } // BasicCell::size() in cell.h  (always returns 1)
+
     bool IsLeaf() const {
       if (is_local_) return cell_->IsLocal();
       else           return data_.max_depth_ <= SFC::GetDepth(key_);
     }
 
-    SubCellIterator<ProxyCell> subcells() {
-      return SubCellIterator<ProxyCell>(*this);
-    }
-
-    index_t nb() const {
-      if(is_local_) {
-        return cell_->nb();
+    index_t nb() {
+      if (is_local_) {
+        return cell_->IsLocal();
       } else {
-        TAPAS_ASSERT(!"Cannot obtain nb() of right hand side Cell for Map(Cell &lhs, Cell &rhs)");
-        return -1;
+        TAPAS_ASSERT(IsLeaf() && "Cell::nb() is not allowed for non-leaf cells.");
+        MarkBody();
+        return 0;
       }
     }
 
+    SubCellIterator<ProxyCell> subcells() {
+      MarkSplit();
+      return SubCellIterator<ProxyCell>(*this);
+    }
+
+    ProxyCell &subcell(int) {
+      // TODO: return *this as dummy: because this function should no be called in LET construction.
+      //       because this function must be called by <Cell>::Map() but ProxyCell::Map never calls it.
+      TAPAS_ASSERT(0);
+      return *this; 
+    }
+    
+    BodyIter bodies() {
+      return BodyIter(*this);
+    }
+
+    BodyType &body(index_t) {
+      TAPAS_ASSERT(!"ProxyCell::body() is called in LET mode. Check that nb() > 0. All ProxyCell::nb() returns 0.");
+      return BodyType(); // never called.
+    }
+    
     KeyType key() const { return key_; }
     const Data &data() const { return data_; }
 
    protected:
     void MarkSplit() { marked_split_ = true; }
+    void MarkBody()  { marked_body_ = true; }
   
    private:
     KeyType key_;
     const Data &data_;
     bool marked_split_;
+    bool marked_body_;
     bool is_local_;
     Cell<TSP> *cell_;
   }; // end of class ProxyCell
@@ -583,7 +618,7 @@ struct LET {
 
     for (size_t i = 0; i < keys_body_recv.size(); i++) {
       KeyType k = keys_body_recv[i];
-      int nb = nb_recv[i];
+      index_t nb = nb_recv[i];
       Cell<TSP> *c = nullptr;
 
       if (data.ht_let_.count(k) > 0) {
