@@ -30,6 +30,10 @@
 //#include "tapas/morton_common.h"
 #include "tapas/sfc_morton.h"
 
+namespace {
+namespace iter = tapas::iterator;
+}
+
 namespace tapas {
 
 /**
@@ -69,7 +73,7 @@ class Partitioner;
 template <class TSP> // TapasStaticParams
 class Cell: public tapas::BasicCell<TSP> { 
   friend class Partitioner<TSP>;
-  friend class BodyIterator<Cell>;
+  friend class iter::BodyIterator<Cell>;
  public:
   typedef typename TSP::ATTR attr_type;
   typedef typename TSP::BT::type BodyType;
@@ -82,7 +86,8 @@ class Cell: public tapas::BasicCell<TSP> {
   
   typedef std::unordered_map<KeyType, Cell*> HashTable;
   typedef Cell<TSP> CellType;
-  typedef BodyIterator<CellType> BodyIter;
+  using BodyIterator = iter::BodyIterator<Cell>;
+  using SubCellIterator = iter::SubCellIterator<Cell>;
   
  protected:
   KeyType key_;
@@ -106,8 +111,8 @@ class Cell: public tapas::BasicCell<TSP> {
   template<class Funct>
   static void Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2);
   
-  static void Map(BodyIter &b1, BodyIter &b2,
-                  std::function<void(BodyIter&, BodyIter&)> f);
+  static void Map(BodyIterator &b1, BodyIterator &b2,
+                  std::function<void(BodyIterator&, BodyIterator&)> f);
 
   static void PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
   static void UpwardMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
@@ -147,16 +152,29 @@ class Cell: public tapas::BasicCell<TSP> {
    */
   BodyAttrType &body_attr(index_t idx);
   const BodyAttrType &body_attr(index_t idx) const;
-  BodyAttrType &local_body_attr(index_t idx);
-  const BodyAttrType &local_body_attr(index_t idx) const;
   
-  BodyIterator<Cell> bodies();
+  BodyAttrType &local_body_attr(index_t idx) {
+    return body_attrs_[this->bid_+idx];
+  }
+
+  const BodyAttrType &local_body_attr(index_t idx) const {
+    return body_attrs_[this->bid_+idx];
+  }
+  
+  BodyIterator bodies() {
+    return BodyIterator(*this);
+  }
   
   BodyAttrType *body_attrs();
   const BodyAttrType *body_attrs() const;
   
-  BodyAttrType *local_body_attrs();
-  const BodyAttrType *local_body_attrs() const;
+  BodyAttrType *local_body_attrs() {
+    return body_attrs_;
+  }
+  
+  const BodyAttrType *local_body_attrs() const {
+    return body_attrs_;
+  }
   
 #ifdef DEPRECATED
     typename TSP::BT_ATTR *particle_attrs() const {
@@ -164,7 +182,9 @@ class Cell: public tapas::BasicCell<TSP> {
     }
 #endif
   
-  SubCellIterator<Cell> subcells();
+  SubCellIterator subcells() {
+    return SubCellIterator(*this);
+  }
 
   int depth() const {
     return SFC::GetDepth(key_);
@@ -465,16 +485,6 @@ const typename TSP::BT_ATTR *Cell<TSP>::body_attrs() const {
 }
 
 template <class TSP>
-typename TSP::BT_ATTR *Cell<TSP>::local_body_attrs() {
-  return body_attrs_;
-}
-
-template <class TSP>
-const typename TSP::BT_ATTR *Cell<TSP>::local_body_attrs() const {
-  return body_attrs_;
-}
-
-template <class TSP>
 typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) {
   return body_attrs_[this->bid_+idx];
 }
@@ -482,27 +492,6 @@ typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) {
 template <class TSP>
 const typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) const {
   return body_attrs_[this->bid_+idx];
-}
-
-template <class TSP>
-typename TSP::BT_ATTR &Cell<TSP>::local_body_attr(index_t idx) {
-  return body_attrs_[this->bid_+idx];
-}
-
-template <class TSP>
-const typename TSP::BT_ATTR &Cell<TSP>::local_body_attr(index_t idx) const {
-  return body_attrs_[this->bid_+idx];
-}
-
-template <class TSP>
-SubCellIterator<Cell<TSP>> Cell<TSP>::subcells() {
-  return SubCellIterator<Cell>(*this);
-}
-
-
-template <class TSP>
-BodyIterator<Cell<TSP>> Cell<TSP>::bodies() {
-    return BodyIterator<Cell<TSP> >(*this);
 }
 
 template <class TSP> // Tapas static params
@@ -684,39 +673,21 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
 
 } // namespace single_node_hot
 
-#if 0 // to be deleted (2015/10/13)
-template <class TSP, class T2>
-ProductIterator<CellIterator<single_node_hot::Cell<TSP>>, T2>
-Product(single_node_hot::Cell<TSP> &c, T2 t2) {
-    TAPAS_LOG_DEBUG() << "Cell-X product\n";
-    typedef single_node_hot::Cell<TSP> CellType;
-    typedef CellIterator<CellType> CellIterType;
-    return ProductIterator<CellIterType, T2>(CellIterType(c), t2);
-}
-
-template <class T1, class TSP>
-ProductIterator<T1, CellIterator<single_node_hot::Cell<TSP>>>
-                         Product(T1 t1, single_node_hot::Cell<TSP> &c) {
-    TAPAS_LOG_DEBUG() << "X-Cell product\n";
-    typedef single_node_hot::Cell<TSP> CellType;
-    typedef CellIterator<CellType> CellIterType;
-    return ProductIterator<T1, CellIterType>(t1, CellIterType(c));
-}
-#endif
+using tapas::iterator::CellIterator;
+namespace sn = single_node_hot;
 
 /**
  * @brief Constructs a ProductIterator for dual tree traversal of two trees
  */ 
 template <class TSP>
-ProductIterator<CellIterator<single_node_hot::Cell<TSP>>,
-                CellIterator<single_node_hot::Cell<TSP>>>
-                         Product(single_node_hot::Cell<TSP> &c1,
-                                 single_node_hot::Cell<TSP> &c2) {
-    TAPAS_LOG_DEBUG() << "Cell-Cell product\n";
-    typedef single_node_hot::Cell<TSP> CellType;
-    typedef CellIterator<CellType> CellIterType;
-    return ProductIterator<CellIterType, CellIterType>(
-        CellIterType(c1), CellIterType(c2));
+ProductIterator<CellIterator<sn::Cell<TSP>>,
+                CellIterator<sn::Cell<TSP>>>
+Product(sn::Cell<TSP> &c1, sn::Cell<TSP> &c2) {
+  TAPAS_LOG_DEBUG() << "Cell-Cell product\n";
+  using CellType = sn::Cell<TSP>;
+  using CI = tapas::iterator::CellIterator<CellType>;
+  
+  return ProductIterator<CI,CI>(CI(c1), CI(c2));
 }
 
 /** 
@@ -754,10 +725,9 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
   typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR, Threading,
                             typename SingleNodeMortonHOT::SFC> TSP; // Tapas static params
  public:
-  typedef tapas::Region<TSP> Region;  
-  typedef single_node_hot::Cell<TSP> Cell;
-  //typedef tapas::BodyIterator<DIM, BT, BT_ATTR, Cell> BodyIterator;
-  typedef tapas::BodyIterator<Cell> BodyIterator;  
+  using Region = tapas::Region<TSP>;
+  using Cell = single_node_hot::Cell<TSP>;
+  using BodyIterator = typename Cell::BodyIterator;
 
   /**
    * @brief Partition and build an octree of the target space.
@@ -790,10 +760,9 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
                             tapas::threading::Serial,
                             typename SingleNodeMortonHOT::SFC> TSP; // Tapas static params
  public:
-  typedef tapas::Region<TSP> Region;  
-  typedef single_node_hot::Cell<TSP> Cell;
-  //typedef tapas::BodyIterator<DIM, BT, BT_ATTR, Cell> BodyIterator;
-  typedef tapas::BodyIterator<Cell> BodyIterator;  
+  using Region = tapas::Region<TSP>;
+  using Cell = single_node_hot::Cell<TSP>;
+  using BodyIterator = typename Cell::BodyIterator;
   
   /**
    * @brief Partition and build an octree of the target space.

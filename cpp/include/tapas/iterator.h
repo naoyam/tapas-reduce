@@ -6,6 +6,8 @@
 
 namespace tapas {
 
+namespace iterator {
+
 template <class Cell>
 class BodyIterator {
   Cell &c_;
@@ -37,7 +39,7 @@ class BodyIterator {
     tmp += n;
     return tmp;
   }
-  typename CellType::BodyType *operator->() const {
+  const typename CellType::BodyType *operator->() const {
     return &(c_.body(idx_));
   }
   void rewind(int idx) {
@@ -343,6 +345,13 @@ class ProductIterator<ITER, void> {
 // ProductIterator<T1, T2> Product(T1 t1, T2 t2) {
 //   return ProductIterator<T1, T2>(t1, t2);
 // }
+
+
+} // namespace iterator
+
+namespace {
+using namespace iterator;
+}
 
 // <subcell, subcell>
 template <class CELL>

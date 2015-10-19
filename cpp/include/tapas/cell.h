@@ -7,9 +7,11 @@
 
 namespace tapas {
 
-//template <int DIM, class BT, class BT_ATTR, class CellType>
+namespace iterator {
+// forward decleration
 template <class CellType> class BodyIterator;
 template <class CellType> class SubCellIterator;
+}
 
 template<class TSP> // TSP=TapasStaticParams
 class BasicCell {

@@ -120,16 +120,42 @@ struct InteractionPred {
  */
 template<class TSP>
 struct LET {
-  // typedefs 
+  // typedefs
+  using FP = typename TSP::FP;
   using CellType = Cell<TSP>;
   using KeyType = typename CellType::KeyType;
   using SFC = typename CellType::SFC;
   using Data = typename CellType::Data;
   using KeySet = typename Cell<TSP>::SFC::KeySet;
   using BodyType = typename CellType::BodyType;
-  using attr_type = typename CellType::attr_type;
+  using BodyAttrType = typename CellType::attr_type;
+  using attr_type = typename CellType::attr_type; // alias for backward compatibility
   using CellAttrType = attr_type;
+  using Vec = Vec<TSP::Dim, typename TSP::FP>;
 
+  class ProxyBodyAttr : public BodyAttrType {
+   public:
+    ProxyBodyAttr(BodyAttrType &rhs) : ProxyBodyAttr(rhs) {
+      TAPAS_ASSERT(orig_ != nullptr);
+    }
+    
+    const ProxyBodyAttr& operator=(const BodyAttrType &rhs) const {
+      // empty
+      // TODO: Can the return value to be void and can the function be 'const' ?
+      return *this;
+    }
+
+    operator BodyAttrType& () const {
+      return dynamic_cast<BodyAttrType&>(*this);
+    }
+  };
+  
+  class ProxyBody : public BodyType {
+   public:
+    ProxyBody(BodyAttrType &rhs) : BodyType(rhs) {
+    }
+  };
+  
   /**
    * ProxyCell
    */
@@ -139,16 +165,20 @@ struct LET {
     using KeyType = KeyType;
     using SFC = SFC;
     using attr_type = attr_type;
-    using BodyAttrType = typename TSP::BT_ATTR;
-    using BodyType = typename TSP::BT::type;
+
+    using BodyAttrType = ProxyBodyAttr;
+    using BodyType = ProxyBody;
+    
     using BodyIter = BodyIterator<ProxyCell>;
     
     static const constexpr int Dim = TSP::Dim;
     using Threading = typename CellType::Threading;
-    
+
+    using RealCellType = CellType;
+
     // ctor
     ProxyCell(KeyType key, const Data &data)
-        : key_(key), data_(data), marked_split_(false), is_local_(false), cell_(nullptr)
+        : key_(key), data_(data), marked_split_(false), is_local_(false), cell_(nullptr), bodies_(), body_attrs_()
     {
       if (data.ht_.count(key_) > 0) {
         is_local_ = true;
@@ -192,6 +222,14 @@ struct LET {
     // TODO
     unsigned size() const { return 0; } // BasicCell::size() in cell.h  (always returns 1)
 
+    Vec center() {
+      return Cell<TSP>::CalcCenter(key_, data_.region_);
+    }
+
+    FP width(FP d) const {
+      return Cell<TSP>::CalcRegion(key_, data_.region_).width(d);
+    }
+
     bool IsLeaf() const {
       if (is_local_) return cell_->IsLocal();
       else           return data_.max_depth_ <= SFC::GetDepth(key_);
@@ -218,32 +256,90 @@ struct LET {
       TAPAS_ASSERT(0);
       return *this; 
     }
+
+    const attr_type &attr() const {
+      return cell_->attr();
+    }
     
     BodyIter bodies() {
       return BodyIter(*this);
     }
 
-    BodyType &body(index_t) {
-      TAPAS_ASSERT(!"ProxyCell::body() is called in LET mode. Check that nb() > 0. All ProxyCell::nb() returns 0.");
-      return BodyType(); // never called.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wreturn-type"
+    const ProxyBody &body(index_t idx) {
+      if (is_local_) {
+        TAPAS_ASSERT(IsLeaf());
+        TAPAS_ASSERT(idx < cell_->nb());
+        
+        if (bodies_.size() != cell_->nb()) {
+          InitBodies();
+        }
+        
+        return *bodies_[idx];
+      } else {
+        // never reach here because remote ProxyCell::nb() always returns 0 in LET mode.
+        TAPAS_ASSERT(!"Tapas internal eror: ProxyCell::body_attr() must not be called in LET mode.");
+        return *bodies_[0]; // dummy return to avoid 'no return statement' warning;
+      }
     }
-    
+#pragma GCC diagnostic pop
+
+    ProxyBodyAttr &body_attr(index_t idx) {
+      if (is_local_) {
+        TAPAS_ASSERT(IsLaef() && "ProxyCell::body_attr() can be called only for leaf cells");
+        TAPAS_ASSERT(idx < cell_->nb());
+        
+        if (body_attrs_.size() != cell_->nb()) {
+          InitBodies();
+        }
+        
+        return *body_attrs_[idx];
+      } else {
+        // never reach here because remote ProxyCell::nb() always returns 0 in LET mode.
+        TAPAS_ASSERT(!"Tapas internal eror: ProxyCell::body_attr() must not be called in LET mode.");
+      }
+    }
+
     KeyType key() const { return key_; }
     const Data &data() const { return data_; }
+
+
+    CellType *RealCell() {
+      return cell_;
+    }
 
    protected:
     void MarkSplit() { marked_split_ = true; }
     void MarkBody()  { marked_body_ = true; }
-  
+
+    void InitBodies() {
+      if (cell_) {
+        bodies_.resize(cell_->nb());
+        body_attrs_.resize(cell_->nb());
+        
+        if (bodies_.size() != cell_->nb()) {
+          for (size_t i = 0; i < cell_->nb(); i++) {
+            bodies_[i] = reinterpret_cast<ProxyBody*>(&cell_->body(i));
+            body_attrs_[i] = reinterpret_cast<ProxyBodyAttr*>(&cell_->body_attr(i));
+          }
+        }
+      }
+    }
+
    private:
     KeyType key_;
     const Data &data_;
+    
     bool marked_split_;
     bool marked_body_;
     bool is_local_;
-    Cell<TSP> *cell_;
+    
+    CellType *cell_;
+    std::vector<ProxyBody*> bodies_;
+    std::vector<ProxyBodyAttr*> body_attrs_;
   }; // end of class ProxyCell
-  
+
   // Note for UserFunct template parameter:
   // The template parameter `UserFunct` is used between all the functions in LET class
   // and seems that it should be included in the class template parameter list along with TSP.
@@ -360,7 +456,7 @@ struct LET {
     auto pred = InteractionPred<TSP>(data); // predicator objectd
 
     SplitType split = pred(trg_key, src_key);
-    //(void)LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data);
+    (void) LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data);
 
     switch(split) {
       case SplitType::SplitLeft:
@@ -687,8 +783,47 @@ struct LET {
 
 };
 
-} // namespace tapas
 } // namespace hot
+
+namespace iterator {
+
+template<class TSP>
+class BodyIterator<typename tapas::hot::LET<TSP>::ProxyCell> {
+ public:
+  using ProxyCell = typename tapas::hot::LET<TSP>::ProxyCell;
+  using ProxyBody = typename tapas::hot::LET<TSP>::ProxyBody;
+  using ProxyBodyAttr = typename tapas::hot::LET<TSP>::ProxyBodyAttr;
+
+  using BodyType = typename ProxyBody::OrigBodyType;
+  using BodyAttrType = typename ProxyBodyAttr::OrigBodyAttrType;
+
+ private:
+  ProxyCell *c_;
+  index_t idx_;
+
+ public:
+  BodyIterator(ProxyCell &c) : c_(c), idx_(0) { }
+  
+  BodyIterator<ProxyCell> &operator*() const {
+    return *this;
+  }
+
+  BodyIterator<ProxyCell> &operator+=(int n) {
+    idx_ += n;
+    TAPAS_ASSERT(idx_ < c_->RealCell()->nb());
+  }
+
+  const BodyType *operator->() const {
+    return reinterpret_cast<BodyType*>(&(c_->body(idx_)));
+  }
+  
+  const ProxyBodyAttr &attr() const {
+    return c_->body_attr(idx_);
+  }
+};
+
+} // namespace iterator
+} // namespace tapas
 
 #endif // __TAPAS_HOT_LET__
 

@@ -10,6 +10,9 @@
 #include "tapas/cell.h"
 #include "tapas/iterator.h"
 
+namespace {
+namespace iter = tapas::iterator;
+}
 
 namespace tapas {
 
@@ -194,11 +197,11 @@ void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
 }
 
 template <class Funct, class CellType, class... Args>
-void Map(Funct f, SubCellIterator<CellType> iter, Args...args) {
+void Map(Funct f, tapas::iterator::SubCellIterator<CellType> iter, Args...args) {
   TAPAS_LOG_DEBUG() << "map non-product subcell iterator size: "
                     << iter.size() << std::endl;
   typedef typename CellType::Threading Th;
-
+  
   // pack args... into a lambda closure
   std::function<void(CellType&)> lambda = [=](CellType &cell) { f(cell, args...); };
   
@@ -210,8 +213,8 @@ void Map(Funct f, SubCellIterator<CellType> iter, Args...args) {
   tg.wait();
 }
 
-template <class Funct, class T, class... Args>
-void Map(Funct f, BodyIterator<T> iter, Args...args) {
+template <class Funct, class CellType, class... Args>
+void Map(Funct f, iter::BodyIterator<CellType> iter, Args...args) {
   TAPAS_LOG_DEBUG() << "map non-product body iterator size: "
                     << iter.size() << std::endl;
   for (int i = 0; i < iter.size(); ++i) {

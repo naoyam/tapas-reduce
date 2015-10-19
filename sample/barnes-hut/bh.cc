@@ -108,20 +108,26 @@ static real_t distR2(const tapas::Vec<3, double> &p, const float4 &q) {
   return dx * dx + dy * dy + dz * dz;
 }
 
-
 struct ComputeForce {
   template<class BodyIterator>
   void operator()(BodyIterator &p1, float4 approx, real_t eps2) {
-    real_t dx = approx.x - p1->x;
+    real_t dx = approx.x - p1->x; // const BodyType * BodyIterator::operator->()
     real_t dy = approx.y - p1->y;
     real_t dz = approx.z - p1->z;
     real_t R2 = dx * dx + dy * dy + dz * dz + eps2;
     real_t invR = 1.0 / std::sqrt(R2);
     real_t invR3 = invR * invR * invR;
-    p1.attr().x += dx * invR3 * approx.w;
-    p1.attr().y += dy * invR3 * approx.w;
-    p1.attr().z += dz * invR3 * approx.w;
-    p1.attr().w += invR * approx.w;
+
+    // 必要なのは、BodyIteratorが ->()では本物のbodyへのconst ポインタを返し、
+    // .attr()ではProxyBodyへの参照を返す
+    // reference qualifierによる呼び分けについて、attr()のようなケースで実験してみる
+    // ProxyBody::attr()は、const参照を返す。const参照は、空のoperator=を定義する
+    auto tmp = p1.attr();  // const BodyAttrType &BodyIterator::attr() const;
+    tmp.x += dx * invR3 * approx.w;
+    tmp.y += dy * invR3 * approx.w;
+    tmp.z += dz * invR3 * approx.w;
+    tmp.w += invR * approx.w;
+    p1.attr() = tmp;
   }
 };
 
