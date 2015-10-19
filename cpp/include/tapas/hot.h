@@ -446,11 +446,11 @@ class Cell: public tapas::BasicCell<TSP> {
    * It is not recommended to use local_nb() for your main computation.
    * because it exposes the underlying implementation details of Tapas runtime.
    */ 
-  index_t local_nb() const {
-    return (int) data_->local_bodies_.size();
+  size_t local_nb() const {
+    return (size_t) data_->local_bodies_.size();
   }
 
-  index_t nb() const {
+  size_t nb() const {
     if (!this->IsLeaf()) {
       TAPAS_ASSERT(!"Cell::nb() is not allowed for non-leaf cells.");
     }

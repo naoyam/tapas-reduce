@@ -118,16 +118,12 @@ struct ComputeForce {
     real_t invR = 1.0 / std::sqrt(R2);
     real_t invR3 = invR * invR * invR;
 
-    // 必要なのは、BodyIteratorが ->()では本物のbodyへのconst ポインタを返し、
-    // .attr()ではProxyBodyへの参照を返す
-    // reference qualifierによる呼び分けについて、attr()のようなケースで実験してみる
-    // ProxyBody::attr()は、const参照を返す。const参照は、空のoperator=を定義する
-    auto tmp = p1.attr();  // const BodyAttrType &BodyIterator::attr() const;
+    auto tmp = p1.attr();  // const ProxyBodyAttrType &BodyIterator::attr() const; 場合によってはキャスト演算子
     tmp.x += dx * invR3 * approx.w;
     tmp.y += dy * invR3 * approx.w;
     tmp.z += dz * invR3 * approx.w;
     tmp.w += invR * approx.w;
-    p1.attr() = tmp;
+    p1.attr() = tmp; // ProxyBodyAttrType::operator=()
   }
 };
 

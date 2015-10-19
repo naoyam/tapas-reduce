@@ -84,7 +84,7 @@ struct InteractionPred {
     }
   }
 
-  index_t nb(KT k) { return 1; } // nb() method for remote cell always returns '1' in LET mode
+  size_t nb(KT) { return 1; } // nb() method for remote cell always returns '1' in LET mode
   
   SplitType operator() (KT k1, KT k2) {
     const constexpr FP theta = 0.5;
@@ -139,7 +139,7 @@ struct LET {
       TAPAS_ASSERT(orig_ != nullptr);
     }
     
-    const ProxyBodyAttr& operator=(const BodyAttrType &rhs) const {
+    const ProxyBodyAttr& operator=(const BodyAttrType &) const {
       // empty
       // TODO: Can the return value to be void and can the function be 'const' ?
       return *this;
@@ -235,7 +235,7 @@ struct LET {
       else           return data_.max_depth_ <= SFC::GetDepth(key_);
     }
 
-    index_t nb() {
+    size_t nb() {
       if (is_local_) {
         return cell_->IsLocal();
       } else {
@@ -265,8 +265,6 @@ struct LET {
       return BodyIter(*this);
     }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wreturn-type"
     const ProxyBody &body(index_t idx) {
       if (is_local_) {
         TAPAS_ASSERT(IsLeaf());
@@ -275,15 +273,12 @@ struct LET {
         if (bodies_.size() != cell_->nb()) {
           InitBodies();
         }
-        
-        return *bodies_[idx];
       } else {
         // never reach here because remote ProxyCell::nb() always returns 0 in LET mode.
         TAPAS_ASSERT(!"Tapas internal eror: ProxyCell::body_attr() must not be called in LET mode.");
-        return *bodies_[0]; // dummy return to avoid 'no return statement' warning;
       }
+      return *bodies_[idx];
     }
-#pragma GCC diagnostic pop
 
     ProxyBodyAttr &body_attr(index_t idx) {
       if (is_local_) {
@@ -293,12 +288,11 @@ struct LET {
         if (body_attrs_.size() != cell_->nb()) {
           InitBodies();
         }
-        
-        return *body_attrs_[idx];
       } else {
         // never reach here because remote ProxyCell::nb() always returns 0 in LET mode.
         TAPAS_ASSERT(!"Tapas internal eror: ProxyCell::body_attr() must not be called in LET mode.");
       }
+      return *body_attrs_[idx];
     }
 
     KeyType key() const { return key_; }
@@ -456,7 +450,8 @@ struct LET {
     auto pred = InteractionPred<TSP>(data); // predicator objectd
 
     SplitType split = pred(trg_key, src_key);
-    (void) LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data);
+    volatile SplitType split_auto = LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data);
+    (void)split_auto;
 
     switch(split) {
       case SplitType::SplitLeft:
