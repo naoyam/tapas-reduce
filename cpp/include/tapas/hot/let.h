@@ -203,20 +203,6 @@ struct LET {
       return reinterpret_cast<const BodyType*>(&(c_->body(idx_)));
     }
   
-    ProxyBodyIterator &operator*() const {
-      return *this;
-    }
-
-    ProxyBodyIterator &operator+=(int n) {
-      idx_ += n;
-      TAPAS_ASSERT(idx_ < c_->RealCell()->nb());
-    }
-
-    // Returns a const pointer to (real) BodyType for read-only use.
-    const BodyType *operator->() const {
-      return reinterpret_cast<const BodyType*>(&(c_->body(idx_)));
-    }
-  
     const ProxyBodyAttr &attr() const {
       return c_->body_attr(idx_);
     }
@@ -253,7 +239,8 @@ struct LET {
 
     // ctor
     ProxyCell(KeyType key, const Data &data)
-        : key_(key), data_(data), marked_split_(false), is_local_(false), cell_(nullptr), bodies_(), body_attrs_(), attr_()
+        : key_(key), data_(data), marked_touched_(false), marked_split_(false), marked_body_(false),
+          is_local_(false), cell_(nullptr), bodies_(), body_attrs_(), attr_()
     {
       if (data.ht_.count(key_) > 0) {
         is_local_ = true;
@@ -261,15 +248,6 @@ struct LET {
       }
     }
     
-#if 0
-    // Map funtion. It just marks the cells 'split', and never calls f recursively.
-    template<class Funct>
-    static void Map(Funct f, SubCellIterator<ProxyCell> subcells) {
-      (void) f;
-      subcells.Parent().MarkSplit();
-    }
-#endif
-
     template<class Funct>
     static void Map(Funct, ProxyCell &, ProxyCell &) {
       // empty
@@ -284,44 +262,52 @@ struct LET {
 
       if (trg_cell.marked_split_) {
         return SplitType::SplitLeft;
-      } else if (src_cell.marked_body_) {
-        return SplitType::Body;
       } else if (src_cell.marked_split_) {
         return SplitType::SplitRight;
-        // else if body
+      } else if (src_cell.marked_body_) {
+        return SplitType::Body;
+      } else if (!src_cell.marked_touched_) {
+        return SplitType::None;
       } else {
         return SplitType::Approx;
       }
     }
 
     // TODO
-    unsigned size() const { return 0; } // BasicCell::size() in cell.h  (always returns 1)
+    unsigned size() const {
+      Touched();
+      return 0;
+    } // BasicCell::size() in cell.h  (always returns 1)
 
     Vec center() {
+      Touched();
       return Cell<TSP>::CalcCenter(key_, data_.region_);
     }
 
     FP width(FP d) const {
+      Touched();
       return Cell<TSP>::CalcRegion(key_, data_.region_).width(d);
     }
 
     bool IsLeaf() const {
+      Touched();
       if (is_local_) return cell_->IsLeaf();
       else           return data_.max_depth_ <= SFC::GetDepth(key_);
     }
 
     size_t nb() {
+      Touched();
       if (is_local_) {
         return cell_->nb();
       } else {
         TAPAS_ASSERT(IsLeaf() && "Cell::nb() is not allowed for non-leaf cells.");
-        MarkBody();
+        Body();
         return 0;
       }
     }
 
     SubCellIterator<ProxyCell> subcells() {
-      MarkSplit();
+      Split();
       return SubCellIterator<ProxyCell>(*this);
     }
 
@@ -330,6 +316,7 @@ struct LET {
     }
 
     const attr_type &attr() const {
+      Touched();
       if (is_local_) {
         TAPAS_ASSERT(cell_ != nullptr);
         return cell_->attr();
@@ -339,10 +326,12 @@ struct LET {
     }
     
     ProxyBodyIterator bodies() {
+      Touched();
       return ProxyBodyIterator(this);
     }
 
     const ProxyBody &body(index_t idx) {
+      Touched();
       if (is_local_) {
         TAPAS_ASSERT(IsLeaf());
         TAPAS_ASSERT((size_t)idx < cell_->nb());
@@ -360,6 +349,7 @@ struct LET {
     }
 
     ProxyBodyAttr &body_attr(index_t idx) {
+      Touched();
       if (is_local_) {
         TAPAS_ASSERT(IsLeaf() && "ProxyCell::body_attr() can be called only for leaf cells");
         TAPAS_ASSERT((size_t)idx < cell_->nb());
@@ -377,14 +367,14 @@ struct LET {
     KeyType key() const { return key_; }
     const Data &data() const { return data_; }
 
-
     CellType *RealCell() {
       return cell_;
     }
 
    protected:
-    void MarkSplit() { marked_split_ = true; }
-    void MarkBody()  { marked_body_ = true; }
+    void Touched() const { marked_touched_ = true; }
+    void Split()   { marked_split_ = true; }
+    void Body()    { marked_body_ = true; }
 
     void InitBodies() {
       if (cell_ != nullptr && cell_->nb() >= 0) {
@@ -403,9 +393,11 @@ struct LET {
    private:
     KeyType key_;
     const Data &data_;
-    
+
+    mutable bool marked_touched_;
     bool marked_split_;
     bool marked_body_;
+    
     bool is_local_;
     
     CellType *cell_;
@@ -527,40 +519,9 @@ struct LET {
     list_attr.insert(src_key);
 
     // Approx/Split branch
-    auto pred = InteractionPred<TSP>(data); // hand-written predicator object
-    SplitType split = pred(trg_key, src_key);
-    
-    SplitType split_auto = LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data); // automated predicator object
-    (void)split_auto;
+    //SplitType split = InteractionPred<TSP>(data)(trg_key, src_key);
+    SplitType split = LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data); // automated predicator object
 
-    if (trg_cell->IsLeaf() && trg_cell->nb() > 0) {
-      body_after = trg_cell->body_attr(0);
-    }
-    
-    {
-      Stderr e("pred_debug");
-
-      if (body_before.x == body_after.x &&
-          body_before.y == body_after.y &&
-          body_before.z == body_after.z &&
-          body_before.w == body_after.w) {
-        // print nothing
-      } else {
-        e.out() << SFC::Simplify(trg_key) << " - " << SFC::Simplify(src_key) << " ";
-        e.out() << "NG" << std::endl;
-        e.out() << "Original :"
-                << body_before.x << ", "
-                << body_before.y << ", "
-                << body_before.z << ", "
-                << body_before.w << std::endl;
-        e.out() << "After    :"
-                << body_after.x << ", "
-                << body_after.y << ", "
-                << body_after.z << ", "
-                << body_after.w << std::endl;
-      }
-    }
-    
     switch(split) {
       case SplitType::SplitLeft:
         for (KeyType ch : SFC::GetChildren(trg_key)) {
@@ -609,7 +570,7 @@ struct LET {
 
     // Construct request lists of necessary cells
     Traverse(f, root.key(), root.key(), root.data(), req_keys_attr, req_keys_body);
-  
+
     // for (int bi = 0; bi < root.local_nb(); bi++) {
     //   BodyType &b = root.local_body(bi);
     //   Traverse<TSP, KeySet>(b, root.key(), root.data(), req_keys_attr, req_keys_body);
