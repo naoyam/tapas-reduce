@@ -110,7 +110,7 @@ static real_t distR2(const tapas::Vec<3, double> &p, const float4 &q) {
 
 struct ComputeForce {
   template<class BodyIterator>
-  void operator()(BodyIterator &p1, float4 approx, real_t eps2) {
+  void operator()(BodyIterator &p1, float4 approx, real_t eps2) const {
     real_t dx = approx.x - p1->x; // const BodyType * BodyIterator::operator->()
     real_t dy = approx.y - p1->y;
     real_t dz = approx.z - p1->z;
@@ -176,6 +176,7 @@ struct interact {
       }
     } else {
       assert(c1.IsLeaf() && !c2.IsLeaf());
+      assert(c1.nb() == 1);
     
       // use apploximation
       const float4 &p1 = c1.body(0);
@@ -362,7 +363,7 @@ void CheckResult(int np_check,
 #endif
 
 #ifdef USE_MPI
-  tapas::hot::BarrierExec([&tattrs](int, int) {
+  tapas::debug::BarrierExec([&tattrs](int, int) {
       std::stringstream ss;
       ss << "direct_" << mpi_size << ".dat";
       std::ofstream ofs(ss.str().c_str());

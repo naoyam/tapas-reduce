@@ -43,6 +43,8 @@
 
 #define DEBUG_SENDRECV
 
+using tapas::debug::BarrierExec;
+
 namespace {
 namespace iter = tapas::iterator;
 }
@@ -164,22 +166,6 @@ struct HelperNode {
   index_t p_index;      //!< Index of the corresponding body
   index_t np;           //!< Number of particles in a node
 };
-
-// Debug helper function
-template<class F>
-void BarrierExec(F func) {
-  int size, rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
-  MPI_Barrier(MPI_COMM_WORLD);
-  for (int i = 0; i < size; i++) {
-    if (rank == i) {
-      func(rank, size);
-    }
-    usleep(1000000);
-    MPI_Barrier(MPI_COMM_WORLD);
-  }
-}
 
 template<class T1, class T2>
 static void Dump(const T1 &bodies, const T2 &keys, std::ostream & strm) {
@@ -845,7 +831,7 @@ void GlobalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
     return;
   }
 
-  TAPAS_ASSERT(data.ht_gtree_.count(chkey) > 0);
+  TAPAS_ASSERT(data.ht_gtree_.count(k) > 0);
   
   // c is not a global leaf.
   int nc = c.nsubcells();
@@ -1042,7 +1028,7 @@ template <class TSP>
 const typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
   TAPAS_ASSERT(this->IsLeaf() && "Cell::body(...) is not allowed for non-leaf cells.");
   TAPAS_ASSERT(this->nb() >= 0);
-  TAPAS_ASSERT(idx < this->nb());
+  TAPAS_ASSERT((size_t)idx < this->nb());
   
   if (is_local_) {
     return data_->local_bodies_[this->bid() + idx];

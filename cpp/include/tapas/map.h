@@ -236,13 +236,20 @@ void UpwardMap(Funct f, T &x, Args...args) {
   //T::PostOrderMap(x, lambda);
 }
 
-
 template <class Funct, class T, class... Args>
 void Map(Funct f, T &x, Args...args) {
-  TAPAS_LOG_DEBUG() << "map non-iterator" << std::endl;
+  TAPAS_LOG_DEBUG() << "map non-iterator (l-value version)" << std::endl;
 
   std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
   T::Map(lambda, x);
+}
+
+template <class Funct, class T, class... Args>
+void Map(Funct f, T &&x, Args...args) {
+  TAPAS_LOG_DEBUG() << "map non-iterator (r-value version)"  << std::endl;
+
+  std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
+  T::Map(lambda, std::forward<T>(x));
 }
 
 } // namespace tapas
