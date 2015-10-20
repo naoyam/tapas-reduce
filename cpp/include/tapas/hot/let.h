@@ -203,6 +203,20 @@ struct LET {
       return reinterpret_cast<const BodyType*>(&(c_->body(idx_)));
     }
   
+    ProxyBodyIterator &operator*() const {
+      return *this;
+    }
+
+    ProxyBodyIterator &operator+=(int n) {
+      idx_ += n;
+      TAPAS_ASSERT(idx_ < c_->RealCell()->nb());
+    }
+
+    // Returns a const pointer to (real) BodyType for read-only use.
+    const BodyType *operator->() const {
+      return reinterpret_cast<const BodyType*>(&(c_->body(idx_)));
+    }
+  
     const ProxyBodyAttr &attr() const {
       return c_->body_attr(idx_);
     }
@@ -513,18 +527,10 @@ struct LET {
     list_attr.insert(src_key);
 
     // Approx/Split branch
-    auto pred = InteractionPred<TSP>(data); // predicator objectd
-
-
-    auto *trg_cell = ht.at(trg_key);
-    BodyType body_before, body_after;
-
-    if (trg_cell->IsLeaf() && trg_cell->nb() > 0) {
-      body_before = trg_cell->body_attr(0);
-    }
-    
+    auto pred = InteractionPred<TSP>(data); // hand-written predicator object
     SplitType split = pred(trg_key, src_key);
-    volatile SplitType split_auto = LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data);
+    
+    SplitType split_auto = LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data); // automated predicator object
     (void)split_auto;
 
     if (trg_cell->IsLeaf() && trg_cell->nb() > 0) {
