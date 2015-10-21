@@ -127,6 +127,12 @@ struct InteractionPred {
   }
 };
 
+#ifdef USE_AUTO_LET_SLOW
+namespace {
+void *dummy_ptr = nullptr;
+}
+#endif
+
 /**
  * A set of static functions to construct LET (Locally Essential Tree)
  */
@@ -150,13 +156,21 @@ struct LET {
     ProxyBodyAttr(BodyAttrType &rhs) : ProxyBodyAttr(rhs) {
     }
     
-    const ProxyBodyAttr& operator=(const BodyAttrType &) const {
+    const ProxyBodyAttr& operator=(const BodyAttrType &v) const {
       // empty
       // In Auto-LET mechanims, assignment statement (using operator=) is replaced with this overload.
       // From a point of view of LET construction, user's functions have both of necessary and unnecessary arithmetic
       // operation. We only need the necessary operations, so we expetct the compiler does the job for us.
       // Assignment to Body or BodyAttr is overloaded by this operator=(), which is empty, and
       // optimized out by the compiler.
+#if defined(USE_AUTO_LET_SLOW)
+      if (dummy_ptr != nullptr) {
+        BodyTypeAttr *ptr = reinterpret_cast<BodyTypeAttr*>(dummy_ptr);
+        *ptr = v;
+      }
+#else
+      (void) v;
+#endif
       return *this;
     }
 
@@ -519,8 +533,13 @@ struct LET {
     list_attr.insert(src_key);
 
     // Approx/Split branch
-    //SplitType split = InteractionPred<TSP>(data)(trg_key, src_key);
+#if defined(USE_MANUAL_LET)
+    SplitType split = InteractionPred<TSP>(data)(trg_key, src_key);
+#elif defined(USE_AUTO_LET_SLOW)
     SplitType split = LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data); // automated predicator object
+#else
+    SplitType split = LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data); // automated predicator object
+#endif
 
     switch(split) {
       case SplitType::SplitLeft:
