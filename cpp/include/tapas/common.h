@@ -181,7 +181,11 @@ void PrintKeys(const T &s, std::ostream &os) {
  */
 template<int _DIM, class _FP, class _BT, class _BT_ATTR, class _ATTR,
          class _Threading,
-         class _SFC>
+         class _SFC
+#ifdef TAPAS_USE_VECTORMAP
+         , class _Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+         >
 struct TapasStaticParams {
   static const int Dim = _DIM;  //!< dimension of simulation space
   typedef _FP FP;               //!< Floating point types
@@ -190,6 +194,9 @@ struct TapasStaticParams {
   typedef _ATTR ATTR;           //!< cell attributes
   typedef _Threading Threading; //!< threading policy
   typedef _SFC SFC;             //!< SFC implementation class
+#ifdef TAPAS_USE_VECTORMAP
+  typedef _Vectormap Vectormap;
+#endif /*TAPAS_USE_VECTORMAP*/
   
   // FIXME: the `SFC` class should not be here, because
   //        the concept of `SFC` is specific to HOT partitioning algorithm.

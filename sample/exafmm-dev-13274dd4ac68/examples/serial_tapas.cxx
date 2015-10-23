@@ -23,6 +23,9 @@
 
 #ifdef TAPAS
 #include "tapas_exafmm.h"
+#ifdef TAPAS_USE_VECTORMAP
+#include "LaplaceP2PCPU_tapas.cxx"
+#endif /*TAPAS_USE_VECTORMAP*/
 #include "serial_tapas_helper.cxx"
 #endif
 
@@ -186,6 +189,10 @@ int main(int argc, char ** argv) {
   MPI_Comm_size(MPI_COMM_WORLD, &args.mpi_size);
 #endif
 
+#ifdef TAPAS_USE_VECTORMAP
+  Tapas::Cell::TSPClass::Vectormap::vectormap_setup(64, 31);
+#endif /*TAPAS_USE_VECTORMAP*/
+
   Bodies bodies, bodies2, bodies3, jbodies;
   BoundBox boundBox(args.nspawn);
   Bounds bounds;
@@ -271,8 +278,17 @@ int main(int argc, char ** argv) {
     dumpM(*root);
 
     logger::startTimer("Traverse");
+#ifdef TAPAS_USE_VECTORMAP
+    Tapas::Cell::TSPClass::Vectormap::vectormap_start();
+#endif /*TAPAS_USE_VECTORMAP*/
     numM2L = 0; numP2P = 0;
     tapas::Map(FMM_M2L, tapas::Product(*root, *root), args.mutual, args.nspawn);
+#ifdef TAPAS_USE_VECTORMAP
+    vec3 Xperiodic = 0; // dummy; periodic not ported
+    Tapas::Cell::TSPClass::Vectormap::vectormap_finish(tapas_kernel_P2P(),
+                                                       *root,
+                                                       Xperiodic);
+#endif /*TAPAS_USE_VECTORMAP*/
     logger::stopTimer("Traverse");
     
     TAPAS_LOG_DEBUG() << "M2L done\n";

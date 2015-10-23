@@ -17,6 +17,9 @@ template<class TSP> // TSP=TapasStaticParams
 class BasicCell {
   public:
     static const int Dim = TSP::Dim;
+#ifdef TAPAS_USE_VECTORMAP
+    typedef TSP TSPClass;
+#endif /*TAPAS_USE_VECTORMAP*/
     typedef typename TSP::FP FP;
     typedef typename TSP::BT BT;
     typedef typename TSP::BT_ATTR BT_ATTR;

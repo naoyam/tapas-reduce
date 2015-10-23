@@ -178,6 +178,19 @@ void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
 #endif
 }
   
+#ifdef TAPAS_USE_VECTORMAP
+
+/* (Specialization of the Map() below by a general ProductIterator<T>
+   with ProductIterator<BodyIterator<T>>). */
+
+template <class Funct, class Cell, class...Args>
+void Map(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args...args) {
+  typedef typename Cell::TSPClass::Vectormap Vectormap;
+  Vectormap::vector_map2(f, prod, args...);
+}
+
+#endif /*TAPAS_USE_VECTORMAP*/
+
 template <class Funct, class T1_Iter, class...Args>
 void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
   TAPAS_LOG_DEBUG() << "map product iterator size: "
