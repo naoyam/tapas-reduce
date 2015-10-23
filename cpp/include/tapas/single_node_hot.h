@@ -707,14 +707,22 @@ struct SingleNodeHOT {
 template <int DIM, class FP, class BT,
           class BT_ATTR, class CELL_ATTR,
           class PartitionAlgorithm,
-          class Threading>
+          class Threading
+#ifdef TAPAS_USE_VECTORMAP
+          , class Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+>
 class Tapas;
 
 /**
  * @brief Specialization of Tapas for HOT (single node HOT) algorithm
  */
 template <int DIM, class FP, class BT,
-          class BT_ATTR, class CELL_ATTR, class Threading>
+          class BT_ATTR, class CELL_ATTR, class Threading
+#ifdef TAPAS_USE_VECTORMAP
+          , class Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+          >
 class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
             SingleNodeHOT<DIM, tapas::sfc::Morton>, Threading
 #ifdef TAPAS_USE_VECTORMAP
@@ -754,7 +762,11 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
  * With default threading policy 'Serial'
  */
 template <int DIM, class FP, class BT,
-          class BT_ATTR, class CELL_ATTR>
+          class BT_ATTR, class CELL_ATTR
+#ifdef TAPAS_USE_VECTORMAP
+          , class Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+>
 class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
             SingleNodeHOT<DIM, tapas::sfc::Morton>,
             tapas::threading::Serial

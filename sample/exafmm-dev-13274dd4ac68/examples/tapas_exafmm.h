@@ -55,8 +55,8 @@ void M2L(Tapas::Cell &Ci, Tapas::Cell &Cj, vec3 Xperiodic, bool mutual);
 void L2L(Tapas::Cell &C);
 void L2P(Tapas::BodyIterator &B);
 #ifdef TAPAS_USE_VECTORMAP
-/*empty*/
-#else /*TAPAS_USE_VECTORMAP*/
+struct P2P;
+#else
 void P2P(Tapas::BodyIterator &Ci, Tapas::BodyIterator &Cj, vec3 Xperiodic);
 #endif /*TAPAS_USE_VECTORMAP*/
 

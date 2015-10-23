@@ -257,6 +257,9 @@ void Map(Funct f, T &x, Args...args) {
   T::Map(lambda, x);
 }
 
+#ifdef TAPAS_USE_VECTORMAP
+/*EMPTY*/
+#else
 template <class Funct, class T, class... Args>
 void Map(Funct f, T &&x, Args...args) {
   TAPAS_LOG_DEBUG() << "map non-iterator (r-value version)"  << std::endl;
@@ -264,6 +267,7 @@ void Map(Funct f, T &&x, Args...args) {
   std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
   T::Map(lambda, std::forward<T>(x));
 }
+#endif /*TAPAS_USE_VECTORMAP*/
 
 } // namespace tapas
 

@@ -1,7 +1,7 @@
 # mk.cuda
 
-MYTH = /home/matu/lib/myth
-MPIDIR = /home/matu/lib/yampi
+MYTHDIR = $(HOME)/lib/myth
+MPIDIR = $(HOME)/lib/yampi
 CUDADIR = /usr/local/cuda-7.0
 
 .SUFFIXES: .cxx
@@ -20,10 +20,16 @@ gpu::
 LFLAGS	+= -DDIRECT # Compare with direct summation
 LFLAGS	+= -DWRITE_TIME # Write timings to file
 
-CCOPTIONS = -I../include -I../../../cpp/include -I$(MYTH)/include \
-	-DEXAFMM_TAPAS_MPI \
-	-DMTHREAD -DTAPAS_LOG_LEVEL=0 -DTAPAS_DEBUG=0 \
-	-DSpherical -DEXPANSION=4 -DFP64 -DASSERT -DCOUNT
+CCOPTIONS = -I../include -I../../../cpp/include -I$(MYTHDIR)/include \
+        -DFP64 -DSpherical -DEXPANSION=6 \
+        -DASSERT -DCOUNT -DTAPAS_LOG_LEVEL=0 -DTAPAS_DEBUG=0 \
+        -DTO_SERIAL
+
+#-DEXAFMM_TAPAS_MPI
+#-DMTHREAD
+#-DTAPAS_BH
+#-DTAPAS_LOG_LEVEL=0 -DTAPAS_DEBUG=0 \
+#-DSpherical -DEXPANSION=4 -DFP64 -DASSERT -DCOUNT
 
 cpu_LD = g++ -m64 -fopenmp -g
 cpu_CC = $(cpu_LD) -std=c++11 -Wall -Wextra $(CCOPTIONS)
@@ -40,9 +46,9 @@ gpu_CC = $(gpu_LD) -v -x cu -std c++11 -ccbin g++ -keep \
 	--compiler-options -Wno-unused-parameter \
 	$(CCOPTIONS)
 
-cpu_LIBS = -L$(MPIDIR)/lib -lmpi64 -L$(MYTH)/lib -lmyth-native
+cpu_LIBS = -L$(MPIDIR)/lib -lmpi64 -L$(MYTHDIR)/lib -lmyth-native
 
-gpu_LIBS = -L$(MPIDIR)/lib -lmpi64 -L$(MYTH)/lib -lmyth-native \
+gpu_LIBS = -L$(MPIDIR)/lib -lmpi64 -L$(MYTHDIR)/lib -lmyth-native \
 	-L$(CUDADIR)/lib64 -lnvToolsExt
 
 dev ?= cpu

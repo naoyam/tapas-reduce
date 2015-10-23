@@ -285,7 +285,7 @@ int main(int argc, char ** argv) {
     tapas::Map(FMM_M2L, tapas::Product(*root, *root), args.mutual, args.nspawn);
 #ifdef TAPAS_USE_VECTORMAP
     vec3 Xperiodic = 0; // dummy; periodic not ported
-    Tapas::Cell::TSPClass::Vectormap::vectormap_finish(tapas_kernel_P2P(),
+    Tapas::Cell::TSPClass::Vectormap::vectormap_finish(tapas_kernel::P2P(),
                                                        *root,
                                                        Xperiodic);
 #endif /*TAPAS_USE_VECTORMAP*/

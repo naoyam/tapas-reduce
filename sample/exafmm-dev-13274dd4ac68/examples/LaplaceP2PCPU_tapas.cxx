@@ -4,9 +4,9 @@ const real_t EPS2 = 0.0;                                        //!< Softening p
 
 #ifdef TAPAS_USE_VECTORMAP
 
-struct tapas_kernel_P2P {
+struct tapas_kernel::P2P {
 
-  tapas_kernel_P2P() {}
+  P2P() {}
 
 #ifdef __CUDACC__
   __host__ __device__ __forceinline__
