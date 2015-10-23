@@ -35,6 +35,7 @@ enum class SplitType {
   using CellType = Cell<TSP>;                           \
   using Data = typename CellType::Data
 
+
 template<class TSP, class SetType>
 void TraverseLET_old(typename Cell<TSP>::BodyType &p,
     typename Cell<TSP>::KeyType src_key,
@@ -123,7 +124,6 @@ void TraverseLET_old(typename Cell<TSP>::BodyType &p,
     // ------ block ends here -------
     return;
 }
-
 
 template<class TSP>
 struct InteractionPred {
@@ -518,30 +518,10 @@ struct LET {
   template<class UserFunct>
   static void Traverse(UserFunct f, std::vector<KeyType> &trg_keys, KeyType src_key,
                        Data &data, KeySet &list_attr, KeySet &list_body) {
-    auto pred = InteractionPred<TSP>(data);
-    auto src_ctr = CellType::CalcCenter(src_key, data.region_);
-
-    // Traverse target cells in trg_keys vector with the source cell src_key.
-  
-    // First, sort trg_keys accoding to their distance from the soruce cell.
-    std::sort(trg_keys.begi(), trg_keys.end(), [src_key, &pred](KeyType k1, KeyType k2) {
-        return pred.distR2(k1, src_key) < pred.distR2(k2, src_key);
-      });
-
     // Apply Traverse for each keys in trg_keys. If interaction between trg_keys[i] and src_key is 'approximate',
     // trg_keys[i+1...] will be all 'approximate'.
     for (size_t i = 0; i < trg_keys.size(); i++) {
-      auto cond = Traverse(f, trg_keys[i], src_key, data, list_attr, list_body);
-    
-#if 0
-      // This optimization code is temporarily disabled.
-      // The "distance" must be the "shortest" distance between cells ??
-      if (cond == SplitType::Approx) {
-        // The rest of the trg_keys are all 'Approx'. however, unlike src_keys[] below, we don't need to add trg_cells to list_attr,
-        // because trg_keys are all expected to be local.
-        break;
-      }
-#endif
+      Traverse(f, trg_keys[i], src_key, data, list_attr, list_body);
     }
   }
 
@@ -549,33 +529,10 @@ struct LET {
   template<class UserFunct>
   static void Traverse(UserFunct f, KeyType trg_key, std::vector<KeyType> src_keys,
                        Data &data, KeySet &list_attr, KeySet &list_body) {
-    auto pred = InteractionPred<TSP>(data);
-
-    // Traverse target cells in trg_keys vector with the source cell src_key.
-  
-    // First, sort trg_keys accoding to their distance from the soruce cell.
-    std::sort(src_keys.begin(), src_keys.end(), [trg_key, &pred](KeyType k1, KeyType k2) {
-        return pred.distR2(trg_key, k1) < pred.distR2(trg_key, k2);
-      });
-
     // Apply Traverse for each keys in src_keys.
     // If interaction between trg_key and src_keys[i] is 'approximate', trg_keys[i+1...] will be all 'approximate'.
     for (size_t i = 0; i < src_keys.size(); i++) {
-      // auto cond = 
       Traverse(f, trg_key, src_keys[i], data, list_attr, list_body);
-
-#if 0
-      // This optimization code is temporarily disabled.
-      // The "distance" must be the "shortest" distance between cells ??
-      if (cond == SplitType::Approx) {
-        // The rest of src_keys are all 'Approx'
-        for (i++; i < src_keys.size(); i++) {
-          list_attr.insert(src_keys[i]);
-          KeyType pkey = SFC::Parent(src_keys[i]); // parent
-        }
-        return;
-      }
-#endif
     }
   }
 
