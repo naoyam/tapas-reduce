@@ -26,6 +26,18 @@ CXXFLAGS += -DS=$(S)
 
 CXXFLAGS += -DTAPAS_BH # temporary cxxflag for Tapas Barnes-Hut implementation.
 
+ifeq ($(LET),hardcoded)
+	CXXFLAGS += -DOLD_LET_TRAVERSE
+endif
+
+ifeq ($(LET),manual)
+	CXXFLAGS += -DMANUAL_LET
+endif
+
+ifeq ($(LET),auto-slow)
+	CXXFLAGS += -DAUTO_LET_SLOW
+endif
+
 TAPAS_DIR = ../../cpp
 
 all: bh bh_mpi

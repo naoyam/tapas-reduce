@@ -1,9 +1,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include <ctime>
+
 #include <iostream>
 #include <fstream>
 #include <sys/time.h>
+#include <unistd.h>
 
 #ifdef USE_MPI
 # include <mpi.h>
@@ -422,20 +425,23 @@ int main(int argc, char **argv) {
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 #endif
 
+  // print time and environment
   parseOption(&argc, &argv);
 
   if (N_total <= 0) {
     std::cerr << "Error: particle number is not specified." << std::endl;
     exit(-1);
   }
-
+  
   // NOTE: Total number of particles is N * size (weak scaling)
   assert(N_total % mpi_size == 0);
   int N = N_total / mpi_size;
   OPS = 20. * N_total * N_total * 1e-9;  
 
-  std::cout << "time n_total " << N_total << std::endl;
-  std::cout << "time n_per_proc " << (N_total / mpi_size) << std::endl;
+  tapas::debug::BarrierExec([=](int rank, int) {
+      std::cout << "time " << rank << " n_total " << N_total << std::endl;
+      std::cout << "time " << rank << " n_per_proc " << (N_total / mpi_size) << std::endl;
+    });
 
   f4vec sourceHost(N);
 
@@ -467,8 +473,10 @@ int main(int argc, char **argv) {
   double tic = get_time();
   f4vec targetTapas = calc(sourceHost);
   double toc = get_time();
-  std::cout << "time total_calc "   << std::scientific << toc-tic << " s" << std::endl;
-  std::cout << "time total_gflops " << std::scientific << OPS / (toc-tic) << " GFlops" << std::endl;
+  tapas::debug::BarrierExec([=](int rank, int) {
+      std::cout << "time " << rank << " total_calc "   << std::scientific << toc-tic << " s" << std::endl;
+      std::cout << "time " << rank << " total_gflops " << std::scientific << OPS / (toc-tic) << " GFlops" << std::endl;
+    });
 
   CheckResult(std::min(100, N), sourceHost, targetTapas);
   

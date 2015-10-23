@@ -34,7 +34,96 @@ enum class SplitType {
   using KeyType = typename CellType::KeyType;           \
   using CellType = Cell<TSP>;                           \
   using Data = typename CellType::Data
-  
+
+template<class TSP, class SetType>
+void TraverseLET_old(typename Cell<TSP>::BodyType &p,
+    typename Cell<TSP>::KeyType src_key,
+    typename Cell<TSP>::Data &data,
+    SetType &list_attr, SetType &list_body) {
+  using CellType = Cell<TSP>;
+  using FP = typename TSP::FP;
+  using SFC = typename Cell<TSP>::SFC;
+  using KeyType = typename Cell<TSP>::KeyType;
+
+  const constexpr double theta = 0.5;
+
+  auto &r = data.region_;
+  auto &ht = data.ht_;
+
+  // Maximum depth of the tree.
+  const int max_depth = data.max_depth_;
+
+  bool is_src_local = ht.count(src_key) != 0;
+  bool is_src_local_leaf = is_src_local && ht[src_key]->IsLeaf();
+  bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= max_depth;
+
+  if (is_src_local_leaf) {
+    // if the source cell is a remote leaf, we need it (the cell is not longer splittable anyway).
+    return;
+  }
+    else if (is_src_remote_leaf) {
+      // If the source cell is a remote leaf, we need it (with it's bodies).
+      list_attr.insert(src_key);
+      list_body.insert(src_key);
+      return;
+    }
+
+    // the cell attributes is necessary (because traversal has come here.)
+    list_attr.insert(src_key);
+    TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
+
+    auto src_child_keys = SFC::GetChildren(src_key);
+
+    // distance function closure, which returns distance from p
+    auto distR2 = [&p](const Vec<TSP::Dim, FP> &v) -> FP {
+      FP dx = p.x - v[0];
+      FP dy = p.y - v[1];
+      FP dz = p.z - v[2];
+      return dx * dx + dy * dy + dz * dz;
+    };
+
+    // compare function to sort cells by their distance from p
+    auto comp = [&p, &r, &distR2](KeyType k1, KeyType k2) {
+      auto ctr1 = CellType::CalcCenter(k1, r);
+      auto ctr2 = CellType::CalcCenter(k2, r);
+
+      FP d1 = distR2(ctr1);
+      FP d2 = distR2(ctr2);
+
+      return d1 < d2;
+    };
+
+    // Sort children according to their distance from p
+    // If a certain child is "approximated", the farer children are all "approximated."
+    std::sort(std::begin(src_child_keys), std::end(src_child_keys), comp);
+
+    for (size_t i = 0; i < src_child_keys.size(); i++) {
+      KeyType ckey = src_child_keys[i];
+      auto ctr = CellType::CalcCenter(ckey, r);
+
+      FP s = CellType::CalcRegion(ckey, r).width(0); // width
+      FP d = std::sqrt(distR2(ctr));
+
+      if (s/d > theta) { // if the cell(ckey) is close
+        TraverseLET_old<TSP, SetType>(p, ckey, data, list_attr, list_body);
+      } else {
+        // If i-th children is far enough from `cell`, the rest of children
+        // are also `far`. Thus we don't need to traverse them recursively
+        // and just need their attributes(multipole)
+
+        for (size_t j = i; j < src_child_keys.size(); j++) {
+          KeyType ckey2 = src_child_keys[j];
+          if (ht.count(ckey2) == 0) {
+            list_attr.insert(src_child_keys[j]);
+          }
+        }
+        break;
+      }
+    }
+    // ------ block ends here -------
+    return;
+}
+
 
 template<class TSP>
 struct InteractionPred {
@@ -127,7 +216,7 @@ struct InteractionPred {
   }
 };
 
-#ifdef USE_AUTO_LET_SLOW
+#ifdef AUTO_LET_SLOW
 namespace {
 void *dummy_ptr = nullptr;
 }
@@ -163,13 +252,12 @@ struct LET {
       // operation. We only need the necessary operations, so we expetct the compiler does the job for us.
       // Assignment to Body or BodyAttr is overloaded by this operator=(), which is empty, and
       // optimized out by the compiler.
-#if defined(USE_AUTO_LET_SLOW)
+#if defined(AUTO_LET_SLOW)
       if (dummy_ptr != nullptr) {
-        BodyTypeAttr *ptr = reinterpret_cast<BodyTypeAttr*>(dummy_ptr);
+        BodyAttrType *ptr = reinterpret_cast<BodyAttrType*>(dummy_ptr);
         *ptr = v;
       }
 #else
-      (void) v;
 #endif
       return *this;
     }
@@ -533,9 +621,9 @@ struct LET {
     list_attr.insert(src_key);
 
     // Approx/Split branch
-#if defined(USE_MANUAL_LET)
+#if defined(MANUAL_LET)
     SplitType split = InteractionPred<TSP>(data)(trg_key, src_key);
-#elif defined(USE_AUTO_LET_SLOW)
+#elif defined(AUTO_LET_SLOW)
     SplitType split = LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data); // automated predicator object
 #else
     SplitType split = LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data); // automated predicator object
@@ -585,16 +673,17 @@ struct LET {
     beg_trv = MPI_Wtime();
 #endif
 
-    req_keys_attr.insert(root.key());
-
     // Construct request lists of necessary cells
+    req_keys_attr.insert(root.key());
+#ifdef OLD_LET_TRAVERSE
+    for (size_t bi = 0; bi < root.local_nb(); bi++) {
+      BodyType &b = root.local_body(bi);
+      TraverseLET_old<TSP, KeySet>(b, root.key(), root.data(), req_keys_attr, req_keys_body);
+    }
+#else
     Traverse(f, root.key(), root.key(), root.data(), req_keys_attr, req_keys_body);
-
-    // for (int bi = 0; bi < root.local_nb(); bi++) {
-    //   BodyType &b = root.local_body(bi);
-    //   Traverse<TSP, KeySet>(b, root.key(), root.data(), req_keys_attr, req_keys_body);
-    // }
-
+#endif
+    
 #ifdef TAPAS_MEASURE
     end_trv = MPI_Wtime();
 #endif
@@ -853,17 +942,16 @@ struct LET {
 
 #ifdef TAPAS_MEASURE
     end_all = MPI_Wtime();
-    if (root.data().mpi_rank_ == 0) {
-      std::cout << "time ExchangeLET " << (end_all - beg_all) << std::endl;
-      std::cout << "time ExchangeLET/Traverse " << (end_trv - beg_trv) << std::endl;
-      std::cout << "time ExchangeLET/Request "     << (end_req - beg_req) << std::endl;
-      std::cout << "time ExchangeLET/Select "      << (end_sel - beg_sel) << std::endl;
-      std::cout << "time ExchangeLET/Response "    << (end_res - beg_res) << std::endl;
-      std::cout << "time ExchangeLET/Register "    << (end_reg - beg_reg) << std::endl;
-    }
+    BarrierExec( [=](int rank, int) {
+        std::cout << "time " << rank << " ExchangeLET/All "         << (end_all - beg_all) << std::endl;
+        std::cout << "time " << rank << " ExchangeLET/Traverse "    << (end_trv - beg_trv) << std::endl;
+        std::cout << "time " << rank << " ExchangeLET/Request "     << (end_req - beg_req) << std::endl;
+        std::cout << "time " << rank << " ExchangeLET/Select "      << (end_sel - beg_sel) << std::endl;
+        std::cout << "time " << rank << " ExchangeLET/Response "    << (end_res - beg_res) << std::endl;
+        std::cout << "time " << rank << " ExchangeLET/Register "    << (end_reg - beg_reg) << std::endl;
+      });
 #endif
   }
-
 };
 
 } // namespace hot
