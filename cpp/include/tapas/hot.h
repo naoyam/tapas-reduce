@@ -462,7 +462,6 @@ class Cell: public tapas::BasicCell<TSP> {
   // utility/accessor functions
   Cell *Lookup(KeyType k) const;
   CellHashTable *ht() { return ht_; }
-  virtual void make_pure_virtual() const {}
   void RegisterCell(Cell<TSP> *c);
 
   //========================================================
