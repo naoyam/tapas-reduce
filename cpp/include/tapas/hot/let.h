@@ -96,7 +96,7 @@ void TraverseLET_old(typename Cell<TSP>::BodyType &p,
 
     // Sort children according to their distance from p
     // If a certain child is "approximated", the farer children are all "approximated."
-    std::sort(std::begin(src_child_keys), std::end(src_child_keys), comp);
+    //std::sort(std::begin(src_child_keys), std::end(src_child_keys), comp);
 
     for (size_t i = 0; i < src_child_keys.size(); i++) {
       KeyType ckey = src_child_keys[i];
@@ -111,14 +111,9 @@ void TraverseLET_old(typename Cell<TSP>::BodyType &p,
         // If i-th children is far enough from `cell`, the rest of children
         // are also `far`. Thus we don't need to traverse them recursively
         // and just need their attributes(multipole)
-
-        for (size_t j = i; j < src_child_keys.size(); j++) {
-          KeyType ckey2 = src_child_keys[j];
-          if (ht.count(ckey2) == 0) {
-            list_attr.insert(src_child_keys[j]);
-          }
+        if (ht.count(ckey) == 0) {
+          list_attr.insert(ckey);
         }
-        break;
       }
     }
     // ------ block ends here -------
@@ -633,6 +628,7 @@ struct LET {
     // Construct request lists of necessary cells
     req_keys_attr.insert(root.key());
 #ifdef OLD_LET_TRAVERSE
+    (void) f;
     for (size_t bi = 0; bi < root.local_nb(); bi++) {
       BodyType &b = root.local_body(bi);
       TraverseLET_old<TSP, KeySet>(b, root.key(), root.data(), req_keys_attr, req_keys_body);
