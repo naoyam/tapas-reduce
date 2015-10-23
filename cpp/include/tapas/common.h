@@ -37,6 +37,9 @@
 # define TAPAS_DEBUG // default
 #endif // TAPAS_DEBUG
 
+//#define INLINE 
+#define INLINE __attribute__((always_inline))
+
 // for debug
 #include <iomanip>
 #include <unistd.h>
