@@ -25,7 +25,6 @@ enum class SplitType {
   None,         // Nothing. Use when a target cell isn't local in Traverse
 };
 
-
 #define USING_TAPAS_TYPES(TSP)                          \
   using FP = typename TSP::FP;                          \
   using BodyType = TSP::BT::type BodyType;              \
@@ -82,21 +81,6 @@ void TraverseLET_old(typename Cell<TSP>::BodyType &p,
       FP dz = p.z - v[2];
       return dx * dx + dy * dy + dz * dz;
     };
-
-    // compare function to sort cells by their distance from p
-    auto comp = [&p, &r, &distR2](KeyType k1, KeyType k2) {
-      auto ctr1 = CellType::CalcCenter(k1, r);
-      auto ctr2 = CellType::CalcCenter(k2, r);
-
-      FP d1 = distR2(ctr1);
-      FP d2 = distR2(ctr2);
-
-      return d1 < d2;
-    };
-
-    // Sort children according to their distance from p
-    // If a certain child is "approximated", the farer children are all "approximated."
-    //std::sort(std::begin(src_child_keys), std::end(src_child_keys), comp);
 
     for (size_t i = 0; i < src_child_keys.size(); i++) {
       KeyType ckey = src_child_keys[i];
