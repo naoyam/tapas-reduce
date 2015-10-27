@@ -218,7 +218,7 @@ struct LET {
   using BodyAttrType = typename CellType::attr_type;
   using attr_type = typename CellType::attr_type; // alias for backward compatibility
   using CellAttrType = attr_type;
-  using Vec = Vec<TSP::Dim, typename TSP::FP>;
+  using Vec = tapas::Vec<TSP::Dim, typename TSP::FP>;
 
   class ProxyBodyAttr : public BodyAttrType {
    public:
@@ -307,9 +307,9 @@ struct LET {
   class ProxyCell {
    public:
     // Export same type definitions as tapas::hot::Cell does.
-    using KeyType = KeyType;
-    using SFC = SFC;
-    using attr_type = attr_type;
+    using KeyType = tapas::hot::LET<TSP>::KeyType;
+    using SFC = tapas::hot::LET<TSP>::SFC;
+    using attr_type = tapas::hot::LET<TSP>::attr_type;
 
     using BodyAttrType = ProxyBodyAttr;
     using BodyType = ProxyBody;
@@ -621,7 +621,10 @@ struct LET {
 #else
     Traverse(f, root.key(), root.key(), root.data(), req_keys_attr, req_keys_body);
 #endif
-    
+
+    //MPI_Finalize();
+    //exit(0);
+
 #ifdef TAPAS_MEASURE
     end_trv = MPI_Wtime();
 #endif

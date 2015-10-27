@@ -198,72 +198,11 @@ struct interact {
 
 typedef tapas::Vec<DIM, real_t> Vec3;
 
-const char *dumpFileName = "approx.dat";
-
-void DumpApproximate(Tapas::Cell *root) {
-  // Dump random seed, number of bodies, and body_attrs
-  // File name is fixed for now.
-  std::ofstream out(dumpFileName);
-  assert(out.good());
-  out << seed << std::endl;
-  out << N_total << std::endl;
-
-  std::function<void (Tapas::Cell&)> dumper = [&out, &dumper](Tapas::Cell &cell) {
-    out << cell.key() << " ";
-    out << std::scientific << cell.attr().x << " ";
-    out << std::scientific << cell.attr().y << " ";
-    out << std::scientific << cell.attr().z << " ";
-    out << std::scientific << cell.attr().w << " ";
-    out << std::endl;
-    if (!cell.IsLeaf()) {
-      tapas::Map(dumper, cell.subcells());
-    }
-  };
-  
-  tapas::Map(dumper, *root);
-
-  out.close();
-}
-
-void LoadApproximate(Tapas::Cell *root) {
-#ifdef USE_MPI
-  std::ifstream in(dumpFileName);
-  assert(in.good());
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  
-  int seed2 = 0, N_total2 = 0;
-  in >> seed2 >> N_total2;
-  assert(seed == seed2);
-  assert(N_total == N_total2);
-
-  auto &ht = root->data().ht_;
-
-  while(!in.eof()) {
-    Tapas::Cell::SFC::KeyType k;
-    float4 v;
-    in >> k >> v.x >> v.y >> v.z >> v.w;
-
-    if (ht.count(k) > 0) {
-      assert(ht.count(k) == 1);
-      assert(ht[k] != nullptr);
-      ht[k]->attr() = v;
-    }
-  }
-#else
-  (void)root; //hack: disable "unused parameter" warnings.
-#endif
-}
-
 f4vec calc(f4vec &source) {
   Tapas::Region r(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 1.0, 1.0));
   Tapas::Cell *root = Tapas::Partition(source.data(), source.size(), r, 1);
 
   tapas::UpwardMap(approximate, *root); // or, simply: approximate(*root);
-  
-#if !defined(USE_MPI) && TAPAS_DEBUG
-  DumpApproximate(root);
-#endif
   
   real_t theta = 0.5;
   tapas::Map(interact(), tapas::Product(*root, *root), theta);
@@ -365,32 +304,6 @@ void CheckResult(int np_check,
   std::ofstream tapas_out("bh_tapas.txt");
 #endif
 
-#ifdef USE_MPI
-  tapas::debug::BarrierExec([&tattrs](int, int) {
-      std::stringstream ss;
-      ss << "direct_" << mpi_size << ".dat";
-      std::ofstream ofs(ss.str().c_str());
-      for (size_t i = 0; i < tattrs.size(); i++) {
-        ofs << tattrs[i].x << " "
-            << tattrs[i].y << " "
-            << tattrs[i].z << " "
-            << tattrs[i].w << std::endl;
-      }
-      ofs.close();
-    });
-#else // ifdef USE_MPI
-  std::stringstream ss;
-  ss << "direct.dat";
-  std::ofstream ofs(ss.str().c_str());
-  for (size_t i = 0; i < tattrs.size(); i++) {
-    ofs << tattrs[i].x << " "
-        << tattrs[i].y << " "
-        << tattrs[i].z << " "
-        << tattrs[i].w << std::endl;
-  }
-  ofs.close();
-#endif
-
   // COMPARE RESULTS
   if (mpi_rank == 0) {
     real_t pd = 0, pn = 0, fd = 0, fn = 0;
@@ -485,4 +398,6 @@ int main(int argc, char **argv) {
 #ifdef USE_MPI
   MPI_Finalize();
 #endif
+  
+  return 0;
 }
