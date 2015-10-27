@@ -2163,6 +2163,10 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, HOT<DIM, tapas::sfc::Morton>, Threa
   }
 };
 
+#ifdef AUTO_LET_SLOW
+extern void *dummy_ptr;
+#endif
+
 } // namespace tapas
 
 #ifdef TAPAS_DEBUG

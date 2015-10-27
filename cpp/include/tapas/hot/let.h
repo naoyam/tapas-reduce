@@ -9,6 +9,11 @@
 using tapas::debug::BarrierExec;
 
 namespace tapas {
+
+#ifdef AUTO_LET_SLOW
+void *dummy_ptr = nullptr;
+#endif
+
 namespace hot {
 
 template<class TSP> class Cell;
@@ -195,12 +200,6 @@ struct InteractionPred {
     }
   }
 };
-
-#ifdef AUTO_LET_SLOW
-namespace {
-void *dummy_ptr = nullptr;
-}
-#endif
 
 /**
  * A set of static functions to construct LET (Locally Essential Tree)
