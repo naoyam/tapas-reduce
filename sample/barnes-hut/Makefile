@@ -4,27 +4,46 @@
 # CXXFLAGS := -std=c++11 -Wall -Wextra -O0
 # CXXFLAGS += -g -g3 -ggdb -Wall -fno-elide-constructors
 
-MODE:=debug
-#MODE:=release
+MODE ?= debug
+#MODE ?= release
 
 ifeq ($(MODE),debug)
 	OPT = -O0
 	DEBUG = -DTAPAS_DEBUG=1 -g -gdwarf-2
 	LOG = -DTAPAS_LOG_LEVEL=1
 else
-	OPT = -O3
+	OPT = -O3 # -O3 is also OK, but when gprof is used, gprof command misunderstand names of functions called as 'frame_dummy'
 	DEBUG = -DTAPAS_DEBUG=0
 	LOG = -DTAPAS_LOG_LEVEL=0
 endif
 
-CXX = clang++
-MPICXX = mpicxx -cxx=clang++ -DUSE_MPI
-CXXFLAGS := -std=c++11 -fcolor-diagnostics -Wall -Wextra -Wno-unused-local-typedef
+CC ?= clang
+CXX ?= clang++
+MPICXX = mpicxx -cxx=$(CXX) -DUSE_MPI
+CXXFLAGS := -std=c++11 -Wall -Wextra -Wno-unused-local-typedef
 CXXFLAGS += -Wall -fno-elide-constructors
+
+#PROF := -pg
+
+ifeq ($(CXX),clang++)
+	CXXFLAGS += -fcolor-diagnostics
+endif	
 
 CXXFLAGS += -DS=$(S)
 
 CXXFLAGS += -DTAPAS_BH # temporary cxxflag for Tapas Barnes-Hut implementation.
+
+ifeq ($(LET),hardcoded)
+	CXXFLAGS += -DOLD_LET_TRAVERSE
+endif
+
+ifeq ($(LET),manual)
+	CXXFLAGS += -DMANUAL_LET
+endif
+
+ifeq ($(LET),auto-slow)
+	CXXFLAGS += -DAUTO_LET_SLOW
+endif
 
 TAPAS_DIR = ../../cpp
 
@@ -37,10 +56,10 @@ bh: bh.o
 	$(CXX) $^ -o $@
 
 bh_mpi.o: bh.cc
-	$(MPICXX) -o $@ $(CXXFLAGS) $(OPT) $(DEBUG) $(LOG) -c $^ -I$(TAPAS_DIR)/include
+	$(MPICXX) -o $@ $(CXXFLAGS) $(OPT) $(DEBUG) $(LOG) -c $^ -I$(TAPAS_DIR)/include $(PROF)
 
 bh_mpi: bh_mpi.o
-	$(MPICXX) $^ $(PROF) -o $@
+	$(MPICXX) $^ $(PROF) -o $@ $(PROF)
 
 clean:
 	$(RM) -f *.o bh bh_mpi

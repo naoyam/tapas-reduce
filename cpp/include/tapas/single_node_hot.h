@@ -196,7 +196,6 @@ class Cell: public tapas::BasicCell<TSP> {
     typename TSP::BT::type *bodies_;
     typename TSP::BT_ATTR *body_attrs_;
     bool is_leaf_;
-    virtual void make_pure_virtual() const {}
 
   const std::vector<BodyType>& LocalBodies() const;
   const std::vector<BodyAttrType>& LocalBodyAttrs() const;

@@ -214,7 +214,9 @@ void Alltoallv(std::vector<T>& send_buf, std::vector<int>& dest,
                          (void*)recv_counts.data(), 1, MPI_INT,
                          comm);
 
-  TAPAS_ASSERT(err == MPI_SUCCESS);
+  if (err != MPI_SUCCESS) {
+    TAPAS_ASSERT(!"MPI_Alltoall failed.");
+  }
 
   std::vector<int> send_disp(mpi_size, 0); // displacement 
   std::vector<int> recv_disp(mpi_size, 0);

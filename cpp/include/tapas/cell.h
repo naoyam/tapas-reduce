@@ -103,7 +103,6 @@ class BasicCell {
 
  protected:
   BT_ATTR &attr(index_t idx) const;
-  virtual void make_pure_virtual() const = 0;
 }; // class BasicCell
 
 

@@ -9,6 +9,11 @@
 using tapas::debug::BarrierExec;
 
 namespace tapas {
+
+#ifdef AUTO_LET_SLOW
+void *dummy_ptr = nullptr;
+#endif
+
 namespace hot {
 
 template<class TSP> class Cell;
@@ -25,7 +30,6 @@ enum class SplitType {
   None,         // Nothing. Use when a target cell isn't local in Traverse
 };
 
-
 #define USING_TAPAS_TYPES(TSP)                          \
   using FP = typename TSP::FP;                          \
   using BodyType = TSP::BT::type BodyType;              \
@@ -34,7 +38,76 @@ enum class SplitType {
   using KeyType = typename CellType::KeyType;           \
   using CellType = Cell<TSP>;                           \
   using Data = typename CellType::Data
-  
+
+
+template<class TSP, class SetType>
+void TraverseLET_old(typename Cell<TSP>::BodyType &p,
+    typename Cell<TSP>::KeyType src_key,
+    typename Cell<TSP>::Data &data,
+    SetType &list_attr, SetType &list_body) {
+  using CellType = Cell<TSP>;
+  using FP = typename TSP::FP;
+  using SFC = typename Cell<TSP>::SFC;
+  using KeyType = typename Cell<TSP>::KeyType;
+
+  const constexpr double theta = 0.5;
+
+  auto &r = data.region_;
+  auto &ht = data.ht_;
+
+  // Maximum depth of the tree.
+  const int max_depth = data.max_depth_;
+
+  bool is_src_local = ht.count(src_key) != 0;
+  bool is_src_local_leaf = is_src_local && ht[src_key]->IsLeaf();
+  bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= max_depth;
+
+  if (is_src_local_leaf) {
+    // if the source cell is a remote leaf, we need it (the cell is not longer splittable anyway).
+    return;
+  }
+    else if (is_src_remote_leaf) {
+      // If the source cell is a remote leaf, we need it (with it's bodies).
+      list_attr.insert(src_key);
+      list_body.insert(src_key);
+      return;
+    }
+
+    // the cell attributes is necessary (because traversal has come here.)
+    list_attr.insert(src_key);
+    TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
+
+    auto src_child_keys = SFC::GetChildren(src_key);
+
+    // distance function closure, which returns distance from p
+    auto distR2 = [&p](const Vec<TSP::Dim, FP> &v) -> FP {
+      FP dx = p.x - v[0];
+      FP dy = p.y - v[1];
+      FP dz = p.z - v[2];
+      return dx * dx + dy * dy + dz * dz;
+    };
+
+    for (size_t i = 0; i < src_child_keys.size(); i++) {
+      KeyType ckey = src_child_keys[i];
+      auto ctr = CellType::CalcCenter(ckey, r);
+
+      FP s = CellType::CalcRegion(ckey, r).width(0); // width
+      FP d = std::sqrt(distR2(ctr));
+
+      if (s/d > theta) { // if the cell(ckey) is close
+        TraverseLET_old<TSP, SetType>(p, ckey, data, list_attr, list_body);
+      } else {
+        // If i-th children is far enough from `cell`, the rest of children
+        // are also `far`. Thus we don't need to traverse them recursively
+        // and just need their attributes(multipole)
+        if (ht.count(ckey) == 0) {
+          list_attr.insert(ckey);
+        }
+      }
+    }
+    // ------ block ends here -------
+    return;
+}
 
 template<class TSP>
 struct InteractionPred {
@@ -50,45 +123,45 @@ struct InteractionPred {
 
   InteractionPred(const DT &data) : data_(data) {} 
 
-  static FP distR2(const VT& v1, const VT& v2) {
+  INLINE static FP distR2(const VT& v1, const VT& v2) {
     FP dx = v1[0] - v2[0];
     FP dy = v1[1] - v2[1];
     FP dz = v1[2] - v2[2];
     return dx * dx + dy * dy + dz * dz;
   }
 
-  FP distR2(const BT &p, const VT &v2) {
+  INLINE FP distR2(const BT &p, const VT &v2) {
     VT v1(p.x, p.y, p.z);
     return distR2(v1, v2);
   }
   
   template<class T1>
-  FP distR2(const T1 &t, const CT &c) {
+  INLINE FP distR2(const T1 &t, const CT &c) {
     return distR2(t, c.center());
   }
 
   template<class T2>
-  FP distR2(const CT &c, const T2 &t) {
+  INLINE FP distR2(const CT &c, const T2 &t) {
     return distR2(c.center(), t);
   }
 
   template<class T1>
-  FP distR2(const T1 &v1, KT k2) {
+  INLINE FP distR2(const T1 &v1, KT k2) {
     const auto &r = data_.region_;
     return distR2(v1, CT::CalcCenter(k2, r));
   }
 
   template<class T2>
-  FP distR2(KT k1, const T2 &v2) {
+  INLINE FP distR2(KT k1, const T2 &v2) {
     return distR2(CT::CalcCenter(k1, data_.region_), v2);
   }
 
-  FP distR2(KT k1, KT k2) {
+  INLINE FP distR2(KT k1, KT k2) {
     return distR2(CT::CalcCenter(k1, data_.region_),
                   CT::CalcCenter(k2, data_.region_));
   }
 
-  bool IsLeaf(KT k) {
+  INLINE bool IsLeaf(KT k) {
     if (data_.ht_.count(k) > 0) {
       return data_.ht_.at(k)->IsLeaf();
     } else {
@@ -96,9 +169,9 @@ struct InteractionPred {
     }
   }
 
-  size_t nb(KT) { return 1; } // nb() method for remote cell always returns '1' in LET mode
+  INLINE size_t nb(KT) { return 1; } // nb() method for remote cell always returns '1' in LET mode
   
-  SplitType operator() (KT k1, KT k2) {
+  INLINE SplitType operator() (KT k1, KT k2) {
     const constexpr FP theta = 0.5;
     TAPAS_ASSERT(data_.ht_.count(k1) > 0);
     const auto &c1 = *(data_.ht_.at(k1));
@@ -106,6 +179,7 @@ struct InteractionPred {
     if (!c1.IsLeaf()) {
       return SplitType::SplitLeft;
     } else if (c1.IsLeaf() && c1.nb() == 0) {
+      
       return SplitType::None;
     } else if (IsLeaf(k2)) { // c2.IsLeaf()
       if (nb(k2) == 0) { // Note: nb(k2) always returns 1 to be conservative
@@ -127,12 +201,6 @@ struct InteractionPred {
   }
 };
 
-#ifdef USE_AUTO_LET_SLOW
-namespace {
-void *dummy_ptr = nullptr;
-}
-#endif
-
 /**
  * A set of static functions to construct LET (Locally Essential Tree)
  */
@@ -149,7 +217,7 @@ struct LET {
   using BodyAttrType = typename CellType::attr_type;
   using attr_type = typename CellType::attr_type; // alias for backward compatibility
   using CellAttrType = attr_type;
-  using Vec = Vec<TSP::Dim, typename TSP::FP>;
+  using Vec = tapas::Vec<TSP::Dim, typename TSP::FP>;
 
   class ProxyBodyAttr : public BodyAttrType {
    public:
@@ -163,13 +231,12 @@ struct LET {
       // operation. We only need the necessary operations, so we expetct the compiler does the job for us.
       // Assignment to Body or BodyAttr is overloaded by this operator=(), which is empty, and
       // optimized out by the compiler.
-#if defined(USE_AUTO_LET_SLOW)
+#if defined(AUTO_LET_SLOW)
       if (dummy_ptr != nullptr) {
-        BodyTypeAttr *ptr = reinterpret_cast<BodyTypeAttr*>(dummy_ptr);
+        BodyAttrType *ptr = reinterpret_cast<BodyAttrType*>(dummy_ptr);
         *ptr = v;
       }
 #else
-      (void) v;
 #endif
       return *this;
     }
@@ -239,9 +306,9 @@ struct LET {
   class ProxyCell {
    public:
     // Export same type definitions as tapas::hot::Cell does.
-    using KeyType = KeyType;
-    using SFC = SFC;
-    using attr_type = attr_type;
+    using KeyType = tapas::hot::LET<TSP>::KeyType;
+    using SFC = tapas::hot::LET<TSP>::SFC;
+    using attr_type = tapas::hot::LET<TSP>::attr_type;
 
     using BodyAttrType = ProxyBodyAttr;
     using BodyType = ProxyBody;
@@ -430,30 +497,10 @@ struct LET {
   template<class UserFunct>
   static void Traverse(UserFunct f, std::vector<KeyType> &trg_keys, KeyType src_key,
                        Data &data, KeySet &list_attr, KeySet &list_body) {
-    auto pred = InteractionPred<TSP>(data);
-    auto src_ctr = CellType::CalcCenter(src_key, data.region_);
-
-    // Traverse target cells in trg_keys vector with the source cell src_key.
-  
-    // First, sort trg_keys accoding to their distance from the soruce cell.
-    std::sort(trg_keys.begi(), trg_keys.end(), [src_key, &pred](KeyType k1, KeyType k2) {
-        return pred.distR2(k1, src_key) < pred.distR2(k2, src_key);
-      });
-
     // Apply Traverse for each keys in trg_keys. If interaction between trg_keys[i] and src_key is 'approximate',
     // trg_keys[i+1...] will be all 'approximate'.
     for (size_t i = 0; i < trg_keys.size(); i++) {
-      auto cond = Traverse(f, trg_keys[i], src_key, data, list_attr, list_body);
-    
-#if 0
-      // This optimization code is temporarily disabled.
-      // The "distance" must be the "shortest" distance between cells ??
-      if (cond == SplitType::Approx) {
-        // The rest of the trg_keys are all 'Approx'. however, unlike src_keys[] below, we don't need to add trg_cells to list_attr,
-        // because trg_keys are all expected to be local.
-        break;
-      }
-#endif
+      Traverse(f, trg_keys[i], src_key, data, list_attr, list_body);
     }
   }
 
@@ -461,33 +508,10 @@ struct LET {
   template<class UserFunct>
   static void Traverse(UserFunct f, KeyType trg_key, std::vector<KeyType> src_keys,
                        Data &data, KeySet &list_attr, KeySet &list_body) {
-    auto pred = InteractionPred<TSP>(data);
-
-    // Traverse target cells in trg_keys vector with the source cell src_key.
-  
-    // First, sort trg_keys accoding to their distance from the soruce cell.
-    std::sort(src_keys.begin(), src_keys.end(), [trg_key, &pred](KeyType k1, KeyType k2) {
-        return pred.distR2(trg_key, k1) < pred.distR2(trg_key, k2);
-      });
-
     // Apply Traverse for each keys in src_keys.
     // If interaction between trg_key and src_keys[i] is 'approximate', trg_keys[i+1...] will be all 'approximate'.
     for (size_t i = 0; i < src_keys.size(); i++) {
-      // auto cond = 
       Traverse(f, trg_key, src_keys[i], data, list_attr, list_body);
-
-#if 0
-      // This optimization code is temporarily disabled.
-      // The "distance" must be the "shortest" distance between cells ??
-      if (cond == SplitType::Approx) {
-        // The rest of src_keys are all 'Approx'
-        for (i++; i < src_keys.size(); i++) {
-          list_attr.insert(src_keys[i]);
-          KeyType pkey = SFC::Parent(src_keys[i]); // parent
-        }
-        return;
-      }
-#endif
     }
   }
 
@@ -533,9 +557,9 @@ struct LET {
     list_attr.insert(src_key);
 
     // Approx/Split branch
-#if defined(USE_MANUAL_LET)
+#if defined(MANUAL_LET)
     SplitType split = InteractionPred<TSP>(data)(trg_key, src_key);
-#elif defined(USE_AUTO_LET_SLOW)
+#elif defined(AUTO_LET_SLOW)
     SplitType split = LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data); // automated predicator object
 #else
     SplitType split = LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data); // automated predicator object
@@ -585,15 +609,20 @@ struct LET {
     beg_trv = MPI_Wtime();
 #endif
 
-    req_keys_attr.insert(root.key());
-
     // Construct request lists of necessary cells
+    req_keys_attr.insert(root.key());
+#ifdef OLD_LET_TRAVERSE
+    (void) f;
+    for (size_t bi = 0; bi < root.local_nb(); bi++) {
+      BodyType &b = root.local_body(bi);
+      TraverseLET_old<TSP, KeySet>(b, root.key(), root.data(), req_keys_attr, req_keys_body);
+    }
+#else
     Traverse(f, root.key(), root.key(), root.data(), req_keys_attr, req_keys_body);
+#endif
 
-    // for (int bi = 0; bi < root.local_nb(); bi++) {
-    //   BodyType &b = root.local_body(bi);
-    //   Traverse<TSP, KeySet>(b, root.key(), root.data(), req_keys_attr, req_keys_body);
-    // }
+    //MPI_Finalize();
+    //exit(0);
 
 #ifdef TAPAS_MEASURE
     end_trv = MPI_Wtime();
@@ -853,17 +882,16 @@ struct LET {
 
 #ifdef TAPAS_MEASURE
     end_all = MPI_Wtime();
-    if (root.data().mpi_rank_ == 0) {
-      std::cout << "time ExchangeLET " << (end_all - beg_all) << std::endl;
-      std::cout << "time ExchangeLET/Traverse " << (end_trv - beg_trv) << std::endl;
-      std::cout << "time ExchangeLET/Request "     << (end_req - beg_req) << std::endl;
-      std::cout << "time ExchangeLET/Select "      << (end_sel - beg_sel) << std::endl;
-      std::cout << "time ExchangeLET/Response "    << (end_res - beg_res) << std::endl;
-      std::cout << "time ExchangeLET/Register "    << (end_reg - beg_reg) << std::endl;
-    }
+    BarrierExec( [=](int rank, int) {
+        std::cout << "time " << rank << " ExchangeLET/All "         << (end_all - beg_all) << std::endl;
+        std::cout << "time " << rank << " ExchangeLET/Traverse "    << (end_trv - beg_trv) << std::endl;
+        std::cout << "time " << rank << " ExchangeLET/Request "     << (end_req - beg_req) << std::endl;
+        std::cout << "time " << rank << " ExchangeLET/Select "      << (end_sel - beg_sel) << std::endl;
+        std::cout << "time " << rank << " ExchangeLET/Response "    << (end_res - beg_res) << std::endl;
+        std::cout << "time " << rank << " ExchangeLET/Register "    << (end_reg - beg_reg) << std::endl;
+      });
 #endif
   }
-
 };
 
 } // namespace hot
