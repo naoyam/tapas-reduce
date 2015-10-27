@@ -113,7 +113,7 @@ static real_t distR2(const tapas::Vec<3, double> &p, const float4 &q) {
 
 struct ComputeForce {
   template<class BodyIterator>
-  void operator()(BodyIterator &p1, float4 approx, real_t eps2) const {
+  inline void operator()(BodyIterator &p1, float4 approx, real_t eps2) const {
     real_t dx = approx.x - p1->x; // const BodyType * BodyIterator::operator->()
     real_t dy = approx.y - p1->y;
     real_t dz = approx.z - p1->z;
@@ -130,7 +130,7 @@ struct ComputeForce {
   }
 };
 
-void approximate(Tapas::Cell &c) {
+inline void approximate(Tapas::Cell &c) {
   if (c.IsLeaf()) {
     if (c.nb() == 0) {
       c.attr().w = 0.0;
@@ -164,7 +164,7 @@ void approximate(Tapas::Cell &c) {
 
 struct interact {
   template<class Cell>
-  void operator()(Cell &c1, Cell &c2, real_t theta) {
+  inline void operator()(Cell &c1, Cell &c2, real_t theta) {
     if (!c1.IsLeaf()) {
       tapas::Map(*this, tapas::Product(c1.subcells(), c2), theta);
     } else if (c1.IsLeaf() && c1.nb() == 0) {

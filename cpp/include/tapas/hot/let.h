@@ -118,45 +118,45 @@ struct InteractionPred {
 
   InteractionPred(const DT &data) : data_(data) {} 
 
-  static FP distR2(const VT& v1, const VT& v2) {
+  INLINE static FP distR2(const VT& v1, const VT& v2) {
     FP dx = v1[0] - v2[0];
     FP dy = v1[1] - v2[1];
     FP dz = v1[2] - v2[2];
     return dx * dx + dy * dy + dz * dz;
   }
 
-  FP distR2(const BT &p, const VT &v2) {
+  INLINE FP distR2(const BT &p, const VT &v2) {
     VT v1(p.x, p.y, p.z);
     return distR2(v1, v2);
   }
   
   template<class T1>
-  FP distR2(const T1 &t, const CT &c) {
+  INLINE FP distR2(const T1 &t, const CT &c) {
     return distR2(t, c.center());
   }
 
   template<class T2>
-  FP distR2(const CT &c, const T2 &t) {
+  INLINE FP distR2(const CT &c, const T2 &t) {
     return distR2(c.center(), t);
   }
 
   template<class T1>
-  FP distR2(const T1 &v1, KT k2) {
+  INLINE FP distR2(const T1 &v1, KT k2) {
     const auto &r = data_.region_;
     return distR2(v1, CT::CalcCenter(k2, r));
   }
 
   template<class T2>
-  FP distR2(KT k1, const T2 &v2) {
+  INLINE FP distR2(KT k1, const T2 &v2) {
     return distR2(CT::CalcCenter(k1, data_.region_), v2);
   }
 
-  FP distR2(KT k1, KT k2) {
+  INLINE FP distR2(KT k1, KT k2) {
     return distR2(CT::CalcCenter(k1, data_.region_),
                   CT::CalcCenter(k2, data_.region_));
   }
 
-  bool IsLeaf(KT k) {
+  INLINE bool IsLeaf(KT k) {
     if (data_.ht_.count(k) > 0) {
       return data_.ht_.at(k)->IsLeaf();
     } else {
@@ -164,9 +164,9 @@ struct InteractionPred {
     }
   }
 
-  size_t nb(KT) { return 1; } // nb() method for remote cell always returns '1' in LET mode
+  INLINE size_t nb(KT) { return 1; } // nb() method for remote cell always returns '1' in LET mode
   
-  SplitType operator() (KT k1, KT k2) {
+  INLINE SplitType operator() (KT k1, KT k2) {
     const constexpr FP theta = 0.5;
     TAPAS_ASSERT(data_.ht_.count(k1) > 0);
     const auto &c1 = *(data_.ht_.at(k1));
@@ -174,6 +174,7 @@ struct InteractionPred {
     if (!c1.IsLeaf()) {
       return SplitType::SplitLeft;
     } else if (c1.IsLeaf() && c1.nb() == 0) {
+      
       return SplitType::None;
     } else if (IsLeaf(k2)) { // c2.IsLeaf()
       if (nb(k2) == 0) { // Note: nb(k2) always returns 1 to be conservative

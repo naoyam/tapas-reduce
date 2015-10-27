@@ -460,7 +460,7 @@ class Cell: public tapas::BasicCell<TSP> {
 
  protected:
   // utility/accessor functions
-  Cell *Lookup(KeyType k) const;
+  inline Cell *Lookup(KeyType k) const;
   CellHashTable *ht() { return ht_; }
   void RegisterCell(Cell<TSP> *c);
 
@@ -969,7 +969,7 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) {
 }
 
 template <class TSP>
-Cell<TSP> *Cell<TSP>::Lookup(KeyType k) const {
+inline Cell<TSP> *Cell<TSP>::Lookup(KeyType k) const {
   // Try the local hash.
   auto &ht = data_->ht_;
   auto &ht_let = data_->ht_let_;
