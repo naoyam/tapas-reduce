@@ -8,10 +8,18 @@
 
 using tapas::debug::BarrierExec;
 
+#if defined(AUTO_LET_SLOW)
+#  warning "Using Auto/Slow LET"
+#elif defined(MANUAL_LET)
+#  warning "Using Manual LET"
+#elif defined(OLD_LET_TRAVERSE)
+#  warning "Using old LET traverse"
+#endif
+
 namespace tapas {
 
 #ifdef AUTO_LET_SLOW
-void *dummy_ptr = nullptr;
+volatile double dummy_value = 0;
 #endif
 
 namespace hot {
@@ -223,8 +231,20 @@ struct LET {
    public:
     ProxyBodyAttr(BodyAttrType &rhs) : ProxyBodyAttr(rhs) {
     }
+    // staticにしてみる？
     
-    const ProxyBodyAttr& operator=(const BodyAttrType &v) const {
+    template <class T>
+    inline ProxyBodyAttr& operator=(const T &) {
+      return *this;
+    }
+
+    template<class T>
+    inline const ProxyBodyAttr& operator=(const T &) const {
+      return *this;
+    }
+
+#if 0
+    INLINE const ProxyBodyAttr& operator=(const BodyAttrType &v) const {
       // empty
       // In Auto-LET mechanims, assignment statement (using operator=) is replaced with this overload.
       // From a point of view of LET construction, user's functions have both of necessary and unnecessary arithmetic
@@ -232,16 +252,14 @@ struct LET {
       // Assignment to Body or BodyAttr is overloaded by this operator=(), which is empty, and
       // optimized out by the compiler.
 #if defined(AUTO_LET_SLOW)
-      if (dummy_ptr != nullptr) {
-        BodyAttrType *ptr = reinterpret_cast<BodyAttrType*>(dummy_ptr);
-        *ptr = v;
-      }
+      dummy_value = v.x;
 #else
 #endif
       return *this;
     }
+#endif
 
-    operator BodyAttrType& () const {
+    INLINE operator BodyAttrType& () {
       return dynamic_cast<BodyAttrType&>(*this);
     }
   };
