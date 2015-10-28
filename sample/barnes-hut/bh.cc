@@ -112,6 +112,7 @@ static real_t distR2(const tapas::Vec<3, double> &p, const float4 &q) {
 }
 
 struct ComputeForce {
+  
   template<class BodyIterator>
   inline void operator()(BodyIterator &p1, float4 approx, real_t eps2) const {
     real_t dx = approx.x - p1->x; // const BodyType * BodyIterator::operator->()
@@ -121,6 +122,7 @@ struct ComputeForce {
     real_t invR = 1.0 / std::sqrt(R2);
     real_t invR3 = invR * invR * invR;
 
+    // コンストラクタは消せない？
     auto tmp = p1.attr();  // const ProxyBodyAttrType &BodyIterator::attr() const; 場合によってはキャスト演算子
     tmp.x += dx * invR3 * approx.w;
     tmp.y += dy * invR3 * approx.w;

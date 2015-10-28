@@ -99,6 +99,9 @@ struct HotData {
   std::vector<BodyAttrType> let_body_attrs_;
   
   std::vector<KeyType> proc_first_keys_; //!< first SFC key of each process
+
+#ifdef TAPAS_DEBUG
+#endif
   
   HotData() { }
   HotData(const HotData<TSP, SFC>& rhs) = delete; // no copy
@@ -2164,7 +2167,7 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, HOT<DIM, tapas::sfc::Morton>, Threa
 };
 
 #ifdef AUTO_LET_SLOW
-extern void *dummy_ptr;
+extern volatile double dummy_value;
 #endif
 
 } // namespace tapas
