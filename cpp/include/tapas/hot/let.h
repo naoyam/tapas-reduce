@@ -47,12 +47,12 @@ enum class SplitType {
   using CellType = Cell<TSP>;                           \
   using Data = typename CellType::Data
 
-
 template<class TSP, class SetType>
 void TraverseLET_old(typename Cell<TSP>::BodyType &p,
-    typename Cell<TSP>::KeyType src_key,
-    typename Cell<TSP>::Data &data,
-    SetType &list_attr, SetType &list_body) {
+                     typename Cell<TSP>::KeyType trg_key,
+                     typename Cell<TSP>::KeyType src_key,
+                     typename Cell<TSP>::Data &data,
+                     SetType &list_attr, SetType &list_body) {
   using CellType = Cell<TSP>;
   using FP = typename TSP::FP;
   using SFC = typename Cell<TSP>::SFC;
@@ -70,52 +70,96 @@ void TraverseLET_old(typename Cell<TSP>::BodyType &p,
   bool is_src_local_leaf = is_src_local && ht[src_key]->IsLeaf();
   bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= max_depth;
 
+  
   if (is_src_local_leaf) {
     // if the source cell is a remote leaf, we need it (the cell is not longer splittable anyway).
+    Stderr("traverse_count").out() << trg_key << " " << src_key << " is_src_local_leaf" << std::endl;
     return;
   }
-    else if (is_src_remote_leaf) {
-      // If the source cell is a remote leaf, we need it (with it's bodies).
-      list_attr.insert(src_key);
-      list_body.insert(src_key);
-      return;
-    }
 
-    // the cell attributes is necessary (because traversal has come here.)
+  if (is_src_remote_leaf) {
+    // If the source cell is a remote leaf, we need it (with it's bodies).
     list_attr.insert(src_key);
-    TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
+    list_body.insert(src_key);
+    Stderr("traverse_count").out() << trg_key << " " << src_key << " is_src_remote_leaf" << std::endl;
+    return;
+  }
 
-    auto src_child_keys = SFC::GetChildren(src_key);
+  // ここまでOK
+  
+  // the cell attributes is necessary (because traversal has come here.)
+  list_attr.insert(src_key);
+  TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
 
-    // distance function closure, which returns distance from p
-    auto distR2 = [&p](const Vec<TSP::Dim, FP> &v) -> FP {
-      FP dx = p.x - v[0];
-      FP dy = p.y - v[1];
-      FP dz = p.z - v[2];
-      return dx * dx + dy * dy + dz * dz;
-    };
+  auto src_child_keys = SFC::GetChildren(src_key);
 
-    for (size_t i = 0; i < src_child_keys.size(); i++) {
-      KeyType ckey = src_child_keys[i];
-      auto ctr = CellType::CalcCenter(ckey, r);
+  // distance function closure, which returns distance from p
+  auto distR2 = [&p](const Vec<TSP::Dim, FP> &v) -> FP {
+    FP dx = p.x - v[0];
+    FP dy = p.y - v[1];
+    FP dz = p.z - v[2];
+    return dx * dx + dy * dy + dz * dz;
+  };
 
-      FP s = CellType::CalcRegion(ckey, r).width(0); // width
-      FP d = std::sqrt(distR2(ctr));
+  for (size_t i = 0; i < src_child_keys.size(); i++) {
+    KeyType ckey = src_child_keys[i];
+    auto ctr = CellType::CalcCenter(ckey, r);
 
-      if (s/d > theta) { // if the cell(ckey) is close
-        TraverseLET_old<TSP, SetType>(p, ckey, data, list_attr, list_body);
-      } else {
-        // If i-th children is far enough from `cell`, the rest of children
-        // are also `far`. Thus we don't need to traverse them recursively
-        // and just need their attributes(multipole)
-        if (ht.count(ckey) == 0) {
-          list_attr.insert(ckey);
-        }
+    FP s = CellType::CalcRegion(ckey, r).width(0); // width
+    FP d = std::sqrt(distR2(ctr));
+
+    Stderr("traverse_count").out() << "particle [" << p.x << "," << p.y << "," << p.z << "]"
+                                   << " " << src_key << " s=" << s << " d=" << d << std::endl;
+    
+    if (s/d > theta) { // if the cell(ckey) is close
+      TraverseLET_old<TSP, SetType>(p, trg_key, ckey, data, list_attr, list_body);
+    } else {
+      // If i-th children is far enough from `cell`, the rest of children
+      // are also `far`. Thus we don't need to traverse them recursively
+      // and just need their attributes(multipole)
+      if (ht.count(ckey) == 0) {
+        list_attr.insert(ckey);
       }
     }
-    // ------ block ends here -------
-    return;
+  }
+  // ------ block ends here -------
+  return;
 }
+
+template<class TSP, class SetType>
+void TraverseLET_old_slow(typename Cell<TSP>::KeyType trg_key, typename Cell<TSP>::KeyType src_key,
+                          typename Cell<TSP>::Data &data, SetType &list_attr, SetType &list_body) {
+  // 2015/10/28
+  // hardcodedとmanualの速度差を説明するために、古いコードにトラバースを入れる
+  // （おそらくトラバースの計算量の分が速度差であろう）
+
+  using SFC = typename Cell<TSP>::SFC;
+
+  const auto &ht = data.ht_;
+
+  Stderr("traverse_count").out() << trg_key << " " << src_key << std::endl;
+
+  if (ht.count(trg_key) == 0) {
+    return;
+  }
+
+  auto *cell = ht.at(trg_key);
+  
+  if(cell->IsLeaf()) {
+    if (cell->nb() == 0) {
+      return;
+    } else {
+      assert(cell->nb() == 1);
+      TraverseLET_old<TSP>(cell->body(0), trg_key, src_key, data, list_attr, list_body);
+    }
+  } else {
+    auto child = SFC::GetChildren(trg_key);
+    for (auto chk : child) {
+      TraverseLET_old_slow<TSP>(chk, src_key, data, list_attr, list_body);
+    }
+  }
+}
+
 
 template<class TSP>
 struct InteractionPred {
@@ -179,32 +223,42 @@ struct InteractionPred {
 
   INLINE size_t nb(KT) { return 1; } // nb() method for remote cell always returns '1' in LET mode
   
-  INLINE SplitType operator() (KT k1, KT k2) {
+  INLINE SplitType operator() (KT trg_key, KT src_key) {
     const constexpr FP theta = 0.5;
-    TAPAS_ASSERT(data_.ht_.count(k1) > 0);
-    const auto &c1 = *(data_.ht_.at(k1));
-    
+    const auto &ht = data_.ht_;
+    TAPAS_ASSERT(data_.ht_.count(trg_key) > 0);
+    const auto &c1 = *(ht.at(trg_key));
+
+    bool is_src_local = ht.count(src_key) != 0;
+    bool is_src_local_leaf = is_src_local && ht.at(src_key)->IsLeaf();
+    bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= data_.max_depth_;
+
     if (!c1.IsLeaf()) {
       return SplitType::SplitLeft;
-    } else if (c1.IsLeaf() && c1.nb() == 0) {
-      
+    }
+
+    if (c1.nb() == 0) {
       return SplitType::None;
-    } else if (IsLeaf(k2)) { // c2.IsLeaf()
-      if (nb(k2) == 0) { // Note: nb(k2) always returns 1 to be conservative
-        return SplitType::Approx;
-      } else {
-        return SplitType::Body;
-      }
+    }
+
+    if (IsLeaf(src_key)) { // c2.IsLeaf()
+      return SplitType::Body;
+    }
+
+    // ここまでOK
+
+    // else
+    const auto &p1 = c1.body(0);
+    real_t d = std::sqrt(distR2(p1, src_key));
+    real_t s = CT::CalcRegion(src_key, data_.region_).width(0);
+    
+    Stderr("traverse_count").out() << "particle [" << p1.x << "," << p1.y << "," << p1.z << "]"
+                                   << " " << src_key << " s=" << s << " d=" << d << std::endl;
+    
+    if ((s/d) < theta) {
+      return SplitType::Approx;
     } else {
-      const auto &p1 = c1.body(0);
-      real_t d = std::sqrt(distR2(p1, k2));
-      real_t s = CT::CalcRegion(k2, data_.region_).width(0);
-      
-      if ((s/d) < theta) {
-        return SplitType::Approx;
-      } else {
-        return SplitType::SplitRight;
-      }
+      return SplitType::SplitRight;
     }
   }
 };
@@ -542,15 +596,15 @@ struct LET {
    * \param list_body (output) Set of request keys of which bodies are to be sent
    */
   template<class UserFunct>
-  static SplitType Traverse(UserFunct f, KeyType trg_key, KeyType src_key, Data &data,
-                            KeySet &list_attr, KeySet &list_body) {
+  static void Traverse(UserFunct f, KeyType trg_key, KeyType src_key, Data &data,
+                       KeySet &list_attr, KeySet &list_body) {
     // Traverse traverses the hypothetical global tree and constructs a list of
     // necessary cells required by the local process.
     auto &ht = data.ht_; // hash table
-  
+
     // (A) check if the trg cell is local (kept in this function)
     if (ht.count(trg_key) == 0) {
-      return SplitType::None;
+      return; // SplitType::None;
     }
 
     // Maximum depth of the tree.
@@ -560,16 +614,20 @@ struct LET {
     bool is_src_local_leaf = is_src_local && ht[src_key]->IsLeaf();
     bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= max_depth;
 
+    Stderr("traverse_count").out() << trg_key << " " << src_key << std::endl;
+
     if (is_src_local_leaf) {
       // the cell is local. everythig's fine. nothing to do.
-      return SplitType::None;
+      Stderr("traverse_count").out() << trg_key << " " << src_key << " is_src_local_leaf" << std::endl;
+      return; // SplitType::None;
     }
 
     if (is_src_remote_leaf) {
       // If the source cell is a remote leaf, we need it (with it's bodies).
       list_attr.insert(src_key);
       list_body.insert(src_key);
-      return SplitType::Body;
+      Stderr("traverse_count").out() << trg_key << " " << src_key << " is_src_remote_leaf" << std::endl;
+      return; // SplitType::Body;
     }
     TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
     list_attr.insert(src_key);
@@ -605,7 +663,7 @@ struct LET {
 
       default: assert(0); // Never happens
     }
-    return split;
+    return; // split;
   }
 
   template<class UserFunct>
@@ -631,10 +689,17 @@ struct LET {
     req_keys_attr.insert(root.key());
 #ifdef OLD_LET_TRAVERSE
     (void) f;
+
+    // 2015/10/28 性能評価のため一時的に粒子までトラバースするように変更
+#if 0
     for (size_t bi = 0; bi < root.local_nb(); bi++) {
       BodyType &b = root.local_body(bi);
-      TraverseLET_old<TSP, KeySet>(b, root.key(), root.data(), req_keys_attr, req_keys_body);
+      TraverseLET_old<TSP, KeySet>(b, root.key(), root.key(), root.data(), req_keys_attr, req_keys_body);
     }
+#else
+    TraverseLET_old_slow<TSP, KeySet>(root.key(), root.key(), root.data(), req_keys_attr, req_keys_body);
+#endif
+    
 #else
     Traverse(f, root.key(), root.key(), root.data(), req_keys_attr, req_keys_body);
 #endif
