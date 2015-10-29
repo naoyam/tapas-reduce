@@ -100,9 +100,6 @@ struct HotData {
   
   std::vector<KeyType> proc_first_keys_; //!< first SFC key of each process
 
-#ifdef TAPAS_DEBUG
-#endif
-  
   HotData() { }
   HotData(const HotData<TSP, SFC>& rhs) = delete; // no copy
   HotData(HotData<TSP, SFC>&& rhs) = delete; // no move
