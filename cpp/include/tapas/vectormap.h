@@ -1,4 +1,5 @@
 /* vectormap.h -*- Coding: us-ascii-unix; -*- */
+/* Copyright (C) 2015-2015 RIKEN AICS */
 
 #ifndef TAPAS_VECTORMAP_H_
 #define TAPAS_VECTORMAP_H_

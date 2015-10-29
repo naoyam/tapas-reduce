@@ -1,4 +1,5 @@
 /* vectormap_cuda.h -*- Coding: us-ascii-unix; -*- */
+/* Copyright (C) 2015-2015 RIKEN AICS */
 
 #ifndef TAPAS_VECTORMAP_CUDA_H_
 #define TAPAS_VECTORMAP_CUDA_H_
