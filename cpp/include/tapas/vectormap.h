@@ -12,7 +12,7 @@
 #include <assert.h>
 #include <memory>
 
-#define TAPAS_USE_VECTORMAP
+//#define TAPAS_USE_VECTORMAP
 
 namespace tapas {
 
