@@ -95,6 +95,16 @@ namespace mpi {
 
 using tapas::util::exclusive_scan;
 
+template<class T>
+void* mpi_sendbuf_cast(const T* p) {
+  return const_cast<void*>(reinterpret_cast<const void*>(p));
+}
+
+template<class T>
+void* mpi_sendbuf_cast(T* p) {
+  return reinterpret_cast<void*>(p);
+}
+
 // MPI-related utilities and wrappers
 // TODO: wrap them as a pluggable policy/traits class
 template<class T> struct MPI_DatatypeTraits {
@@ -149,7 +159,7 @@ void Allreduce(const T *sendbuf, T *recvbuf, int count, MPI_Op op, MPI_Comm comm
     TAPAS_ASSERT(0 && "Allreduce() is not supported for user-defined types.");
   }
 
-  int ret = MPI_Allreduce(reinterpret_cast<void*>(sendbuf), (void*)recvbuf, count, kType, op, comm);
+  int ret = MPI_Allreduce(mpi_sendbuf_cast(sendbuf), (void*)recvbuf, count, kType, op, comm);
 
   (void)ret; // to avoid warnings of 'unused variable'
   TAPAS_ASSERT(ret == MPI_SUCCESS);
@@ -277,7 +287,7 @@ void Allgatherv(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, MPI_Comm
   auto kType = MPI_DatatypeTraits<T>::type();
 
   // Call allgather and create recvcount & displacements array.
-  int ret = ::MPI_Allgather(reinterpret_cast<void*>(&count), 1, MPI_INT,
+  int ret = ::MPI_Allgather(mpi_sendbuf_cast(&count), 1, MPI_INT,
                             reinterpret_cast<void*>(recvcounts.data()), 1, MPI_INT, comm);
   (void)ret;
   TAPAS_ASSERT(ret == MPI_SUCCESS);
@@ -295,7 +305,7 @@ void Allgatherv(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, MPI_Comm
     for (auto && d : disp) d *= sizeof(T);
   }
 
-  ret = ::MPI_Allgatherv(reinterpret_cast<void*>(sendbuf.data()), count, kType,
+  ret = ::MPI_Allgatherv(mpi_sendbuf_cast(sendbuf.data()), count, kType,
                          reinterpret_cast<void*>(recvbuf.data()), recvcounts.data(), disp.data(),
                          kType, comm);
 
