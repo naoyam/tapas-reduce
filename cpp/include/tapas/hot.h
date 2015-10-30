@@ -609,10 +609,12 @@ Region<TSP> ExchangeRegion(const Region<TSP> &r) {
   Vec<Dim, FP> new_max, new_min;
 
   // Exchange max
-  ::MPI_Allreduce(&r.max()[0], &new_max[0], Dim, MPI_DatatypeTraits<FP>::type(), MPI_MAX, MPI_COMM_WORLD);
+  tapas::mpi::Allreduce(&r.max()[0], &new_max[0], Dim, MPI_MAX, MPI_COMM_WORLD);
+  //::MPI_Allreduce(&r.max()[0], &new_max[0], Dim, MPI_DatatypeTraits<FP>::type(), MPI_MAX, MPI_COMM_WORLD);
   
   // Exchange min
-  ::MPI_Allreduce(&r.min()[0], &new_min[0], Dim, MPI_DatatypeTraits<FP>::type(), MPI_MIN, MPI_COMM_WORLD);
+  tapas::mpi::Allreduce(&r.min()[0], &new_min[0], Dim, MPI_MIN, MPI_COMM_WORLD);
+  //::MPI_Allreduce(&r.min()[0], &new_min[0], Dim, MPI_DatatypeTraits<FP>::type(), MPI_MIN, MPI_COMM_WORLD);
 
   return Region<TSP>(new_min, new_max);
 }
