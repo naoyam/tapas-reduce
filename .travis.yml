@@ -12,6 +12,5 @@ before_install:
   - sudo sh ./setup-travis.sh
 branches:
   only:
-    - feature-barnes-hut-LET
-    - travis-ci
+    - master
 script: bash ./test.sh
