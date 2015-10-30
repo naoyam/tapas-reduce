@@ -1491,7 +1491,7 @@ void GenerateLeaves(int num_bodies,
   std::sort(hn.begin(), hn.end(),
             [](const HN &lhs, const HN &rhs) { return lhs.key < rhs.key; });
 
-  int tmp_max_depth;
+  int tmp_max_depth = 0;
 
   // Start from a root cell and refine it recursively until all cells have at most
   leaf_keys.push_back(0);
@@ -1755,8 +1755,6 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
   auto data = std::make_shared<Data>();
 
-  int max_depth = 0;
-
 #ifdef TAPAS_MEASURE
   double beg, end;
   beg = MPI_Wtime();
@@ -1788,7 +1786,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
   if (data->mpi_rank_ == 0) {
     // debug
-    std::cerr << "Max depth = " << max_depth << std::endl;
+    std::cerr << "Max depth = " << data->max_depth_ << std::endl;
   }
 
   // distribute the morton-ordered leaf cells over processes
