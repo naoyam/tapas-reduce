@@ -149,7 +149,7 @@ void Allreduce(const T *sendbuf, T *recvbuf, int count, MPI_Op op, MPI_Comm comm
     TAPAS_ASSERT(0 && "Allreduce() is not supported for user-defined types.");
   }
 
-  int ret = MPI_Allreduce((const void*)sendbuf, (void*)recvbuf, count, kType, op, comm);
+  int ret = MPI_Allreduce(reinterpret_cast<void*>(sendbuf), (void*)recvbuf, count, kType, op, comm);
 
   (void)ret; // to avoid warnings of 'unused variable'
   TAPAS_ASSERT(ret == MPI_SUCCESS);
@@ -197,7 +197,7 @@ void Alltoallv(std::vector<T>& send_buf, std::vector<int>& dest,
                MPI_Comm comm) {
   int mpi_size;
 
-  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+  MPI_Comm_size(comm, &mpi_size);
   
   TAPAS_ASSERT(send_buf.size() == dest.size());
   SortByKeys(dest, send_buf);
@@ -277,8 +277,8 @@ void Allgatherv(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, MPI_Comm
   auto kType = MPI_DatatypeTraits<T>::type();
 
   // Call allgather and create recvcount & displacements array.
-  int ret = ::MPI_Allgather((const void*)&count, 1, MPI_INT,
-                            (void*)recvcounts.data(), 1, MPI_INT, comm);
+  int ret = ::MPI_Allgather(reinterpret_cast<void*>(&count), 1, MPI_INT,
+                            reinterpret_cast<void*>(recvcounts.data()), 1, MPI_INT, comm);
   (void)ret;
   TAPAS_ASSERT(ret == MPI_SUCCESS);
   
@@ -295,8 +295,8 @@ void Allgatherv(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, MPI_Comm
     for (auto && d : disp) d *= sizeof(T);
   }
 
-  ret = ::MPI_Allgatherv((const void*)sendbuf.data(), count, kType,
-                         (void*)recvbuf.data(), recvcounts.data(), disp.data(),
+  ret = ::MPI_Allgatherv(reinterpret_cast<void*>(sendbuf.data()), count, kType,
+                         reinterpret_cast<void*>(recvbuf.data()), recvcounts.data(), disp.data(),
                          kType, comm);
 
 

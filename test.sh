@@ -13,7 +13,9 @@ fi
 
 for comp in ${COMPILERS[@]}; do
     echo "test.sh: compiler = ${comp}"
-    env CXX="${comp}" python test.py
+    export CXX="${comp}"
+    export CC=$(echo $CXX | sed -e 's/clang++/clang/' | sed -e 's/g++/gcc/')
+    python test.py
 done
 
 echo OK.
