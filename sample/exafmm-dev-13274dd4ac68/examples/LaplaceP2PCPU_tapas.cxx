@@ -2,6 +2,32 @@
 
 const real_t EPS2 = 0.0;                                        //!< Softening parameter (squared)
 
+#ifdef TAPAS_USE_VECTORMAP
+
+struct tapas_kernel::P2P {
+
+  P2P() {}
+
+#ifdef __CUDACC__
+  __host__ __device__ __forceinline__
+#endif
+  void operator() (Body* Bi, Body* Bj, kvec4 &biattr, vec3 Xperiodic) {
+    vec3 dX = Bi->X - Bj->X - Xperiodic;
+    real_t R2 = norm(dX) + EPS2;
+    if (R2 != 0) {
+      real_t invR2 = 1.0 / R2;
+      real_t invR = Bi->SRC * Bj->SRC * sqrt(invR2);
+      dX *= invR2 * invR;
+      biattr[0] += invR;
+      biattr[1] -= dX[0];
+      biattr[2] -= dX[1];
+      biattr[3] -= dX[2];
+    }
+  }
+};
+
+#else
+
 void tapas_kernel::P2P(Tapas::BodyIterator &Bi, Tapas::BodyIterator &Bj, vec3 Xperiodic) {
   kreal_t pot = 0; 
   kreal_t ax = 0;
@@ -33,3 +59,4 @@ void tapas_kernel::P2P(Tapas::BodyIterator &Bi, Tapas::BodyIterator &Bj, vec3 Xp
   }
 }
 
+#endif /*TAPAS_USE_VECTORMAP*/

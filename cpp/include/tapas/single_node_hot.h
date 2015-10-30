@@ -706,23 +706,39 @@ struct SingleNodeHOT {
 template <int DIM, class FP, class BT,
           class BT_ATTR, class CELL_ATTR,
           class PartitionAlgorithm,
-          class Threading>
+          class Threading
+#ifdef TAPAS_USE_VECTORMAP
+          , class Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+>
 class Tapas;
 
 /**
  * @brief Specialization of Tapas for HOT (single node HOT) algorithm
  */
 template <int DIM, class FP, class BT,
-          class BT_ATTR, class CELL_ATTR, class Threading>
+          class BT_ATTR, class CELL_ATTR, class Threading
+#ifdef TAPAS_USE_VECTORMAP
+          , class Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+          >
 class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
-            SingleNodeHOT<DIM, tapas::sfc::Morton>, Threading> {
+            SingleNodeHOT<DIM, tapas::sfc::Morton>, Threading
+#ifdef TAPAS_USE_VECTORMAP
+            , Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+            > {
  public:
   using SingleNodeMortonHOT = SingleNodeHOT<DIM, tapas::sfc::Morton>;
   using SFC = typename SingleNodeMortonHOT::SFC;
   
  private:
   typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR, Threading,
-                            typename SingleNodeMortonHOT::SFC> TSP; // Tapas static params
+                            typename SingleNodeMortonHOT::SFC
+#ifdef TAPAS_USE_VECTORMAP
+                            , Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+                            > TSP; // Tapas static params
  public:
   using Region = tapas::Region<TSP>;
   using Cell = single_node_hot::Cell<TSP>;
@@ -745,10 +761,18 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
  * With default threading policy 'Serial'
  */
 template <int DIM, class FP, class BT,
-          class BT_ATTR, class CELL_ATTR>
+          class BT_ATTR, class CELL_ATTR
+#ifdef TAPAS_USE_VECTORMAP
+          , class Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+>
 class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
             SingleNodeHOT<DIM, tapas::sfc::Morton>,
-            tapas::threading::Serial> {
+            tapas::threading::Serial
+#ifdef TAPAS_USE_VECTORMAP
+            , Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+            > {
  public:
   using SingleNodeMortonHOT = SingleNodeHOT<DIM, tapas::sfc::Morton>;
   using SFC = typename SingleNodeMortonHOT::SFC;
@@ -757,7 +781,11 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
   
   typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR,
                             tapas::threading::Serial,
-                            typename SingleNodeMortonHOT::SFC> TSP; // Tapas static params
+                            typename SingleNodeMortonHOT::SFC
+#ifdef TAPAS_USE_VECTORMAP
+                            , Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+                            > TSP; // Tapas static params
  public:
   using Region = tapas::Region<TSP>;
   using Cell = single_node_hot::Cell<TSP>;

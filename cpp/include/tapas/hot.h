@@ -76,6 +76,11 @@ struct HotData {
   using BodyType = typename TSP::BT::type;
   using BodyAttrType = typename TSP::BT_ATTR;
 
+#ifdef TAPAS_USE_VECTORMAP
+  template <typename T>
+  using vector_allocator = typename TSP::Vectormap:: template um_allocator<T>;
+#endif /*TAPAS_USE_VECTORMAP*/
+
   CellHashTable ht_;
   CellHashTable ht_let_;
   CellHashTable ht_gtree_;  // Hsah table of the global tree.
@@ -91,9 +96,19 @@ struct HotData {
   std::vector<KeyType> leaf_keys_; //!< SFC keys of (all) leaves
   std::vector<index_t> leaf_nb_;   //!< Number of bodies in each cell
   std::vector<int>     leaf_owners_; //!< Owner process of leaf[i]
+#ifdef TAPAS_USE_VECTORMAP
+  std::vector<BodyType, vector_allocator<BodyType>>
+  local_bodies_; //!< Bodies that belong to the local process
+#else /*TAPAS_USE_VECTORMAP*/
   std::vector<BodyType> local_bodies_; //!< Bodies that belong to the local process
+#endif /*TAPAS_USE_VECTORMAP*/
   std::vector<KeyType>  local_body_keys_; //!< SFC keys of local bodies
+#ifdef TAPAS_USE_VECTORMAP
+  std::vector<BodyAttrType, vector_allocator<BodyAttrType>>
+  local_body_attrs_; //!< Local body attributes
+#else /*TAPAS_USE_VECTORMAP*/
   std::vector<BodyAttrType> local_body_attrs_; //!< Local body attributes
+#endif /*TAPAS_USE_VECTORMAP*/
 
   std::vector<BodyType> let_bodies_;
   std::vector<BodyAttrType> let_body_attrs_;
@@ -1765,6 +1780,14 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   int mpi_rank = data->mpi_rank_;
   int mpi_size = data->mpi_size_;
 
+#ifdef TAPAS_USE_VECTORMAP
+  /* (No templates allowed.) */
+  typedef typename TSP::Vectormap:: template um_allocator<BodyType>
+    body_vector_allocator;
+  typedef typename TSP::Vectormap:: template um_allocator<BodyAttrType>
+    attr_vector_allocator;
+#endif /*TAPAS_USE_VECTORMAP*/
+
   // Calculate the global bouding box by MPI_Allreduce
   data->region_ = ExchangeRegion(reg);
 
@@ -2098,7 +2121,11 @@ struct HOT {
 template <int DIM, class FP, class BT,
           class BT_ATTR, class CELL_ATTR,
           class PartitionAlgorithm,
-          class Threading>
+          class Threading
+#ifdef TAPAS_USE_VECTORMAP
+          , class Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+          >
 class Tapas;
 
 #if 0
@@ -2108,8 +2135,24 @@ class Tapas;
 template <int DIM, class FP, class BT,
           class BT_ATTR, class CELL_ATTR,
           class Threading>
-class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, MortonHOT, Threading> {
-  typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR, Threading> TSP; // Tapas static params
+class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, MortonHOT, Threading
+#ifdef TAPAS_USE_VECTORMAP
+#  ifdef __CUDACC__
+            , tapas::Vectormap_CUDA_Packed<DIM, FP, BT, BT_ATTR>
+#  else
+            , tapas::Vectormap_CPU<DIM, FP, BT, BT_ATTR>
+#  endif /*__CUDACC__*/
+#endif /*TAPAS_USE_VECTORMAP*/
+            > {
+  typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR, Threading
+#ifdef TAPAS_USE_VECTORMAP
+#  ifdef __CUDACC__
+                            , tapas::Vectormap_CUDA_Packed<DIM, FP, BT, BT_ATTR>
+#  else
+                            , tapas::Vectormap_CPU<DIM, FP, BT, BT_ATTR>
+#  endif /*__CUDACC__*/
+#endif /*TAPAS_USE_VECTORMAP*/
+                            > TSP; // Tapas static params
  public:
   using Region = tapas::Region<TSP>;
   using Cell = hot::Cell<TSP>;
@@ -2136,13 +2179,25 @@ class MassiveThreads;
  * @brief Specialization of Tapas for HOT (Morton HOT) algorithm
  */
 template <int DIM, class FP, class BT,
-          class BT_ATTR, class CELL_ATTR, class Threading>
-class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, HOT<DIM, tapas::sfc::Morton>, Threading> {
+          class BT_ATTR, class CELL_ATTR, class Threading
+#ifdef TAPAS_USE_VECTORMAP
+          , class Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+>
+class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, HOT<DIM, tapas::sfc::Morton>, Threading
+#ifdef TAPAS_USE_VECTORMAP
+            , Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+> {
   
   typedef HOT<DIM, tapas::sfc::Morton> MortonHOT;
   
   typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR, Threading,
-                            typename MortonHOT::SFC> TSP; // Tapas static params
+                            typename MortonHOT::SFC
+#ifdef TAPAS_USE_VECTORMAP
+                            , Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+                            > TSP; // Tapas static params
  public:
   using Region = tapas::Region<TSP>;
   using Cell = hot::Cell<TSP>;

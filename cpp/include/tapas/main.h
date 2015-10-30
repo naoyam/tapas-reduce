@@ -31,7 +31,11 @@ class BodyInfo {
 template <int DIM, class FP, class BT,
           class BT_ATTR, class CELL_ATTR,
           class PartitionAlgorithm,
-          class Threading>
+          class Threading
+#ifdef TAPAS_USE_VECTORMAP
+          , class Vectormap
+#endif /*TAPAS_USE_VECTORMAP*/
+          >
 class Tapas {
     // Generic definition of Tapas class.
     // This is just a placeholder and actual definition is provided by

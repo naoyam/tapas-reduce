@@ -1,0 +1,92 @@
+# mk.cuda
+
+MYTHDIR = $(HOME)/lib/myth
+MPIDIR = $(HOME)/lib/yampi
+CUDADIR = /usr/local/cuda-7.0
+
+.SUFFIXES: .cxx
+
+all:
+	@echo "USAGE: make -f mk.cuda cpu, gpu, or clean"
+
+cpu::
+	$(MAKE) -f mk.cuda serial_tapas dev=cpu
+
+gpu::
+	$(MAKE) -f mk.cuda serial_tapas dev=gpu
+
+#LFLAGS	+= -DMASS # Use all positive sources
+#LFLAGS	+= -DIneJ # Different target and source points
+LFLAGS	+= -DDIRECT # Compare with direct summation
+LFLAGS	+= -DWRITE_TIME # Write timings to file
+
+CCOPTIONS = -I../include -I../../../cpp/include -I$(MYTHDIR)/include \
+        -DFP64 -DSpherical -DEXPANSION=6 \
+        -DASSERT -DCOUNT -DTAPAS_LOG_LEVEL=0 -DTAPAS_DEBUG=0 \
+        -DTO_SERIAL
+
+#-DEXAFMM_TAPAS_MPI
+#-DMTHREAD
+#-DTAPAS_BH
+#-DTAPAS_LOG_LEVEL=0 -DTAPAS_DEBUG=0 \
+#-DSpherical -DEXPANSION=4 -DFP64 -DASSERT -DCOUNT
+
+cpu_LD = g++ -m64 -fopenmp -g
+cpu_CC = $(cpu_LD) -std=c++11 -Wall -Wextra $(CCOPTIONS)
+
+#-ftz=true
+#-g -G
+
+gpu_LD = nvcc -m64 -arch sm_35 -O3
+gpu_CC = $(gpu_LD) -v -x cu -std c++11 -ccbin g++ -keep \
+	-Xcicc -v -Xptxas -v \
+	-Xcicc -O3 -Xptxas -O3 \
+	--compiler-options -fopenmp \
+	--compiler-options -Wall --compiler-options -Wextra \
+	--compiler-options -Wno-unused-parameter \
+	$(CCOPTIONS)
+
+cpu_LIBS = -L$(MPIDIR)/lib -lmpi64 -L$(MYTHDIR)/lib -lmyth-native
+
+gpu_LIBS = -L$(MPIDIR)/lib -lmpi64 -L$(MYTHDIR)/lib -lmyth-native \
+	-L$(CUDADIR)/lib64 -lnvToolsExt
+
+dev ?= cpu
+XLD = $($(dev)_LD)
+XCC = $($(dev)_CC)
+XLIBS = $($(dev)_LIBS)
+
+OBJS = serial_tapas.o LaplaceSphericalCPU_tapas.o \
+	LaplaceSphericalCPU.o LaplaceP2PCPU.o
+
+serial_tapas:: $(OBJS)
+	sleep 1; $(XLD) -v -keep -o a.out $(OBJS) $(XLIBS)
+	ls -lt | head
+
+serial_tapas.o: serial_tapas.cxx
+	$(XCC) $(LFLAGS) -I$(MPIDIR)/include -c serial_tapas.cxx
+
+LaplaceSphericalCPU.o: ../kernels/LaplaceSphericalCPU.cxx
+	$(XCC) $(LFLAGS) -I$(MPIDIR)/include -c $<
+
+LaplaceP2PCPU.o: ../kernels/LaplaceP2PCPU.cxx
+	$(XCC) $(LFLAGS) -c $<
+
+.cxx.o::
+	$(XCC) $(LFLAGS) -I$(MPIDIR)/include -c $<
+
+GOMI = a_dlink.* \
+	*.cubin *.fatbin *.fatbin.c \
+	*.ptx *.cpp[14].ii *.cpp[23].i *.cu.cpp.ii \
+	*.cudafe1.c *.cudafe1.cpp *.cudafe1.gpu *.cudafe1.stub.c \
+	*.cudafe2.c *.cudafe2.gpu *.cudafe2.stub.c \
+	*.hash *.module_id
+
+GOMI += L.0000.dat L.dat M.0000.dat M.dat
+GOMI += bodies.0000.dat bodies.dat exch_bodies.1.dat init_bodies.dat
+GOMI += leaves.0000.dat leaves.dat
+GOMI += time000000.dat
+
+clean::
+	rm -f a.out *.o ../kernels/*.o $(GOMI)
+	shopt -s nullglob; rm -f {P2M,partition,bodies,center}.*.*.stderr.txt

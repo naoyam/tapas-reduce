@@ -131,7 +131,12 @@ static inline void FMM_M2L(Tapas::Cell &Ci, Tapas::Cell &Cj, int mutual, int nsp
     numM2L++;
     tapas_kernel::M2L(Ci, Cj, Xperiodic, mutual);                   //  M2L kernel
   } else if (Ci.IsLeaf() && Cj.IsLeaf()) {            // Else if both cells are bodies
+#ifdef TAPAS_USE_VECTORMAP
+    tapas::Map(tapas_kernel::P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic);
+#else 
     tapas::Map(tapas_kernel::P2P, tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic);
+#endif /*TAPAS_USE_VECTORMAP*/
+
     numP2P++;
   } else {                                                    // Else if cells are close but not bodies
     tapas_splitCell(Ci, Cj, mutual, nspawn);             //  Split cell and call function recursively for child

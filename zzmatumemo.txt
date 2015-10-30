@@ -1,0 +1,32 @@
+-*-Mode: Fundamental; Coding: utf-8;-*-
+
+*** Added Files (2015-10-22)
+
+* In cpp/include/tapas
+
+vectormap.h
+vectormap_cpu.h
+vectormap_cuda.h
+vectormap_util.h
+
+*** Modified Files (2015-10-22)
+
+* In cpp/include/tapas
+
+tapas.h
+
+* In cpp/include/tapas
+
+cell.h
+common.h
+hot.h
+main.h
+map.h
+single_node_hot.h
+
+* In sample/exafmm-dev-13274dd4ac68/examples
+
+tapas_exafmm.h
+serial_tapas.cxx
+serial_tapas_helper.cxx
+LaplaceP2PCPU_tapas.cxx
