@@ -19,3 +19,4 @@ for comp in ${COMPILERS[@]}; do
 done
 
 echo OK.
+exit 0

@@ -162,4 +162,5 @@ if __name__ == "__main__":
         if LogFile:
             LogFile.close()
             LogFile = None
+    sys.exit(0)
 
