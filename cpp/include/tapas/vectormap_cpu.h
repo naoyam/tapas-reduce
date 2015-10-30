@@ -25,7 +25,7 @@ struct Vectormap_CPU {
   template <typename T>
   using um_allocator = std::allocator<T>;
 
-  static void vectormap_setup(int cta, int nstreams) {}
+  static void vectormap_setup(int /* cta */, int /* nstreams */) {}
   static void vectormap_release() {}
 
   static void vectormap_start() {}
