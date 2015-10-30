@@ -130,9 +130,10 @@ class TestExaFMM(unittest.TestCase):
                     self.assertLess(float(m.group(1)), 1e-2)
         
 if __name__ == "__main__":
-    sys.stderr.write("SourceRoot = " + SourceRoot + "\n")
-    sys.stderr.write("BuildRoot = " + BuildRoot + "\n")
-    sys.stderr.write("Test Scale = " + Scale + "\n")
+    sys.stderr.write("test.py: SourceRoot = " + SourceRoot + "\n")
+    sys.stderr.write("test.py: BuildRoot = " + BuildRoot + "\n")
+    sys.stderr.write("test.py: Test Scale = " + Scale + "\n")
+    sys.stderr.write("test.py: CXX = " + os.environ["CXX"] + "\n")
 
     check_call(['cmake', '--version'])
 
