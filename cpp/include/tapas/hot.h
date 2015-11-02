@@ -39,6 +39,7 @@
 #include "tapas/threading/default.h"
 #include "tapas/mpi_util.h"
 
+#include "tapas/hot/buildtree.h"
 #include "tapas/hot/let.h"
 
 #define DEBUG_SENDRECV
@@ -1764,6 +1765,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   using Data = typename CellType::Data;
 
   auto data = std::make_shared<Data>();
+  auto data2 = std::make_shared<Data>();
 
 #ifdef TAPAS_MEASURE
   double beg, end;
@@ -1772,8 +1774,18 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
   MPI_Comm_rank(MPI_COMM_WORLD, &data->mpi_rank_);
   MPI_Comm_size(MPI_COMM_WORLD, &data->mpi_size_);
+  MPI_Comm_rank(MPI_COMM_WORLD, &data2->mpi_rank_);
+  MPI_Comm_size(MPI_COMM_WORLD, &data2->mpi_size_);
   int mpi_rank = data->mpi_rank_;
   int mpi_size = data->mpi_size_;
+
+
+  // ---------------------------
+  // sample based tree construction
+  // Until implementation of SamplingOctree is done, use a copy of data.
+  SamplingOctree<TSP, SFC>::BuildTree(b, num_bodies, reg, data2);
+  // ---------------------------
+  
 
 #ifdef TAPAS_USE_VECTORMAP
   /* (No templates allowed.) */
