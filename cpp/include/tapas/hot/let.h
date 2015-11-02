@@ -700,6 +700,19 @@ struct LET {
     std::cout << "depth: " << root.data().max_depth_ << std::endl;
     std::cout << "filling rate: " << ((double)ncells / nall) << std::endl;
 
+    std::vector<int> hist(d + 1, 0);
+    for (auto p : root.data().ht_) {
+      const auto *cell = p.second;
+      if (cell->IsLeaf()) {
+        hist[cell->depth()]++;
+      }
+    }
+
+    std::cout << "Depth histogram" << std::endl;
+    for (int i = 0; i <= d; i++) {
+      std::cout << i << " " << hist[i] << std::endl;
+    }
+
     // Construct request lists of necessary cells
     req_keys_attr.insert(root.key());
 #ifdef OLD_LET_TRAVERSE
