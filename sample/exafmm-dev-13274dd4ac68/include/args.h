@@ -189,7 +189,7 @@ public:
 		<< "distribution" << " : " << distribution << std::endl// Print distribution
 		<< std::setw(stringLength)                      //  Set format
 		<< "repeat" << " : " << repeat << std::endl     //  Print distribution
-#ifdef EXAFMM_TAPAS_MPI
+#ifdef USE_MPI
 		<< std::setw(stringLength)                      //  Set format
 		<< "MPI size" << " : " << mpi_size << std::endl //  Print distribution
 		<< std::setw(stringLength)                      //  Set format

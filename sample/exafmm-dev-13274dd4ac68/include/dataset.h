@@ -20,7 +20,7 @@ class Stderr {
 
  public:
   Stderr(const char *label) : fs_(nullptr) {
-#ifdef EXAFMM_TAPAS_MPI
+#ifdef USE_MPI
     pid_t tid = syscall(SYS_gettid);
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);

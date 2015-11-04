@@ -241,9 +241,9 @@ struct InteractionPred {
       return SplitType::None;
     }
 
-    bool is_src_local = ht.count(src_key) != 0;
-    bool is_src_local_leaf = is_src_local && ht.at(src_key)->IsLeaf();
-    bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= data_.max_depth_;
+    //bool is_src_local = ht.count(src_key) != 0;
+    //bool is_src_local_leaf = is_src_local && ht.at(src_key)->IsLeaf();
+    //bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= data_.max_depth_;
 
     if (IsLeaf(src_key)) { // c2.IsLeaf()
       return SplitType::Body;

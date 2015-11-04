@@ -1,3 +1,6 @@
+# Makefile for ExaFMM example for Tapas library
+# This Makefile is written 
+
 .SUFFIXES: .cxx .cu .o
 
 ### choose kernel
@@ -12,8 +15,18 @@ BASIS	= Spherical
 #BASIS	= Planewave (not available yet)
 
 ### choose device to use
+# For original ExaFMM (not for Tapas)
 DEVICE	= CPU
 #DEVICE	= GPU (not integrated)
+
+CXX ?= clang++
+
+ifneq (,$(findstring clang++,$(CXX)))
+	CXX += -std=c++11 -ggdb3 -Wall -Wextra -O2 -funroll-loops -fcolor-diagnostics -Wno-sign-compare
+else ifneq (, $(findstring g++, $(CXX)))
+	CXX += -std=c++11 -ggdb3 -Wall -Wextra -O2 -funroll-loops -Wno-sign-compare -fdiagnostics-color=auto
+else ifneq (, $(findstring icpc, $(CXX)))
+endif
 
 ### choose C++ compiler
 #CXX	= mpicxx -ggdb3 -Wall -Wextra -O3 -msse4a -ffast-math -funroll-loops -fopenmp -std=c++11 # GCC
@@ -25,29 +38,25 @@ DEVICE	= CPU
 #CXX	= mpiFCCpx -Kfast # K computer
 #CXX	= tau_cxx.sh # TAU compiler instrumentation
 
-# Clang with libc++
-CXX	= clang++ -std=c++11  -ggdb3 -Wall -Wextra -O2  -funroll-loops -fcolor-diagnostics 
-##CXX	= icpc -Wall -O2
-
 ### choose fortran compiler
 FC = mpif90 -ggdb3 -O3 -msse4a -ffast-math -funroll-loops -cpp # gfortran
 #FC = mpif90 -Wall -xHOST -O3 -funroll-loops -finline-functions -ansi-alias -cpp # Intel
 
 ### Base flags
-CXX	+= -I../include -I../../../cpp/include -I$(HOME)/local/include
+LFLAGS += -I../include -I../../../cpp/include -I$(HOME)/local/include
 #CXX	+= -I$$(echo $$CPATH | sed 's/:/ -I/g') # BG compilers need this
 #LFLAGS	+= -L$$(echo $$LIBRARY_PATH | sed 's/:/ -L/g') # BG compilers need this
-LFLAGS	+= -D$(BASIS) # Specify basis of multipole/local expansion
-LFLAGS  += -DEXPANSION=4 # Specify expansion order
+LFLAGS += -D$(BASIS) # Specify basis of multipole/local expansion
+LFLAGS += -DEXPANSION=4 # Specify expansion order
 # SIMD causes compilation errors on umekoji
 #LFLAGS	+= -DUSE_SIMD # Use SSE/AVX/MIC intrinsics
 #LFLAGS	+= -DUSE_WEIGHT # Use weights for partitioning
-LFLAGS	+= -DFP64 # Use double precision
+LFLAGS += -DFP64 # Use double precision
 #LFLAGS	+= -DKAHAN # Use Kahan summation
 
 ### Debugging flags
-LFLAGS	+= -DASSERT # Turns on asserttions (otherwise define an empty macro function)
-LFLAGS	+= -DCOUNT # Count number calls to P2P and M2L (slows down execution)
+LFLAGS += -DASSERT # Turns on asserttions (otherwise define an empty macro function)
+LFLAGS += -DCOUNT # Count number calls to P2P and M2L (slows down execution)
 
 ### Thread model flags
 #LFLAGS	+= -DCILK -lcilkrts # Cilk is included in the Intel C/C++ Compiler
@@ -82,7 +91,6 @@ endif
 
 MAKEFLAGS += --no-print-directory
 
-CXX += $(CXXFLAGS)
 CXX += -DTAPAS_LOG_LEVEL=0 -DTAPAS_DEBUG=0
 
 .c.o	:

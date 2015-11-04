@@ -2,6 +2,7 @@
 
 import os,sys,re
 import unittest
+import errno
 import tempfile
 import shutil
 import glob
@@ -15,6 +16,18 @@ LogFile = None
 Scale = 'small' # test scale ('small', 'medium', 'large')
 
 assert Scale in ['small', 'medium', 'large']
+
+def mkdir_p(d):
+    try:
+        os.makedirs(d)
+    except OSError as exc:
+        if exc.erro == errno.EEXIST and os.path.isdir(path):
+            pass
+        else:
+            raise
+
+def is_exe(path):
+    return os.path.isfile(path) and os.access(path, os.X_OK)
 
 if 'SCALE' in os.environ:
     s = os.environ['SCALE']
@@ -35,8 +48,17 @@ def find_exec(exe):
 
 class TestCppUnitTests(unittest.TestCase):
     def test_units(self):
-        tests = glob.glob(os.path.join(BuildRoot, "cpp", "tests", "test_*"))
-        for t in tests:
+        self.srcdir = os.path.join(SourceRoot, 'cpp', 'tests')
+        self.bindir = os.path.join(BuildRoot,  'cpp', 'tests')
+        try:
+            mkdir_p(self.bindir)
+        except:
+            pass
+        check_call(['make', 'VERBSE=1', 'MODE=release',
+                    '-C', self.srcdir, 'clean', 'all'], cwd = self.bindir, stdout=LogFile, stderr=LogFile)
+
+        tests = glob.glob(os.path.join(SourceRoot, "cpp", "tests", "test_*"))
+        for t in [t for t in tests if is_exe(t)]:
             try:
                 retcode = check_call(t, stderr=LogFile, stdout=LogFile)
                 self.assertEqual(retcode, 0, msg=t)
@@ -49,7 +71,7 @@ class TestBH(unittest.TestCase):
         self.bindir = os.path.join(BuildRoot,  'sample', 'barnes-hut')
         self.bin    = os.path.join(self.srcdir, 'bh_mpi')
         try:
-            os.mkdir(self.bindir)
+            mkdir_p(self.bindir)
         except:
             pass
         check_call(['make', 'VERBSE=1', 'MODE=release',
@@ -94,7 +116,16 @@ class TestBH(unittest.TestCase):
 
 class TestExaFMM(unittest.TestCase):
     def setUp(self):
-        self.serial_tapas = os.path.join(BuildRoot, 'sample', 'exafmm-dev-13274dd4ac68', 'examples', 'serial_tapas')
+        self.srcdir = os.path.join(SourceRoot, 'sample', 'exafmm-dev-13274dd4ac68', 'examples')
+        self.bindir = os.path.join(BuildRoot,  'sample', 'exafmm-dev-13274dd4ac68', 'examples')
+        try:
+            mkdir_p(self.bindir)
+        except:
+            pass
+        check_call(['make', 'VERBSE=1', 'MODE=release',
+                    '-C', self.srcdir, 'clean', 'serial_tapas'], cwd = self.bindir, stdout=LogFile, stderr=LogFile)
+        
+        self.serial_tapas = os.path.join(self.srcdir, 'serial_tapas')
 
     def test_fmm(self):
         if Scale == 'small':
@@ -135,22 +166,12 @@ if __name__ == "__main__":
     sys.stderr.write("test.py: Test Scale = " + Scale + "\n")
     sys.stderr.write("test.py: CXX = " + os.environ["CXX"] + "\n")
 
-    check_call(['cmake', '--version'])
-
     t = datetime.datetime.now()
     logfile_name = t.strftime("test-%Y%m%d-%H%M%S-%f.log")
     LogFile = open(logfile_name, 'w+')
 
+    # Run tests
     try:
-        # Build the source tree
-        # We use P=6 to make the test clearer.
-        check_call(['cmake', SourceRoot,
-                    '-DCMAKE_BUILD_TYPE=Release',
-                    '-DEXAFMM_EXPANSION=6',
-                    '-DEXAFMM_ENABLE_MT=no'], cwd=BuildRoot, stdout=LogFile, stderr=LogFile)
-        check_call(['make', 'VERBOSE=1'], cwd=BuildRoot, stdout=LogFile, stderr=LogFile)
-
-        # Run tests
         unittest.main(verbosity=3)
 
     finally:

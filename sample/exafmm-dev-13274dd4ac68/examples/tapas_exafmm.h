@@ -1,12 +1,9 @@
-#ifndef EXAFMM_TAPAS_COMMON_H_
-#define EXAFMM_TAPAS_COMMON_H_
+#ifndef EXAFMM_TAPAS_H_
+#define EXAFMM_TAPAS_H_
 
 #include "types.h" // exafmm/include/types.h
 
 #include "tapas.h"
-
-#ifdef EXAFMM_TAPAS_MPI
-#endif
 
 struct CellAttr {
     real_t R;
@@ -16,13 +13,32 @@ struct CellAttr {
 
 typedef tapas::BodyInfo<Body, 0> BodyInfo;
 
-#ifdef EXAFMM_TAPAS_MPI
-// Build MPI-based distributed version
-#include "tapas/hot.h" // Morton-key based partitioning with MPI
+// Select MPI or single-process
+#ifdef USE_MPI
+
+// Use multi-process version of hashed octree
+#include "tapas/hot.h"
+using HOT = tapas::HOT<3, tapas::sfc::Morton>;
+
+#else
+
+// Use single-process version of hashed octree
+#include "tapas/single_node_hot.h"
+using HOT = tapas::SingleNodeHOT<3, tapas::sfc::Morton>;
+
+#endif
+
+
+// Select threading component: serial or MassiveThreads
+#ifdef MTHREADS
 #include "tapas/threading/massivethreads.h"
+using Threading = tapas::threading::MassiveThreads;
+#else
+using Threading = tapas::threading::Default;
+#endif
+
 typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr,
-                     tapas::HOT<3, tapas::sfc::Morton>,
-                     tapas::threading::MassiveThreads
+                     HOT, Threading
 #ifdef TAPAS_USE_VECTORMAP
 #  ifdef __CUDACC__
                      , tapas::Vectormap_CUDA_Packed<3, real_t, BodyInfo, kvec4>
@@ -31,19 +47,6 @@ typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr,
 #  endif /*__CUDACC__*/
 #endif /*TAPAS_USE_VECTORMAP*/
                      > Tapas;
-#else
-
-// Build single-node version
-#include "tapas/single_node_hot.h" // Morton-key based single node partitioning
-typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr,
-                     tapas::SingleNodeHOT<3, tapas::sfc::Morton>,
-                     tapas::threading::Serial
-#ifdef TAPAS_USE_VECTORMAP
-                     , tapas::Vectormap_CUDA_Packed<3, real_t, BodyInfo, kvec4>
-#endif /*TAPAS_USE_VECTORMAP*/
-                     > Tapas;
-
-#endif
 
 typedef Tapas::Region Region;
 
@@ -62,4 +65,4 @@ void P2P(Tapas::BodyIterator &Ci, Tapas::BodyIterator &Cj, vec3 Xperiodic);
 
 } // tapas_kernel
 
-#endif // EXAFMM_TAPAS_COMMON_H_
+#endif // EXAFMM_TAPAS_H_

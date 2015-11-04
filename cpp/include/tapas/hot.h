@@ -501,8 +501,6 @@ class Cell: public tapas::BasicCell<TSP> {
 template<class T>
 using uset = std::unordered_set<T>;
 
-#ifdef TAPAS_BH
-
 template<class TSP>
 std::string k2s(typename Cell<TSP>::KeyType k) {
   std::stringstream ss;
@@ -550,9 +548,6 @@ void ReportSplitType(typename Cell<TSP>::KeyType trg_key,
 
 
 // new Traverse
-
-#endif // TAPAS_BH
-
 
 template<class T>
 int MPI_Allreduce(const std::vector<T> &send, std::vector<T> &recv, MPI_Op op, MPI_Comm comm) {
@@ -755,11 +750,9 @@ void Cell<TSP>::Map(Funct f, Cell<TSP> &cell) {
 template<class TSP>
 template<class Funct>
 void Cell<TSP>::Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2) {
-#ifdef TAPAS_BH
   if (c1.key() == 0 && c2.key() == 0) {
     LET<TSP>::Exchange(f, c1);
   }
-#endif
   
   f(c1, c2);
 }
@@ -2203,6 +2196,7 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, HOT<DIM, tapas::sfc::Morton>, Threa
  public:
   using Region = tapas::Region<TSP>;
   using Cell = hot::Cell<TSP>;
+  using BodyIterator = typename Cell::BodyIterator;
 
   using SFC = typename TSP::SFC;
   

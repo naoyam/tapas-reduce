@@ -13,7 +13,7 @@
 #include <fstream>
 #include <iomanip>
 
-#ifdef EXAFMM_TAPAS_MPI
+#ifdef USE_MPI
 #include <mpi.h>
 #endif
 
@@ -139,11 +139,13 @@ void evalLocal(real_t rho, real_t alpha, real_t beta, complex_t * Ynm) {
     eim *= ei;                                                  //  Update exp(i * m * beta)
   }                                                             // End loop over m in Ynm
 }
-}
+
+} // anon namespace
+
 void tapas_kernel::P2M(Tapas::Cell &C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
   
-  Stderr e("P2M");
+  //Stderr e("P2M");
   
   for (tapas::index_t i = 0; i < C.nb(); ++i) {
     const Body &B = C.body(i);
@@ -151,8 +153,9 @@ void tapas_kernel::P2M(Tapas::Cell &C) {
     real_t rho, alpha, beta;
     cart2sph(rho, alpha, beta, dX);
     evalMultipole(rho, alpha, beta, Ynm, YnmTheta);
-    e.out() << std::setw(10) << Tapas::SFC::Simplify(C.key())
-            << " B[" << i << "].SRC=" << B.SRC << std::endl;
+    
+    //e.out() << std::setw(10) << Tapas::SFC::Simplify(C.key()) << " B[" << i << "].SRC=" << B.SRC << std::endl;
+    
     for (int n=0; n<P; n++) {
       for (int m=0; m<=n; m++) {
         int nm  = n * n + n - m;
@@ -161,9 +164,7 @@ void tapas_kernel::P2M(Tapas::Cell &C) {
       }
     }
   }
-  e.out() << std::setw(10) << Tapas::SFC::Simplify(C.key())
-          << "M=" << C.attr().M
-          << std::endl;
+  //e.out() << std::setw(10) << Tapas::SFC::Simplify(C.key()) << "M=" << C.attr().M << std::endl;
 }
 
 void tapas_kernel::M2M(Tapas::Cell & C) {
@@ -189,7 +190,7 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
       e.out() << "Cj.nb() = " << Cj.nb() << std::endl;
       e.out() << "Cj.center() = " << Cj.center() << std::endl;
       e.out() << "Cj.M = " << Cj.attr().M << std::endl;
-#if EXAFMM_TAPAS_MPI
+#if USE_MPI
       //e.out() << "Cj.IsLocal() = " << Cj.IsLocal() << std::endl;
 #endif
     }
@@ -242,7 +243,7 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
       Tapas::Cell &Cj = C.subcell(i);
       e.out() << "C[" << i << "].key = " << Tapas::SFC::Simplify(Cj.key()) << std::endl;
       e.out() << "C[" << i << "].IsLeaf = " << Cj.IsLeaf() << std::endl;
-#if EXAFMM_TAPAS_MPI
+#if USE_MPI
       //e.out() << "C[" << i << "].Local  = " << Cj.IsLocal() << std::endl;
 #endif 
       e.out() << "C[" << i << "].depth  = " << Cj.depth() << std::endl;

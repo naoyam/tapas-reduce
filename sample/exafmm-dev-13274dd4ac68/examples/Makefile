@@ -19,7 +19,8 @@ serial: serial.o $(OBJECTS)
 #	$(CXX) $? $(LFLAGS) -o $@
 
 tapas: serial_tapas
-serial_tapas.o: serial_tapas.cxx serial_tapas_helper.cxx
+serial_tapas.o: tapas_exafmm.cxx
+	$(CXX) -c $^ $(LFLAGS) -o $@
 serial_tapas: serial_tapas.o LaplaceSphericalCPU_tapas.o LaplaceP2PCPU_tapas.o $(OBJECTS)
 	$(CXX) $^ $(LFLAGS) -o $@
 
@@ -51,3 +52,4 @@ convergence: kernel.cxx $(SOURCES)
 ewald: ewald.o $(OBJECTS)
 	$(CXX) $? $(LFLAGS)
 	mpirun -np 2 ./a.out --numBodies 1000 --ncrit 32 --images 3
+
