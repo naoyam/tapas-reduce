@@ -20,14 +20,16 @@ endif
 CC ?= clang
 CXX ?= clang++
 MPICXX = mpicxx -cxx=$(CXX) -DUSE_MPI
-CXXFLAGS := -std=c++11 -Wall -Wextra -Wno-unused-local-typedef
-CXXFLAGS += -Wall -fno-elide-constructors
+CXXFLAGS := -std=c++11 -Wall -Wextra -Wno-unused-local-typedef -fno-elide-constructors
 
 #PROF := -pg
 
-ifeq ($(CXX),clang++)
-	CXXFLAGS += -fcolor-diagnostics
-endif	
+ifneq (,$(findstring clang++,$(CXX)))
+	CXXFLAGS += -funroll-loops -fcolor-diagnostics -Wno-sign-compare
+else ifneq (, $(findstring g++, $(CXX)))
+	CXXFLAGS += -funroll-loops -Wno-sign-compare -fdiagnostics-color=auto -Wno-unknown-pragmas
+else ifneq (, $(findstring icpc, $(CXX)))
+endif
 
 CXXFLAGS += -DS=$(S)
 
