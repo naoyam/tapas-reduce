@@ -55,8 +55,8 @@
   } while(0)
 
 #define ASSERT_FALSE(exp) do {                        \
-    auto e = !(exp);                                  \
-    if (e) {                                          \
+    auto e = (exp);                                   \
+    if (!e) {                                         \
       test_app::succ_cnt++;                           \
     } else {                                          \
       std::stringstream ss;                           \
@@ -64,7 +64,7 @@
          << __FILE__ << ":" << __LINE__ << " "        \
          << __PRETTY_FUNCTION__ << "." << std::endl;  \
       ss << "\tactual = '" << #exp << "' (= "         \
-         << tapas::test::ToString(a) << "), "         \
+         << tapas::test::ToString(e) << "), "         \
          << "which is not 0";                         \
       ss << std::endl;                                \
       test_app::fail_log.push_back(ss.str());         \
