@@ -696,9 +696,12 @@ struct LET {
     int d = root.data().max_depth_;
     long ncells = root.data().ht_.size();
     long nall   = (pow(8.0, d+1) - 1) / 7;
-    std::cout << "Cells: " << ncells << std::endl;
-    std::cout << "depth: " << root.data().max_depth_ << std::endl;
-    std::cout << "filling rate: " << ((double)ncells / nall) << std::endl;
+
+    BarrierExec([&](int,int) {
+        std::cout << "Cells: " << ncells << std::endl;
+        std::cout << "depth: " << root.data().max_depth_ << std::endl;
+        std::cout << "filling rate: " << ((double)ncells / nall) << std::endl;
+      });
 
     std::vector<int> hist(d + 1, 0);
     for (auto p : root.data().ht_) {
@@ -708,10 +711,12 @@ struct LET {
       }
     }
 
-    std::cout << "Depth histogram" << std::endl;
-    for (int i = 0; i <= d; i++) {
-      std::cout << i << " " << hist[i] << std::endl;
-    }
+    BarrierExec([&](int, int) {
+        std::cout << "Depth histogram" << std::endl;
+        for (int i = 0; i <= d; i++) {
+          std::cout << i << " " << hist[i] << std::endl;
+        }
+      });
 
     // Construct request lists of necessary cells
     req_keys_attr.insert(root.key());

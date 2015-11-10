@@ -95,7 +95,7 @@ struct HotData {
   int max_depth_; //!< Actual maximum depth of the tree
 
   std::vector<KeyType> leaf_keys_; //!< SFC keys of (all) leaves
-  std::vector<index_t> leaf_nb_;   //!< Number of bodies in each cell
+  std::vector<index_t> leaf_nb_;   //!< Number of bodies in each leaf cell
   std::vector<int>     leaf_owners_; //!< Owner process of leaf[i]
 #ifdef TAPAS_USE_VECTORMAP
   std::vector<BodyType, vector_allocator<BodyType>>
@@ -248,6 +248,7 @@ void FindLocalRoots(typename Cell<TSP>::KeyType,
 
 template <class TSP> // TapasStaticParams
 class Cell: public tapas::BasicCell<TSP> {
+  friend class SamplingOctree<TSP, typename TSP::SFC>;
   friend class Partitioner<TSP>;
   friend class iter::BodyIterator<Cell>;
 
@@ -1255,7 +1256,7 @@ class Partitioner {
     }
 
 #if TAPAS_DEBUG
-    BarrierExec([&res_attr, &res_body](int rank, int size) {
+    BarrierExec([&res_attr, &res_body](int rank, int) {
         std::cerr << "Rank " << rank << " SelectResponseCells: keys_attr.size() = " << res_attr.size() << std::endl;
         std::cerr << "Rank " << rank << " SelectResponseCells: keys.body.size() = " << res_body.size() << std::endl;
       });
@@ -1556,7 +1557,7 @@ void GenerateLeaves(int num_bodies,
     }
   } // end of while(1) loop
   
-  tapas::mpi::Allreduce(&tmp_max_depth, &max_depth, 1, MPI_SUM, MPI_COMM_WORLD);
+  tapas::mpi::Allreduce(&tmp_max_depth, &max_depth, 1, MPI_MAX, MPI_COMM_WORLD);
 }
 
 /**
@@ -1781,9 +1782,14 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
 
   // ---------------------------
-  // sample based tree construction
+  // sample based tree constructio
   // Until implementation of SamplingOctree is done, use a copy of data.
-  SamplingOctree<TSP, SFC>::BuildTree(b, num_bodies, reg, data2);
+
+  {
+    SamplingOctree<TSP, SFC> stree(b, num_bodies, reg ,data2, max_nb_);
+    stree.Build();
+  }
+  
   // ---------------------------
   
 
@@ -2040,9 +2046,10 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
             //<< "center=[" << c->center() << "] "
             //<< "next_key=" << SFC::Simplify(SFC::GetNext(k)) << " "
             //<< "parent=" << SFC::Simplify(SFC::Parent(k)) << " "
+                << k << " "
                 << "decoded=" << SFC::Decode(k) << " "
                 << std::endl;
-        if (c->IsLeaf() && c->nb() == 1) {
+        if (c->IsLeaf() && c->nb() >= 1) {
           e.out() << "Particle ["
                   << c->body(0).x << ", "
                   << c->body(0).y << ", "
@@ -2067,6 +2074,11 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     }
   }
 #endif // TAPAS_DEBUG
+
+  Stderr e("leaves_original");
+  for (auto k : data->leaf_keys_) {
+    e.out() << SFC::Decode(k) << " " << k << " " << SFC::GetDepth(k) << std::endl;
+  }
   
   if (data->ht_[0] == nullptr) {
     // If no leaf is assigned to the process, root node is not generated

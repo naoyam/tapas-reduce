@@ -97,6 +97,125 @@ void Test_Morton_LETRequirement() {
   ASSERT_EQ(2, p - procs.begin());
 }
 
+void Test_Morton_Overlapped() {
+  const constexpr int Dim = 3;
+  using K = tapas::sfc::Morton<Dim, uint64_t>;
+  using KeyType = K::KeyType;
+  
+  KeyType R = 0;
+  KeyType Rn = K::GetNext(R);
+  auto children = K::GetChildren(R);
+
+  // test 1 : Children and the parent always overlap
+  for (int i = 0; i < 8; i++) {
+    KeyType x1 = R,
+            x2 = Rn,
+            y1 = children[i],
+            y2 = K::GetNext(y1);
+    ASSERT_TRUE(K::Overlapped(x1, x2, y1, y2));
+    ASSERT_TRUE(K::Overlapped(y1, y2, x1, x2));
+  } 
+  
+  // test 2 : Children don't overlap each other
+  for (int i = 0; i < 8; i++) {
+    for (int j = i+1; j < 8; j++) {
+      KeyType x1 = children[i],
+              x2 = K::GetNext(x1),
+              y1 = children[j],
+              y2 = K::GetNext(y1);
+      ASSERT_EQ(false, K::Overlapped(x1, x2, y1, y2));
+      ASSERT_EQ(false, K::Overlapped(y1, y2, x1, x2));
+    }
+  }
+
+  // test 3 : Any key overlaps itself
+  ASSERT_TRUE(K::Overlapped(R, Rn, R, Rn));
+  for (int i = 0; i < 8; i++) {
+    KeyType c = children[i];
+    KeyType cn = K::GetNext(c);
+    ASSERT_TRUE(K::Overlapped(c, cn, c, cn));
+  }
+
+  // test 4 : "ancle and nephew" never overlap (similar to test 2, but different levels)
+  for (int i = 0; i < 8; i++) {
+    KeyType ancle = children[i];
+    for (int j = 0; j < 8; j++) {
+      if (i == j) continue;
+
+      for (int k = 0; k < 8; k++) {
+        KeyType nephew = K::GetChildren(children[j])[k];
+        
+        ASSERT_FALSE(K::Overlapped(ancle, K::GetNext(ancle), nephew, K::GetNext(nephew)));
+        ASSERT_FALSE(K::Overlapped(nephew, K::GetNext(nephew), ancle, K::GetNext(ancle)));
+      }
+    }
+  }
+
+  // test 5: a cell and any of its descendants overlap (no matter how deep they are)
+  KeyType anc = children[0];
+  KeyType dec = anc;
+  for (int depth = 0; depth < 10; depth++) {
+    int r = rand() % 8;
+    dec = K::GetChildren(dec)[r];
+    ASSERT_TRUE(K::Overlapped(anc, K::GetNext(anc), dec, K::GetNext(dec)));
+  }
+
+  // test 6: region between find-grained cells
+  KeyType first = K::AppendDepth(0, 10);
+  KeyType last  = 0;
+  for (int depth = 0; depth < 10; depth++) {
+    last = K::GetChildren(last)[7]; // the very last cell at level 10
+  }
+  last = K::GetNext(last);
+  // All cell must be between first and last
+  for (auto chk:  children) {
+    ASSERT_TRUE(K::Overlapped(first, last, chk, K::GetNext(chk)));
+    ASSERT_TRUE(K::Overlapped(chk, K::GetNext(chk), first, last));
+  }
+}
+
+void Test_Morton_Includes() {
+  const constexpr int Dim = 3;
+  using K = tapas::sfc::Morton<Dim, uint64_t>;
+  using KeyType = K::KeyType;
+  
+  KeyType R = 0;
+  KeyType S = K::GetNext(R);
+  auto children = K::GetChildren(R);
+
+  // child cells are always included in the parent cell.
+  for (auto chk : children) {
+    ASSERT_TRUE(K::Includes(R, S, chk));
+  }
+
+  // parent cell is NOT included between any pair of child cells.
+  for (int i = 0; i < 8; i++) {
+    for (int j = i + 1; j < 8; j++) {
+      auto ci = children[i];
+      auto cj = children[j];
+
+      ASSERT_FALSE(K::Includes(ci, cj, R));
+    }
+  }
+
+  KeyType c0 = children[0],
+          c1 = children[1],
+          c2 = children[2];
+  // c1 is always included in the range of [c0, c2), or between any descendants of c0 and c2.
+  ASSERT_TRUE(K::Includes(c0, c2, c1));
+
+  for (auto chk0 : K::GetChildren(c0)) {
+    for (auto chk2 : K::GetChildren(c2)) {
+      ASSERT_TRUE(K::Includes(chk0, chk2, c1));
+
+      for (auto chk1 : K::GetChildren(c1)) {
+        ASSERT_TRUE(K::Includes(chk0, chk2, chk1));
+      }
+    }
+  }
+}
+
+
 void Test_Morton_GetDirOnDepth() {
   // calculate center of a cell of the key
   const constexpr int Dim = 3;
@@ -150,6 +269,8 @@ int main(int argc, char **argv) {
   Test_Morton_IsDescendant();
   Test_Morton_LETRequirement();
   Test_Morton_GetDirOnDepth();
+  Test_Morton_Overlapped();
+  Test_Morton_Includes();
 
   TEST_REPORT_RESULT();
   

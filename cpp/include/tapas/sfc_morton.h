@@ -187,15 +187,24 @@ class Morton {
   }
 
   /**
-   * \brief Get the next key of k of the same depth in Morton order.
+   * \brief Get the next (or n-th next) key of k of the same depth in Morton order.
    */
   static inline CONSTEXPR
-  KeyType GetNext(KeyType k) noexcept {
+  KeyType GetNext(KeyType k, int n = 1) noexcept {
+    
+#ifdef TAPAS_DEBUG
+    index_t L = GetDepth(k);
+    index_t W = pow(1 << Dim, L);
+    TAPAS_ASSERT((index_t)n <= W);
+    // there are W cells in level L so n < W. However, it is sometimes necessary to get the 'next of the last' key
+    // of level L like std::end. 
+#endif
+    
     int d = GetDepth(k);
-    KeyType inc = (KeyType)1 << (Dim * (MaxDepth() - d) + DepthBits());
+    KeyType inc = (KeyType)n << (Dim * (MaxDepth() - d) + DepthBits());
     return k + inc;
   }
-
+  
   static inline CONSTEXPR
   KeyType AppendDepth(KeyType k, int depth) {
     return (k << DepthBits()) | depth;
@@ -315,7 +324,7 @@ class Morton {
   }
 
   static
-  std::string Decode(KeyType k) {
+  std::string Decode(const KeyType k) {
     std::stringstream ss;
     // get the overflow bit
     int overlow_bit = (k >> (Dim * MaxDepth() + DepthBits())) & 1;
@@ -369,7 +378,80 @@ class Morton {
   }
 
   /**
-   * @brief Find the range(beg,end) of cells/bodies that the cell
+   * \brief Checks if two regions overlap.
+   * \param[in] x1 Start of region 1
+   * \param[in] x2 End of region 1
+   * \param[in] y1 Start of region 2
+   * \param[in] y2 End of region2
+   * \return bool true if the two keys overlap
+   */
+  static inline
+  bool Overlapped(KeyType x1, KeyType x2, KeyType y1, KeyType y2) {
+    auto X1 = RemoveDepth(x1);
+    auto X2 = RemoveDepth(x2);
+    auto Y1 = RemoveDepth(y1);
+    auto Y2 = RemoveDepth(y2);
+
+    TAPAS_ASSERT(X1 < X2);
+
+    if (!(Y1 < Y2)) {
+#ifdef USE_MPI
+      int rank;
+      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+      std::cerr << "Assertion failed. Rank " << rank << std::endl;
+#endif
+      std::cerr << "y1 = " << Decode(y1) << std::endl;
+      std::cerr << "y2 = " << Decode(y2) << std::endl;
+      std::cerr << "Y1 = " << Decode(Y1) << std::endl;
+      std::cerr << "Y2 = " << Decode(Y2) << std::endl;
+    }
+    TAPAS_ASSERT(Y1 < Y2);
+    
+    if (X1 <= Y1 && Y1 <  X2) {
+      //std::cout << "(1)" << std::endl;
+      return true;
+    }
+    if (X1 <  Y2 && Y2 <= X2) {
+      //std::cout << "(2)" << std::endl;
+      return true;
+    }
+    if (Y1 <  X1 && X2 <= Y2) {
+      //std::cout << "(3)" << std::endl;
+      return true;
+    }
+    
+    return false;
+  }
+
+
+  /**
+   * \brief Checks if cell c is included in the range [beg, end)
+   */
+  static inline
+  bool Includes(KeyType beg, KeyType end, KeyType c) {
+    beg = RemoveDepth(beg);
+    end = RemoveDepth(end);
+    
+    auto c1 = RemoveDepth(c);
+    auto c2 = RemoveDepth(GetNext(c));
+
+    return (beg <= c1) && (c2 <= end);
+  }
+
+  /**
+   * \brief Checks if k1 includes k2
+   */
+  static inline
+  bool Includes(KeyType k1, KeyType k2) {
+    if (GetDepth(k1) > GetDepth(k2)) return false;
+    
+    k1 = RemoveDepth(k1);
+    k2 = RemoveDepth(k2);
+    return k1 == (k1 & k2);
+  }
+
+  /**
+   * @brief Find the range(beg,end) of cells/bodies that the cell owns
    */
   template<class T>
   static inline 
