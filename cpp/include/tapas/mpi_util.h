@@ -108,11 +108,15 @@ void* mpi_sendbuf_cast(T* p) {
 // MPI-related utilities and wrappers
 // TODO: wrap them as a pluggable policy/traits class
 template<class T> struct MPI_DatatypeTraits {
-  static MPI_Datatype type() {
+  static constexpr MPI_Datatype type() {
     return MPI_BYTE;
   }
   static constexpr bool IsEmbType() {
     return false;
+  }
+
+  static constexpr int count(size_t n) {
+    return sizeof(T) * n;
   }
 };
 
@@ -123,6 +127,9 @@ template<class T> struct MPI_DatatypeTraits {
     }                                               \
     static constexpr bool IsEmbType() {             \
       return true;                                  \
+    }                                               \
+    static constexpr int count(size_t n) {          \
+      return n;                                     \
     }                                               \
   };
 
@@ -275,6 +282,30 @@ void Alltoallv(std::vector<T>& send_buf, std::vector<int>& dest,
 }
 
 template<class T>
+void Gather(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, int root, MPI_Comm comm) {
+  int size = -1;
+  int rank = -1;
+
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+  auto type = MPI_DatatypeTraits<T>::type();
+  int count = MPI_DatatypeTraits<T>::count(sendbuf.size());
+
+  if (rank == root) {
+    recvbuf.clear();
+    recvbuf.resize(sendbuf.size() * size);
+  } else {
+    recvbuf.clear();
+  }
+  
+  int ret = ::MPI_Gather(reinterpret_cast<const void*>(&sendbuf[0]), count, type,
+                         reinterpret_cast<void*>(&recvbuf[0]), count, type, root, comm);
+  
+  TAPAS_ASSERT(ret == MPI_SUCCESS); (void)ret;
+}
+
+template<class T>
 void Allgatherv(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, MPI_Comm comm) {
   int size = -1, rank = -1;
 
@@ -313,6 +344,20 @@ void Allgatherv(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, MPI_Comm
   (void)ret;
   TAPAS_ASSERT(ret == MPI_SUCCESS);
 }
+
+template<class T>
+void Bcast(std::vector<T> &buf, int root, MPI_Comm comm) {
+  int rank = 0;
+
+  MPI_Comm_rank(comm, &rank);
+
+  ::MPI_Bcast(reinterpret_cast<void*>(buf.data()),
+              MPI_DatatypeTraits<T>::count(buf.size()),
+              MPI_DatatypeTraits<T>::type(),
+              root,
+              comm);
+}
+
 
 } // namespace mpi
 } // namespace tapas
