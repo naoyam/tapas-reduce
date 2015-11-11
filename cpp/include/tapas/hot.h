@@ -479,7 +479,6 @@ class Cell: public tapas::BasicCell<TSP> {
   // utility/accessor functions
   inline Cell *Lookup(KeyType k) const;
   CellHashTable *ht() { return ht_; }
-  void RegisterCell(Cell<TSP> *c);
 
   //========================================================
   // Member variables
@@ -549,17 +548,6 @@ void ReportSplitType(typename Cell<TSP>::KeyType trg_key,
 }
 
 
-// new Traverse
-
-template<class T>
-int MPI_Allreduce(const std::vector<T> &send, std::vector<T> &recv, MPI_Op op, MPI_Comm comm) {
-  recv.resize(send.size());
-  return ::MPI_Allreduce(static_cast<const T*>(send.data()),
-                         static_cast<T*>(recv.data()),
-                         (int)send.size(),
-                         MPI_DatatypeTraits<T>::type(),
-                         op, comm);
-}
 
 // Utility functions on set-related operations on std::vector
 
@@ -607,11 +595,9 @@ Region<TSP> ExchangeRegion(const Region<TSP> &r) {
 
   // Exchange max
   tapas::mpi::Allreduce(&r.max()[0], &new_max[0], Dim, MPI_MAX, MPI_COMM_WORLD);
-  //::MPI_Allreduce(&r.max()[0], &new_max[0], Dim, MPI_DatatypeTraits<FP>::type(), MPI_MAX, MPI_COMM_WORLD);
-  
+
   // Exchange min
   tapas::mpi::Allreduce(&r.min()[0], &new_min[0], Dim, MPI_MIN, MPI_COMM_WORLD);
-  //::MPI_Allreduce(&r.min()[0], &new_min[0], Dim, MPI_DatatypeTraits<FP>::type(), MPI_MIN, MPI_COMM_WORLD);
 
   return Region<TSP>(new_min, new_max);
 }
@@ -1163,14 +1149,6 @@ class Partitioner {
                          const Region<TSP> &r);
     Cell<TSP> *Partition(std::vector<typename TSP::BT::type> &b,
                          const Region<TSP> &r);
- private:
-#if 0
-  void Refine(Cell<TSP> *c,
-              const std::vector<HelperNode<TSP>> &hn,
-              const BodyType *b,
-              int cur_depth,
-              KeyType cur_key) const;
-#endif
 
  public:
   //---------------------
@@ -1297,14 +1275,6 @@ class Partitioner {
     std::transform(keys.begin(), keys.end(), attrs.begin(), key_to_attr);
   }
 
-  static int FindOwnerByKey(const std::vector<KeyType> &leaf_keys,
-                            const std::vector<int> &leaf_owners, KeyType key) {
-    size_t at = std::lower_bound(leaf_keys.begin(), leaf_keys.end(), key) - leaf_keys.begin();
-    assert(at < leaf_keys.size());
-
-    return (int)leaf_owners[at];
-  }
-    
   static void KeysToBodies(const std::vector<KeyType> &keys,
                            std::vector<index_t> &nb,
                            std::vector<BodyType> &bodies,
@@ -1323,38 +1293,7 @@ class Partitioner {
     }
   }
 
-  /**
-   * \brief Remove local cell keys from a KeySet
-   * Used in ExchangeELT
-   */
-  void RemoveLocalKeys(KeySet keys, const CellHashTable &hash) {
-    for (auto k : hash.keys()) {
-      if (keys.count(k) > 0) {
-        keys.remove(k);
-      }
-    }
-  }
 }; // class Partitioner
-
-/**
- * \brief Create a list of keys where i-th element is the first key of process i.
- */
-template<class KeyType>
-std::vector<KeyType> ProcHeadKeys(std::vector<KeyType> leaf_keys,
-                                  std::vector<int> &leaf_owners,
-                                  int num_proc) {
-  std::vector<KeyType> head_list(num_proc);
-  
-  // NOTE: Process 0's first key is always 0
-  //TAPAS_ASSERT(Key::RemoveDepth(leaf_keys[0]) == (KeyType)0);
-  
-  int pos = 0;
-  for (int p = 0; p < num_proc; p++) {
-    head_list[p] = leaf_keys[pos];
-    while(leaf_owners[pos] <= p) pos++;
-  }
-  return head_list;
-}
 
 /**
  * @brief Overloaded version of Partitioner::Partition
@@ -1363,89 +1302,6 @@ template <class TSP>
 Cell<TSP>*
 Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b, const Region<TSP> &r) {
     return Partitioner<TSP>::Partition(b.data(), b.size(), r);
-}
-
-/**
- * @brief Split cells that have more than nb_max bodies (not recursive)
- *
- * @param cell_keys Array of morton keys of cells
- * @param nb Array of current numbers of bodies of the cells
- * @param max_nb Criteria to split a cell
- */
-template<class TSP>
-std::vector<typename TSP::SFC::KeyType>
-SplitLargeCellsOnce(const std::vector<typename TSP::SFC::KeyType> &cell_keys,
-                    const std::vector<index_t> &nb,
-                    int max_nb, int *max_depth) {
-  using SFC = typename TSP::SFC;
-  using KeyType = typename SFC::KeyType;
-  
-  std::vector<KeyType> ret; // new
-
-  for (size_t i = 0; i < cell_keys.size(); i++) {
-    if (nb[i] <= max_nb) {
-      // This cell does not need to be split.
-      ret.push_back(cell_keys[i]);
-    } else {
-      // Create 2^DIM children (8 in 3-dim)
-      if (SFC::GetDepth(cell_keys[i]) >= SFC::MAX_DEPTH) {
-        TAPAS_LOG_ERROR()
-            << "Error: Reached maximum depth of octree. "
-            << "Maybe some particles have the exact same coordinates?" << std::endl;
-        MPI_Finalize();
-        exit(-1);
-      }
-      
-      auto children = SFC::GetChildren(cell_keys[i]);
-      *max_depth = std::max(*max_depth, SFC::GetDepth(children[0]));
-      for (auto ch : children) {
-        ret.push_back(ch);
-      }
-    }
-  }
-
-  return ret;
-}
-
-
-/**
- * @brief Distribute cells over processes in a simple algorithm so that each process has
- *        roughly equal number of bodies
- *
- * @param nb Array of numbers of bodies in cells
- * @param proc_size Number of processes (assumes process numbers are integer starting from 0)
- * @return Array of process numbers
- * @todo inline is required here to avoid multiple definitions
- */
-inline std::vector<int> SplitKeysSimple(const std::vector<index_t> &nb, int proc_size) {
-  index_t total_nb = std::accumulate(nb.begin(), nb.end(), 0); // total number of bodies
-  index_t guide = total_nb / proc_size;
-
-  std::vector<int> ret(nb.size()); // return value
-  int psum = 0; // partial sum
-  int cur_proc = 0;
-
-  for (size_t i = 0; i < nb.size(); i++) {
-    psum += nb[i];
-    ret[i] = cur_proc;
-    if (psum > guide * (cur_proc+1)) {
-      // remaining part belongs to last proc.
-      cur_proc = std::min(cur_proc + 1, proc_size - 1);
-    }
-  }
-
-  return ret;
-}
-
-template<class T>
-size_t sum(const T& c) {
-  return std::accumulate(c.begin(), c.end(), 0);
-}
-
-template<class TSP>
-void Cell<TSP>::RegisterCell(Cell<TSP> *c) {
-  std::lock_guard<std::mutex> lock(data_->ht_mtx_);
-  data_->ht_[c->key()] = c;
 }
 
 template <class TSP>
@@ -1475,89 +1331,6 @@ template <class TSP>
 Vec<Cell<TSP>::Dim, typename TSP::FP> Cell<TSP>::CalcCenter(KeyType key, const Region<TSP> &region) {
   auto r = CalcRegion(key, region);
   return r.min() + r.width() / 2;
-}
-
-/**
- * \brief Generate leaves and associated information from bodies.
- * First sort the bodies according to their SFC keys. Then, Split the space 
- * recursively from the root until all leaves have less than `ncrit` bodies.
- * \param [IN] 
- */
-template<class TSP>
-void GenerateLeaves(int num_bodies,
-                    typename Cell<TSP>::BodyType *b,
-                    int ncrit,
-                    const Region<TSP> &region,
-                    int &max_depth,
-                    std::vector<HelperNode<TSP>> &hn,
-                    std::vector<typename Cell<TSP>::SFC::KeyType> &leaf_keys,
-                    std::vector<index_t> &leaf_nb_local,
-                    std::vector<index_t> &leaf_nb_global) {
-  // Sort local bodies using SFC  keys
-  using HN = HelperNode<TSP>;
-  using SFC = typename Cell<TSP>::SFC;
-  (void) region; // to avoid unsed parameter warnings.
-  (void) b;
-  (void) num_bodies;
-  
-  std::sort(hn.begin(), hn.end(),
-            [](const HN &lhs, const HN &rhs) { return lhs.key < rhs.key; });
-
-  int tmp_max_depth = 0;
-
-  // Start from a root cell and refine it recursively until all cells have at most
-  leaf_keys.push_back(0);
-
-  // Loop until all leaf cells have at most max_nb_ bodies.
-  while(1) {
-    leaf_nb_local.clear();
-    leaf_nb_global.clear();
-    leaf_nb_local.resize(leaf_keys.size(), 0);
-    leaf_nb_global.resize(leaf_keys.size(), 0);
-    
-    for (size_t i = 0; i < leaf_keys.size(); i++) {
-      auto _key = [](const HN &hn) { return hn.key; };
-      // Count process-local bodies belonging to the cell[i].
-      leaf_nb_local[i] = GetBodyRange<SFC, HelperNode<TSP>>(leaf_keys[i],
-                                                            hn,
-                                                            _key).second;
-    }
-    
-    // Count bodies belonging to the cell[i] globally using MPI_Allreduce(+)
-    MPI_Allreduce(leaf_nb_local, leaf_nb_global, MPI_SUM, MPI_COMM_WORLD);
-
-    long max_nb = *std::max_element(leaf_nb_global.begin(), leaf_nb_global.end());
-    long total_nb = 0;
-    for (auto nb : leaf_nb_global) {
-      total_nb += nb;
-    }
-    
-#ifdef TAPAS_DEBUG
-    BarrierExec([&] (int rank, int) {
-        if (rank == 0) {
-          std::cerr << "rank " << std::fixed << std::setw(3) << std::left << rank << "  ";
-          std::cerr << "leaf_nb_global.size() = " << leaf_nb_global.size() << ", [";
-          for (auto nb : leaf_nb_global) {
-            std::cerr << std::fixed << std::setw(3) << nb << " ";
-          }
-          std::cerr << "]" << std::endl;
-          std::cerr << "Total nb = " << total_nb << std::endl;
-          std::cerr << "rank " << rank << " " << "max_nb = " << max_nb << " "
-                    << "(the limit is " << ncrit << ")" << std::endl;
-          std::cerr << std::endl;
-        }
-      });
-#endif
-    
-    if (max_nb <= ncrit) {    // Finished. all cells have at most max_nb_ bodies.
-      break;
-    } else {
-      // Find cells that have more than max_nb_ bodies and split them.
-      leaf_keys = SplitLargeCellsOnce<TSP>(leaf_keys, leaf_nb_global, ncrit, &tmp_max_depth);
-    }
-  } // end of while(1) loop
-  
-  tapas::mpi::Allreduce(&tmp_max_depth, &max_depth, 1, MPI_MAX, MPI_COMM_WORLD);
 }
 
 /**
@@ -1755,45 +1528,27 @@ Cell<TSP>*
 Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                             index_t num_bodies,
                             const Region<TSP> &reg) {
-  using BodyType = typename TSP::BT::type;
-  using BodyAttrType = typename TSP::BT_ATTR;
-  
-  using HN = HelperNode<TSP>;
   using SFC = typename TSP::SFC;
-  using KeyType = typename SFC::KeyType;
-  
-  typedef Cell<TSP> CellType;
+  using CellType = Cell<TSP>;
   using Data = typename CellType::Data;
-
-  auto data = std::make_shared<Data>();
-  auto data2 = std::make_shared<Data>();
 
 #ifdef TAPAS_MEASURE
   double beg, end;
   beg = MPI_Wtime();
 #endif
 
+  auto data = std::make_shared<Data>();
+
   MPI_Comm_rank(MPI_COMM_WORLD, &data->mpi_rank_);
   MPI_Comm_size(MPI_COMM_WORLD, &data->mpi_size_);
-  MPI_Comm_rank(MPI_COMM_WORLD, &data2->mpi_rank_);
-  MPI_Comm_size(MPI_COMM_WORLD, &data2->mpi_size_);
-  int mpi_rank = data->mpi_rank_;
-  int mpi_size = data->mpi_size_;
 
-
-  // ---------------------------
-  // sample based tree constructio
-  // Until implementation of SamplingOctree is done, use a copy of data.
-
-  {
-    SamplingOctree<TSP, SFC> stree(b, num_bodies, reg, data2, max_nb_);
-    stree.Build();
-    //BuildGlobalTree(*data);
-  }
-  // ---------------------------
-  
+  SamplingOctree<TSP, SFC> stree(b, num_bodies, reg, data, max_nb_);
+  stree.Build();
 
 #ifdef TAPAS_USE_VECTORMAP
+  using BodyType = typename TSP::BT::type;
+  using BodyAttrType = typename TSP::BT_ATTR;
+  
   /* (No templates allowed.) */
   typedef typename TSP::Vectormap:: template um_allocator<BodyType>
     body_vector_allocator;
@@ -1801,300 +1556,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     attr_vector_allocator;
 #endif /*TAPAS_USE_VECTORMAP*/
 
-  // Calculate the global bouding box by MPI_Allreduce
-  data->region_ = ExchangeRegion(reg);
-
-  auto &leaf_nb_global = data->leaf_nb_;
-  auto &leaf_keys = data->leaf_keys_;
-  std::vector<index_t> leaf_nb_local;
-  
-  std::vector<HN> hn = CreateInitialNodes<TSP>(b, num_bodies, data->region_);
-  
-  GenerateLeaves<TSP>(num_bodies,
-                      b,
-                      max_nb_,
-                      data->region_,
-                      data->max_depth_,
-                      hn,
-                      leaf_keys,
-                      leaf_nb_local,
-                      leaf_nb_global);
-
-  if (data->mpi_rank_ == 0) {
-    // debug
-    std::cerr << "Max depth = " << data->max_depth_ << std::endl;
-  }
-
-  // distribute the morton-ordered leaf cells over processes
-  // so that each process has roughly equal number of bodies.
-  // Split the morton-ordred curve and assign cells to processes
-  auto &leaf_owners = data->leaf_owners_;
-  leaf_owners = SplitKeysSimple(leaf_nb_global, mpi_size);
-
-#ifdef TAPAS_DEBUG
-  {
-    Stderr e("leaf_owners");
-    assert(leaf_keys.size() == leaf_owners.size());
-    for (size_t i = 0; i < leaf_keys.size(); i++) {
-      e.out() << SFC::Simplify(leaf_keys[i]) << " "
-              << leaf_owners[i] << " "
-              << leaf_keys[i] << std::endl;
-    }
-  }
-#endif
-  
-  data->proc_first_keys_ = ProcHeadKeys<KeyType>(leaf_keys, leaf_owners, mpi_size);
-
-  // Exchange bodies using MPI_Alltoallv
-  std::vector<int> send_counts(mpi_size, 0); // number of bodies that this process sends to others
-  std::vector<int> recv_counts(mpi_size, 0); // number of bodies that this process receives from others
-  
-  // count bodies to be sent to process 'proc' in cell ci
-  // note that send_count and recv_count are multiplied by sizeof(BodyType) so that
-  // BodyType objects will be sent as arrays of MPI_BYTE
-  for (size_t ci = 0; ci < leaf_keys.size(); ci++) {
-    int proc = leaf_owners[ci];
-    send_counts[proc] += leaf_nb_local[ci];
-  }
-
-  tapas::mpi::Alltoall(send_counts, recv_counts, 1, MPI_COMM_WORLD);
-#if 0
-  MPI_Alltoall(send_counts.data(), 1, MPI_INT,
-               recv_counts.data(), 1, MPI_INT,
-               MPI_COMM_WORLD);
-#endif
-  
-  std::vector<int> send_bytes_bodies(send_counts);
-  std::vector<int> send_bytes_keys(send_counts);
-  
-  std::vector<int> recv_bytes_bodies(recv_counts);
-  std::vector<int> recv_bytes_keys(recv_counts);
-
-  for (auto &c : send_bytes_bodies) { c *= sizeof(BodyType); }
-  for (auto &c : recv_bytes_bodies) { c *= sizeof(BodyType); }
-  for (auto &c : send_bytes_keys) { c *= sizeof(KeyType); }
-  for (auto &c : recv_bytes_keys) { c *= sizeof(KeyType); }
-
-  // Exchange particle using MPI_Alltoallv
-  // Since Tapas framework does not know the detail of BodyType, we send/recv BodyType data
-  // as arrays of MPI_BYTE.
-
-  // Copy bodies and keys to send_buf.
-  // hn (array of HelperNode) is already sorted by their SFC keys,
-  // which also means they are sorted by their parent process.
-  std::vector<BodyType> send_bodies(num_bodies);
-  std::vector<KeyType>  send_keys(num_bodies);
-  for (size_t hi = 0; hi < hn.size(); hi++) {
-    int bi = hn[hi].p_index;
-    send_bodies[hi] = b[bi];
-    send_keys[hi] = hn[hi].key;
-  }
-
-  // Calculate send displacements, which is prefix sum of send_bytes_bodies
-  std::vector<int> send_disp_bodies(mpi_size, 0);
-  std::vector<int> send_disp_keys(mpi_size, 0);
-
-  for (int p = 0; p < mpi_size; p++) {
-    // p : process id (i.e. rank in MPI)
-    if (p == 0) {
-      send_disp_bodies[p] = 0;
-      send_disp_keys[p] = 0;
-    } else {
-      // find cells that belong to process p.
-      const auto beg = leaf_owners.begin();
-      const auto end = leaf_owners.end();
-      int p_beg_idx = std::lower_bound(beg, end, p-1) - beg; // beg of process p's cells
-      int p_end_idx = std::upper_bound(beg, end, p-1) - beg; // end of process p's cells
-
-      // calculate total number of bodies that are sent to process p
-      // and the displacement for process p.
-      int nbodies = std::accumulate(leaf_nb_local.begin() + p_beg_idx,
-                                    leaf_nb_local.begin() + p_end_idx,
-                                    0);
-      send_disp_bodies[p] = nbodies * sizeof(BodyType) + send_disp_bodies[p-1];
-      send_disp_keys[p] = nbodies * sizeof(KeyType) + send_disp_keys[p-1];
-    }
-  }
-
-  // Prepare local_bodies (array of received body, which will be used in local computation)
-  // and local_body_keys (array of keys corresponding to local_bodies)
-  // local_bodies will be held by cells and continuously used after this function.
-  int num_bodies_recv = sum(recv_counts); // note: recv_count is in bytes.
-  auto &local_bodies = data->local_bodies_;
-  auto &local_body_keys = data->local_body_keys_;
-  auto &local_body_attrs = data->local_body_attrs_;
-
-  local_bodies.resize(num_bodies_recv);
-  local_body_keys.resize(num_bodies_recv);
-  local_body_attrs.resize(num_bodies_recv);
-  
-  bzero(reinterpret_cast<void*>(local_body_attrs.data()),
-        sizeof(BodyAttrType) * local_body_attrs.size());
-
-  // Calculate recv displacement, which is prefix sum of recv_bytes_bodies and recv_bytes_keys
-  std::vector<int> recv_disp_bodies(mpi_size, 0);
-  std::vector<int> recv_disp_keys(mpi_size, 0);
-  for (size_t pi = 0; pi < recv_counts.size(); pi++) {
-    if (pi == 0) {
-      recv_disp_bodies[pi] = 0;
-      recv_disp_keys[pi] = 0;
-    } else {
-      recv_disp_bodies[pi] = recv_disp_bodies[pi-1] + recv_bytes_bodies[pi-1];
-      recv_disp_keys[pi] = recv_disp_keys[pi-1] + recv_bytes_keys[pi-1];
-    }
-  }
-  
-  // Call MPI_Alltoallv() for bodies
-  MPI_Alltoallv(send_bodies.data(),  send_bytes_bodies.data(), send_disp_bodies.data(), MPI_BYTE,
-                local_bodies.data(), recv_bytes_bodies.data(), recv_disp_bodies.data(), MPI_BYTE,
-                MPI_COMM_WORLD);
-
-  // Call MPI_Alltoallv() for body keys
-  MPI_Alltoallv(send_keys.data(), send_bytes_keys.data(), send_disp_keys.data(), MPI_BYTE,
-                local_body_keys.data(), recv_bytes_keys.data(), recv_disp_keys.data(), MPI_BYTE,
-                MPI_COMM_WORLD);
-
-  // Now we have all bodies & keys transferred to their owner processes.
-  // Sort the bodies locally using their keys.
-  SortByKeys(local_body_keys, local_bodies);
-
-  // Dump local bodies into a file named exch_bodies.dat
-  // All processes dump bodies in the file in a coordinated way. init_bodies.dat and
-  // exch_bodies.dat must match (if sorted).
-#ifdef TAPAS_DEBUG
-  BarrierExec([&](int rank, int size) {
-      std::stringstream ss;
-      ss << "exch_bodies." << size << ".dat";
-      bool append_mode = (rank > 0);
-      DumpToFile(local_bodies, local_body_keys, ss.str().c_str(), append_mode);
-    });
-#endif
-
-  // construct a local tree from cells which belong to this process.
-  auto leaf_beg = std::lower_bound(std::begin(leaf_owners), std::end(leaf_owners), mpi_rank)
-                  - std::begin(leaf_owners);
-  auto leaf_end = std::upper_bound(std::begin(leaf_owners), std::end(leaf_owners), mpi_rank)
-                  - std::begin(leaf_owners);
-
-  std::vector<Cell<TSP>*> interior_cells;
-  
-  // Build a local tree in a bottom-up manner.
-  for (auto i = leaf_beg; i < leaf_end; i++) {
-    KeyType k = leaf_keys[i];
-    //KeyType kn = SFC::GetNext(k);
-
-    // Create a leaf cell
-    auto *c = Cell<TSP>::CreateLocalCell(k, data);
-    // CellType *c = new CellType(k,               // key
-    //                            true,            // is_local
-    //                            bbeg,            // body index
-    //                            bend - bbeg,     // #bodies
-    //                            data);
-    data->ht_[k] = c;
-    assert(c->IsLocal() && c->IsLeaf());
-
-    // Create anscestors of the cell c (in a recursive upward way)
-    while(1) {
-      k = SFC::Parent(k);
-      int dp = SFC::GetDepth(k);
-
-      if (data->ht_.count(k) == 0) {
-        index_t bbeg, bend;
-        //FindRangeByKey<TSP>(local_body_keys, k, bbeg, bend);
-        SFC::FindRangeByKey(leaf_keys, k, bbeg, bend);
-        int nb = 0;
-        for (auto i = bbeg; i < bend; i++) {
-          nb += leaf_nb_global[i];
-        }
-        
-        // Create interior cellls (anscestors)
-        // Note:
-        // If a cell is non-leaf, then bbeg (body begin index) is not correct.
-        // This is because bodies are help only by a process that owns the corresponding leaf cells.
-        auto *c = Cell<TSP>::CreateLocalCell(k, data);
-        // CellType *c = new CellType(k,     // key
-        //                            true,  // is_local
-        //                            0, nb, // Read the note above
-        //                            data);
-        data->ht_[k] = c;
-        interior_cells.push_back(c);
-        assert(c->IsLocal() && !c->IsLeaf());
-      } else {
-        break; // if c's parent is found: all of the ancestors have already been created.
-      }
-      
-      if (dp == 0) break; // stop if k is the root cell;
-    }
-  }
-  // we have created all local cells
-
-#ifdef TAPAS_DEBUG
-  // Debug
-  // Dump all (local) cells to a file
-  {
-    for (auto& iter : data->ht_) {
-      KeyType k = iter.first;
-      Cell<TSP> *c = iter.second;
-      if (c->IsLocal() && c->key() != 0) {
-#ifdef TAPAS_DEBUG
-        Stderr e("cells");
-        e.out() << SFC::Simplify(k) << " "
-                << "d=" << SFC::GetDepth(k) << " "
-                << "leaf=" << c->IsLeaf() << " "
-                << "owners=" << (c->IsLeaf() ? FindOwnerByKey(leaf_keys, leaf_owners, c->key()) : -1) << " "
-                << "nb=" << std::setw(3) << (c->IsLeaf() ? tapas::debug::ToStr(c->nb()) : "N/A") << " "
-            //<< "center=[" << c->center() << "] "
-            //<< "next_key=" << SFC::Simplify(SFC::GetNext(k)) << " "
-            //<< "parent=" << SFC::Simplify(SFC::Parent(k)) << " "
-                << k << " "
-                << "decoded=" << SFC::Decode(k) << " "
-                << std::endl;
-        if (c->IsLeaf() && c->nb() >= 1) {
-          e.out() << "Particle ["
-                  << c->body(0).x << ", "
-                  << c->body(0).y << ", "
-                  << c->body(0).z << ", "
-                  << c->body(0).w << "]" << std::endl;
-        }
-#endif
-        // Print bodies which belong to Cell c
-#if 0
-        if (c->IsLeaf()) {
-          index_t body_beg, body_end;
-          SFC::FindRangeByKey(local_body_keys, k, body_beg, body_end);
-          for (int i = body_beg; i < body_end; i++) {
-            e.out() << "\t\t\t| "
-                    << SFC::Simplify(local_body_keys[i]) << ": "
-                    << local_bodies[i].X
-                    << std::endl;
-          }
-        }
-#endif
-      }
-    }
-  }
-#endif // TAPAS_DEBUG
-
-  if (!getenv("USE_OLD_TREE")) {
-    data.swap(data2);
-  }
-
-#ifdef TAPAS_DEBUG
-  {
-    Stderr e("leaves_original");
-    for (auto k : data->leaf_keys_) {
-      e.out() << SFC::Decode(k) << " " << k << " " << SFC::GetDepth(k) << std::endl;
-    }
-  }
-
-  {
-    Stderr e("leaves_sampling");
-    for (auto k : data2->leaf_keys_) {
-      e.out() << SFC::Decode(k) << " " << k << " " << SFC::GetDepth(k) << std::endl;
-    }
-  }
-#endif
-  
+  // error check
   if (data->ht_[0] == nullptr) {
     // If no leaf is assigned to the process, root node is not generated
     if (data->mpi_rank_ == 0) {
