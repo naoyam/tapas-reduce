@@ -1,6 +1,9 @@
 /** \file
- *  Functions to construct HOT octrees
+ *  Functions to construct HOT octrees by a sampling method
  */
+
+#ifndef TAPAS_HOT_BUILDTREE_H
+#define TAPAS_HOT_BUILDTREE_H
 
 #include "tapas/stdcbug.h"
 
@@ -13,9 +16,7 @@
 #include "tapas/logging.h"
 #include "tapas/debug_util.h"
 #include "tapas/mpi_util.h"
-
-#ifndef TAPAS_HOT_BUILDTREE_H
-#define TAPAS_HOT_BUILDTREE_H
+#include "tapas/hot/global_tree.h"
 
 namespace tapas {
 namespace hot {
@@ -154,12 +155,14 @@ class SamplingOctree {
 
     return R;
   }
-  
+
   /**
-   * \brief Build an octree from bodies b, with a sampling-based method
+   * \brief Sample bodies and determine proc_first_keys_. 
+   * Output: proc_first_keys_.
    */
-  void Build() {
+  void Sample() {
     const double R = SamplingRate();
+    double beg = MPI_Wtime();
 
     ExchangeRegion();
     data_->region_ = region_;
@@ -186,10 +189,20 @@ class SamplingOctree {
       proc_first_keys_ = PartitionSpace(sampled_keys, data_->mpi_size_);
       TAPAS_ASSERT(proc_first_keys_.size() == data_->mpi_size_);
     }
-    
+
     // Each process's starting key is broadcast.
     tapas::mpi::Bcast(proc_first_keys_, dd_proc_id, MPI_COMM_WORLD);
     TAPAS_ASSERT(proc_first_keys_.size() == data_->mpi_size_);
+
+    double end = MPI_Wtime();
+    data_->time_tree_sample = end - beg;
+  }
+
+  /** 
+   * \brief Exchange bodies to owner processes determined by Sample() function.
+   */ 
+  void Exchange() {
+    double beg = MPI_Wtime();
     
     // Exchange bodies according to proc_first_keys_
     // new_bodies is the received bodies
@@ -210,23 +223,53 @@ class SamplingOctree {
     data_->local_body_keys_ = body_keys_;
     data_->local_body_attrs_.resize(bodies_.size());
     bzero(data_->local_body_attrs_.data(), sizeof(BodyAttrType) * bodies_.size());
-    // tood: proc_first_keysの使われ方を調べる
 
-    // grow tree (generate tree nodes from the root recursively)
-    GrowTree();
+    double end = MPI_Wtime();
+    data_->time_tree_exchange = end - beg;
+  }
+  
+  /**
+   * \brief Build an octree from bodies b, with a sampling-based method
+   */
+  void Build() {
+    double beg = MPI_Wtime();
+    
+    Sample();
+      
+    Exchange();
+
+    GrowLocal();
 
     // Get the max depth
     int d = data_->max_depth_;
     tapas::mpi::Allreduce(&d, &data_->max_depth_, 1, MPI_MAX, MPI_COMM_WORLD);
     data_->proc_first_keys_ = std::move(proc_first_keys_);
+
+    // error check
+    if (data_->ht_[0] == nullptr) {
+      // If no leaf is assigned to the process, root node is not generated
+      if (data_->mpi_rank_ == 0) {
+        std::cerr << "There are too few particles compared to the number of processes."
+                  << std::endl;
+      }
+      MPI_Finalize();
+      exit(-1);
+    }
+    double end = MPI_Wtime();
+    data_->time_tree_all = end - beg;
   }
 
-  void GrowTree() {
+  void GrowLocal() {
+    double beg = MPI_Wtime();
+    
     proc_first_keys_.push_back(SFC::GetNext(0));
     
     GenerateCell((KeyType)0, std::begin(body_keys_), std::end(body_keys_));
     
     proc_first_keys_.pop_back();
+
+    double end = MPI_Wtime();
+    data_->time_tree_growlocal = end - beg;
   }
 
   void GenerateCell(KeyType k,

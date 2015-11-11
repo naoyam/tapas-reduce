@@ -724,9 +724,9 @@ struct LET {
     
     // Construct request lists of necessary cells
     req_keys_attr.insert(root.key());
+    
 #ifdef OLD_LET_TRAVERSE
     (void) f;
-
     
 #if 0 // 2015/10/28 性能評価のため一時的に粒子までトラバースするように変更
     for (size_t bi = 0; bi < root.local_nb(); bi++) {

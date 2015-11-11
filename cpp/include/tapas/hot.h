@@ -39,7 +39,9 @@
 #include "tapas/threading/default.h"
 #include "tapas/mpi_util.h"
 
+#include "tapas/hot/data.h"
 #include "tapas/hot/buildtree.h"
+#include "tapas/hot/global_tree.h"
 #include "tapas/hot/let.h"
 
 #define DEBUG_SENDRECV
@@ -62,64 +64,6 @@ using tapas::mpi::MPI_DatatypeTraits;
 // fwd decl
 template<class TSP> class Cell;
 template<class TSP> class DummyCell;
-
-/**
- * \brief Struct to hold shared data among Cells
- * Never accessed by users directly. Only held by Cells using shared_ptr.
- */
-template<class TSP, class SFC_>
-struct HotData {
-  using SFC = SFC_;
-  using KeyType = typename SFC::KeyType;
-  using CellType = Cell<TSP>;
-  using CellHashTable = typename std::unordered_map<KeyType, CellType*>;
-  using KeySet = std::unordered_set<KeyType>;
-  using BodyType = typename TSP::BT::type;
-  using BodyAttrType = typename TSP::BT_ATTR;
-
-#ifdef TAPAS_USE_VECTORMAP
-  template <typename T>
-  using vector_allocator = typename TSP::Vectormap:: template um_allocator<T>;
-#endif /*TAPAS_USE_VECTORMAP*/
-
-  CellHashTable ht_;
-  CellHashTable ht_let_;
-  CellHashTable ht_gtree_;  // Hsah table of the global tree.
-  KeySet        gleaves_;   // set of global leaves, which are a part of ht_gtree_.keys and ht_.keys
-  KeySet        lroots_;    // set of local roots. It must be a subset of gleaves. gleaves is "Allgatherv-ed" lroots.
-  std::mutex ht_mtx_;  //!< mutex to protect ht_
-  Region<TSP> region_; //!< global bouding box
-  
-  int mpi_rank_;
-  int mpi_size_;
-  int max_depth_; //!< Actual maximum depth of the tree
-
-  std::vector<KeyType> leaf_keys_; //!< SFC keys of (all) leaves
-  std::vector<index_t> leaf_nb_;   //!< Number of bodies in each leaf cell
-  std::vector<int>     leaf_owners_; //!< Owner process of leaf[i]
-#ifdef TAPAS_USE_VECTORMAP
-  std::vector<BodyType, vector_allocator<BodyType>>
-  local_bodies_; //!< Bodies that belong to the local process
-#else /*TAPAS_USE_VECTORMAP*/
-  std::vector<BodyType> local_bodies_; //!< Bodies that belong to the local process
-#endif /*TAPAS_USE_VECTORMAP*/
-  std::vector<KeyType>  local_body_keys_; //!< SFC keys of local bodies
-#ifdef TAPAS_USE_VECTORMAP
-  std::vector<BodyAttrType, vector_allocator<BodyAttrType>>
-  local_body_attrs_; //!< Local body attributes
-#else /*TAPAS_USE_VECTORMAP*/
-  std::vector<BodyAttrType> local_body_attrs_; //!< Local body attributes
-#endif /*TAPAS_USE_VECTORMAP*/
-
-  std::vector<BodyType> let_bodies_;
-  std::vector<BodyAttrType> let_body_attrs_;
-  
-  std::vector<KeyType> proc_first_keys_; //!< first SFC key of each process
-
-  HotData() { }
-  HotData(const HotData<TSP, SFC>& rhs) = delete; // no copy
-  HotData(HotData<TSP, SFC>&& rhs) = delete; // no move
-};
 
 /**
  * @brief Remove redundunt elements in a std::vector. The vector must be sorted.
@@ -249,11 +193,12 @@ void FindLocalRoots(typename Cell<TSP>::KeyType,
 template <class TSP> // TapasStaticParams
 class Cell: public tapas::BasicCell<TSP> {
   friend class SamplingOctree<TSP, typename TSP::SFC>;
+  friend class GlobalTree<TSP>;
   friend class Partitioner<TSP>;
   friend class iter::BodyIterator<Cell>;
 
   friend struct LET<TSP>;
-
+  
   //========================================================
   // Typedefs 
   //========================================================
@@ -1334,185 +1279,6 @@ Vec<Cell<TSP>::Dim, typename TSP::FP> Cell<TSP>::CalcCenter(KeyType key, const R
 }
 
 /**
- * \brief An functional utility that provides upward reudce of a local tree for internal use.
- *
- * Non-local cells are just ignored.
- * Values of member variables (memvp) of child cells are reduce using function f and
- * assigned into parent's memvp value.
- * If c is a leaf, c.*memvp is set to `init`
- * 
- * \tparam T    Type of target member values.
- * \tparam Funct Type of the reducing function f. It is expected to be T(T, KeType, const CellType*c).
- * \param c     Starting root cell
- * \param memvp A member variable pointer (obtained by &Class::member)
- * \param init  Initial value
- * \param f     A reducing function of type (T, KeyType, const Cell*) -> T. If a child cell is local, 
- *              KeyType and Cell* are both given. If a child is not local, the pointer is nullptr.
- */
-template<class TSP, class T, class Funct>
-void LocalUpwardReduce(Cell<TSP> *c, T Cell<TSP>::*memvp, T init, Funct f) {
-  using KeyType = typename Cell<TSP>::KeyType;
-  using SFC = typename Cell<TSP>::SFC;
-  
-  if (c->IsLeaf()) {
-    // If c is a leaf, just assign the value `init` to `memvp` member variable.
-    c->*memvp = init;
-  } else {
-    // c is a non-leaf cell. Reduce children's value and assign it into c->*memvp
-    auto &data = c->data();
-    KeyType key = c->key();
-    auto children_keys = SFC::GetChildren(key);
-
-    T val = init;
-    
-    for (auto chk : children_keys) {
-      if (data.ht_.count(chk) > 0) {
-        Cell<TSP> *cc = data.ht_.at(chk);
-        LocalUpwardReduce(cc, memvp, init, f);
-        val = f(val, chk, const_cast<const Cell<TSP>*>(cc));
-      } else {
-        val = f(val, chk, nullptr);
-      }
-    }
-    
-    c->*memvp = val; // assign reduced value.
-  }
-}
-
-/**
- * \brief Performs pre-order traversal for local cells.
- * \tparam TSP TSP.
- * \tparam Funct A callback function called for each cell. Expected to be <bool (CellType*)>.
- * \param c A cell to start traversal
- * \param f A callback function. If f returns false for a cell, then its children are not visited.
- */
-template<class TSP, class Funct>
-void LocalPreOrderTraverse(Cell<TSP> *c, Funct f) {
-  using SFC = typename Cell<TSP>::SFC;
-  
-  TAPAS_ASSERT(c->IsLocal());
-
-  auto &data = c->data();
-
-  bool cont = f(c);
-  if (!cont) return;
-
-  if (!c->IsLeaf()) {
-    auto child_keys = SFC::GetChildren(c->key());
-    for (auto chk : child_keys) {
-      if (data.ht_.count(chk) > 0) {
-        Cell<TSP> *cc = data.ht_.at(chk);
-        LocalPreOrderTraverse(cc, f);
-      }
-    }
-  }
-}
-
-/**
- * \brief A reducing function used with LocalUpwardReduce, to check if a cell is a local subtree.
- */
-template<class KeyType, class CellType>
-bool ReduceLocality(bool b, KeyType, const CellType *c) {
-  return b && c != nullptr && c->IsLocalSubtree();
-}
-
-template<class TSP>
-void FindLocalRoots(typename Cell<TSP>::KeyType key,
-                    const typename Cell<TSP>::CellHashTable &ht,
-                    typename Cell<TSP>::KeySet   &lroots) {
-  using CellType = Cell<TSP>;
-  using KeyType = typename CellType::KeyType;
-  //using SFC = typename CellType::SFC;
-
-  TAPAS_ASSERT(ht.count(key) == 1);
-
-  CellType *c = ht.at(key);
-
-  LocalUpwardReduce(c, &CellType::is_local_subtree_, true,
-                    ReduceLocality<KeyType, CellType>);
-
-  // Create a closure to find all local roots.
-  auto local_root_collector = [&lroots] (const CellType *c) -> bool {
-    if (c->is_local_subtree_) {
-      lroots.insert(c->key());
-      return false;
-    } else {
-      return true;
-    }
-  };
-  
-  // Find all local subtree roots.
-  LocalPreOrderTraverse(c, local_root_collector);
-}
-
-template<class TSP>
-void ExchangeGlobalLeafKeys(const typename Cell<TSP>::KeySet &lroots,
-                            typename Cell<TSP>::KeySet &gleaves) {
-  using KeyType = typename Cell<TSP>::KeyType;
-
-  std::vector<KeyType> gl_keys_send(lroots.begin(), lroots.end()); // global leaf keys
-  std::vector<KeyType> gl_keys_recv;
-  tapas::mpi::Allgatherv(gl_keys_send, gl_keys_recv, MPI_COMM_WORLD);
-  
-  gleaves.insert(gl_keys_recv.begin(), gl_keys_recv.end());
-}
-
-template<class TSP>
-void GrowGlobalTree(const typename Cell<TSP>::KeySet &gleaves,
-                    const typename Cell<TSP>::CellHashTable &ht,
-                    typename Cell<TSP>::CellHashTable &ht_gtree) {
-  using CellType = Cell<TSP>;
-  using KeyType = typename CellType::KeyType;
-  using SFC = typename CellType::SFC;
-  using Data = HotData<TSP, SFC>;
-  
-  std::shared_ptr<Data> dp = ht.at(0)->data_ptr();
-
-  for (auto && key : gleaves) {
-    for (KeyType k = key; k != 0; k = SFC::Parent(k)) {
-      if (ht_gtree.count(k) > 0) {
-        break; // break to outer loop
-      } else if (ht.count(k) > 0) {
-        ht_gtree[k] = ht.at(k);
-      } else {
-        ht_gtree[k] = CellType::CreateRemoteCell(k, 0, dp);
-      }
-    }
-  }
-  ht_gtree[0] = ht.at(0);
-}
-
-/**
- * \brief Build global tree
- * 1. Traverse recursively from the root and identify global leaves
- * 2. Exchange global leaves using Alltoallv
- * 3. Build global tree locally
- */
-template<class TSP>
-void BuildGlobalTree(HotData<TSP, typename Cell<TSP>::SFC> &data) {
-  // Traverse from root and mark global leaves
-  using HT = typename Cell<TSP>::CellHashTable;
-  using ST = typename Cell<TSP>::KeySet;
-  //using KeyType = typename Cell<TSP>::KeyType;
-
-  HT &ltree = data.ht_;       // hash table for the local tree
-  HT &gtree = data.ht_gtree_; // hash table for the global tree
-  ST &gleaves = data.gleaves_;
-  ST &lroots = data.lroots_;
-
-  gtree.clear();
-
-  FindLocalRoots<TSP>(0, ltree, lroots);
-
-  // Exchange global leaves using Allgatherv
-  ExchangeGlobalLeafKeys<TSP>(lroots, gleaves);
-
-  // Glow the global tree locally in each process
-  GrowGlobalTree<TSP>(gleaves, data.ht_, data.ht_gtree_);
-}
-
-
-/**
  * @brief Partition the simulation space and build SFC key based octree
  * @tparam TSP Tapas static params
  * @param b Array of particles
@@ -1532,11 +1298,6 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   using CellType = Cell<TSP>;
   using Data = typename CellType::Data;
 
-#ifdef TAPAS_MEASURE
-  double beg, end;
-  beg = MPI_Wtime();
-#endif
-
   auto data = std::make_shared<Data>();
 
   MPI_Comm_rank(MPI_COMM_WORLD, &data->mpi_rank_);
@@ -1544,7 +1305,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
 
   SamplingOctree<TSP, SFC> stree(b, num_bodies, reg, data, max_nb_);
   stree.Build();
-
+    
 #ifdef TAPAS_USE_VECTORMAP
   using BodyType = typename TSP::BT::type;
   using BodyAttrType = typename TSP::BT_ATTR;
@@ -1556,23 +1317,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     attr_vector_allocator;
 #endif /*TAPAS_USE_VECTORMAP*/
 
-  // error check
-  if (data->ht_[0] == nullptr) {
-    // If no leaf is assigned to the process, root node is not generated
-    if (data->mpi_rank_ == 0) {
-      std::cerr << "There are too few particles compared to the number of processes."
-                << std::endl;
-    }
-    MPI_Finalize();
-    exit(-1);
-  }
-
-#ifdef TAPAS_MEASURE
-  end = MPI_Wtime();
-  std::cout << "time Partition " << (end - beg) << std::endl;
-#endif
-
-  BuildGlobalTree(*data);
+  GlobalTree<TSP>::Build(*data);
 
   // return the root cell (root key is always 0)
   return data->ht_[0];
