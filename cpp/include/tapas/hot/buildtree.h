@@ -51,8 +51,6 @@ class SamplingOctree {
   using Data = HotData<TSP, SFC>;
   template<class T> using Region = tapas::Region<T>;
 
-  static const constexpr double R = (TAPAS_SAMPLING_RATE);
-
  private:
   std::vector<BodyType> bodies_;
   std::vector<KeyType> body_keys_;
@@ -107,38 +105,25 @@ class SamplingOctree {
     
     std::vector<int> nb(W); // number of bodies each L-level key owns
 
-    std::cout << "kDim = " << kDim << std::endl;
-    std::cout << "L = " << L << std::endl;
-    std::cout << "1 << L = " << (1 << L) << std::endl;
-    std::cout << "W = " << W << std::endl;
-    std::cout << "q = " << q << std::endl;
-    std::cout << "nb vector:";
-    
     KeyType kl = K;
-    
+
+    // For each key(cell) in level L, count how many bodies belong to the cell out of the sampled set.
     for (size_t i = 0; i < nb.size(); i++) {
       index_t b, e;
       SFC::FindRangeByKey(keys, kl, b, e);
       nb[i] = e - b;
-      
-      std::cout << " " << nb[i];
-      
       kl = SFC::GetNext(kl);
     }
-    std::cout << std::endl;
 
     // sum(nb) must be equal to keys.size(), becuase the for loop above cover the entire domain
     TAPAS_ASSERT(std::accumulate(nb.begin(), nb.end(), 0) == keys.size());
         
     std::vector<int> nb_iscan(W); // inclusive scan of nb vector
 
-    std::cout << "nb_iscan vector:";
     for (size_t i = 0; i < nb_iscan.size(); i++) {
       // Future work: this operation can be parallelized by parallel scan
       nb_iscan[i] = nb[i] + (i > 0 ? nb_iscan[i-1] : 0);
-      std::cout << " " << nb_iscan[i];
     }
-    std::cout << std::endl;
     
     std::vector<KeyType> beg_keys(mpi_size); // return value
     
@@ -149,33 +134,37 @@ class SamplingOctree {
     for (size_t i = 1; i < mpi_size; i++) {
       int j = std::upper_bound(nb_iscan.begin(), nb_iscan.end(), q*i) - nb_iscan.begin();
       beg_keys[i] = SFC::GetNext(K, j);
-      std::cout << "Process " << i << "'s j = " << j << std::endl;
     }
 
     return beg_keys;
   }
-  
-  /**
-   * \brief Sort the initial bodies locally and find a destination of each body. All processes perform this operation.
-   */
-  static void SortAndFindDest(std::vector<BodyType> &bodies, std::vector<int> &dest) {
-    std::vector<KeyType> keys(bodies.size());
 
-    for (size_t i = 0; i < bodies.size(); i++) {
-      
+  static double SamplingRate() {
+    double R = 0.01;
+    
+#ifdef TAPAS_SAMPLING_RATE
+    R = (TAPAS_SAMPLING_RATE);
+#endif
+    
+    if (getenv("TAPAS_SAMPLING_RATE")) {
+      R = atof(getenv("TAPAS_SAMPLING_RATE"));
     }
-  }
+    
+    TAPAS_ASSERT(0.0 < R && R < 1.0);
 
+    return R;
+  }
+  
   /**
    * \brief Build an octree from bodies b, with a sampling-based method
    */
   void Build() {
-    TAPAS_ASSERT(0.0 < R && R < 1.0);
+    const double R = SamplingRate();
 
     ExchangeRegion();
     data_->region_ = region_;
 
-    // sample particles
+    // sample particles in this process
     int sample_nb = bodies_.size() * R;
     std::vector<BodyType> sampled_bodies = std::vector<BodyType>(bodies_.begin(), bodies_.begin() + sample_nb);
     std::vector<KeyType> sampled_keys_local = BodiesToKeys(sampled_bodies, data_->region_);
@@ -210,9 +199,12 @@ class SamplingOctree {
     // Sort both new_keys and new_bodies.
     SortByKeys(body_keys_, bodies_);
 
+#ifdef TAPAS_DEBUG
     tapas::debug::BarrierExec([&](int rank,int) {
-        std::cout << "Rank " << rank << " got " << bodies_.size() << " bodies (ncrit = " << ncrit_ << ")" << std::endl;
+        if (rank == 0) std::cout << "LB: R = " << R << std::endl;
+        std::cout << "LB: Rank " << rank << " got " << bodies_.size() << " bodies (ncrit = " << ncrit_ << ")" << std::endl;
       });
+#endif
 
     data_->local_bodies_ = bodies_;
     data_->local_body_keys_ = body_keys_;
@@ -224,28 +216,12 @@ class SamplingOctree {
     GrowTree();
 
     // Get the max depth
-    int max_depth = 0;
-    for (auto k : data_->leaf_keys_) {
-      max_depth = std::max(max_depth, SFC::GetDepth(k));
-    }
-
-    Stderr e("leaves_sampling");
-    for (auto k : data_->leaf_keys_) {
-      e.out() << SFC::Decode(k) << " " << k << " " << SFC::GetDepth(k) << std::endl;
-    }
+    int d = data_->max_depth_;
+    tapas::mpi::Allreduce(&d, &data_->max_depth_, 1, MPI_MAX, MPI_COMM_WORLD);
+    data_->proc_first_keys_ = std::move(proc_first_keys_);
   }
 
   void GrowTree() {
-
-    if (data_->mpi_rank_ == 0) {
-      std::cout << "GrowTree():" << std::endl;
-      std::cout << "proc_first_keys_ (length " << proc_first_keys_.size() << std::endl;
-      for (auto k : proc_first_keys_) {
-        std::cout << SFC::Decode(k) << std::endl;
-      }
-      std::cout << std::endl;
-    }
-    
     proc_first_keys_.push_back(SFC::GetNext(0));
     
     GenerateCell((KeyType)0, std::begin(body_keys_), std::end(body_keys_));
@@ -290,25 +266,10 @@ class SamplingOctree {
     TAPAS_ASSERT(nb >= 0);
     TAPAS_ASSERT(body_beg >= 0);
 
-    if (k == 2536230277651365893) {
-      std::cout << "-------------------------" << std::endl;
-      std::cout << "Found key = " << k << std::endl;
-      std::cout << "k = " << SFC::Decode(k) << std::endl;
-      std::cout << "beg " << SFC::Decode(proc_first_keys_[rank]) << std::endl;
-      std::cout << "end " << SFC::Decode(proc_first_keys_[rank+1]) << std::endl;
-      std::cout << "Included = " << included << std::endl;
-      std::cout << "Overlapped = " << SFC::Overlapped(k, SFC::GetNext(k),
-                                                    proc_first_keys_[rank],
-                                                    proc_first_keys_[rank+1])
-                << std::endl;
-      std::cout << "is_leaf = " << is_leaf << std::endl;
-      std::cout << "rank " << data_->mpi_rank_ << std::endl;
-      std::cout << "nb = " << nb << std::endl;
-      if (nb > 0) {
-        std::cout << "b = " << SFC::Decode(*range_beg) << std::endl;
-      }
-      std::cout << "split = " << (!is_leaf) << std::endl;
-      std::cout << "-------------------------" << std::endl;
+    data_->ht_[k] = c;
+
+    if (SFC::GetDepth(k) > data_->max_depth_) {
+      data_->max_depth_ = SFC::GetDepth(k);
     }
 
     if (is_leaf) {

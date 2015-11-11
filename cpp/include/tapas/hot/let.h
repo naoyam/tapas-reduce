@@ -693,15 +693,17 @@ struct LET {
     beg_trv = MPI_Wtime();
 #endif
 
-    int d = root.data().max_depth_;
-    long ncells = root.data().ht_.size();
-    long nall   = (pow(8.0, d+1) - 1) / 7;
+    const int d = root.data().max_depth_;
 
+#ifdef TAPAS_DEBUG
+    const long ncells = root.data().ht_.size();
+    const long nall   = (pow(8.0, d+1) - 1) / 7;
     BarrierExec([&](int,int) {
         std::cout << "Cells: " << ncells << std::endl;
-        std::cout << "depth: " << root.data().max_depth_ << std::endl;
+        std::cout << "depth: " << d << std::endl;
         std::cout << "filling rate: " << ((double)ncells / nall) << std::endl;
       });
+#endif
 
     std::vector<int> hist(d + 1, 0);
     for (auto p : root.data().ht_) {
@@ -711,13 +713,15 @@ struct LET {
       }
     }
 
+#ifdef TAPAS_DEBUG
     BarrierExec([&](int, int) {
         std::cout << "Depth histogram" << std::endl;
         for (int i = 0; i <= d; i++) {
           std::cout << i << " " << hist[i] << std::endl;
         }
       });
-
+#endif
+    
     // Construct request lists of necessary cells
     req_keys_attr.insert(root.key());
 #ifdef OLD_LET_TRAVERSE
@@ -819,6 +823,8 @@ struct LET {
     //       std::cout << std::endl;
     //     }
     //   });
+
+    TAPAS_ASSERT(data.proc_first_keys_.size() == data.mpi_size_);
     
     // Determine the destination process of each cell request
     std::vector<int> attr_dest = Partitioner<TSP>::FindOwnerProcess(data.proc_first_keys_, keys_attr_send);

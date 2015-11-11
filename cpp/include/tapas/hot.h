@@ -1786,10 +1786,10 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   // Until implementation of SamplingOctree is done, use a copy of data.
 
   {
-    SamplingOctree<TSP, SFC> stree(b, num_bodies, reg ,data2, max_nb_);
+    SamplingOctree<TSP, SFC> stree(b, num_bodies, reg, data2, max_nb_);
     stree.Build();
+    //BuildGlobalTree(*data);
   }
-  
   // ---------------------------
   
 
@@ -2075,10 +2075,25 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   }
 #endif // TAPAS_DEBUG
 
-  Stderr e("leaves_original");
-  for (auto k : data->leaf_keys_) {
-    e.out() << SFC::Decode(k) << " " << k << " " << SFC::GetDepth(k) << std::endl;
+  if (!getenv("USE_OLD_TREE")) {
+    data.swap(data2);
   }
+
+#ifdef TAPAS_DEBUG
+  {
+    Stderr e("leaves_original");
+    for (auto k : data->leaf_keys_) {
+      e.out() << SFC::Decode(k) << " " << k << " " << SFC::GetDepth(k) << std::endl;
+    }
+  }
+
+  {
+    Stderr e("leaves_sampling");
+    for (auto k : data2->leaf_keys_) {
+      e.out() << SFC::Decode(k) << " " << k << " " << SFC::GetDepth(k) << std::endl;
+    }
+  }
+#endif
   
   if (data->ht_[0] == nullptr) {
     // If no leaf is assigned to the process, root node is not generated
