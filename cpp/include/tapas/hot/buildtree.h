@@ -164,6 +164,9 @@ class SamplingOctree {
     const double R = SamplingRate();
     double beg = MPI_Wtime();
 
+    // todo:
+    // record R
+
     ExchangeRegion();
     data_->region_ = region_;
 
@@ -212,12 +215,7 @@ class SamplingOctree {
     // Sort both new_keys and new_bodies.
     SortByKeys(body_keys_, bodies_);
 
-#ifdef TAPAS_DEBUG
-    tapas::debug::BarrierExec([&](int rank,int) {
-        if (rank == 0) std::cout << "LB: R = " << R << std::endl;
-        std::cout << "LB: Rank " << rank << " got " << bodies_.size() << " bodies (ncrit = " << ncrit_ << ")" << std::endl;
-      });
-#endif
+    // todo: record bodies
 
     data_->local_bodies_ = bodies_;
     data_->local_body_keys_ = body_keys_;

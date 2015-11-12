@@ -1141,6 +1141,9 @@ class Partitioner {
     std::set<std::pair<int, KeyType>> res_attr; // keys (and their destinations) of which attributes will be sent as response.
     std::set<std::pair<int, KeyType>> res_body; // keys (and their destinations) of which bodies will be sent as response.
 
+    TAPAS_ASSERT(attr_keys.size() == attr_src_pids.size());
+    TAPAS_ASSERT(body_keys.size() == body_src_pids.size());
+
     for (size_t i = 0; i < attr_keys.size(); i++) {
       KeyType k = attr_keys[i];
       int src_pid = attr_src_pids[i]; // PID of the process that requested k.

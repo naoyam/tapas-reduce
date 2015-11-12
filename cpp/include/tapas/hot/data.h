@@ -67,13 +67,13 @@ struct HotData {
   double time_tree_exchange;   // Tree construction / body exchange
   double time_tree_growlocal;  // Tree construction / grow local tree
   double time_tree_growglobal; // Tree construction / grow global tree
-  
-  double time_exlet_all;      // ExchangeLET/All
-  double time_exlet_traverse; // ExchangeLET/Traverse
-  double time_exlet_req;      // ExchangeLET/Request
-  double time_exlet_select;   // ExchangeLET/Select
-  double time_exlet_response; // ExchangeLET/Response
-  double time_exlet_register; // ExchangeLET/register
+
+  double time_let_all;      // ExchangeLET/All
+  double time_let_traverse; // ExchangeLET/Traverse
+  double time_let_req;      // ExchangeLET/Request
+  double time_let_select;   // ExchangeLET/Select
+  double time_let_response; // ExchangeLET/Response
+  double time_let_register; // ExchangeLET/register
   
   HotData() { }
   HotData(const HotData<TSP, SFC>& rhs) = delete; // no copy

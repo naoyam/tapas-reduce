@@ -674,53 +674,43 @@ struct LET {
     return; // split;
   }
 
-  template<class UserFunct>
-  static void Exchange(UserFunct f, CellType &root) {
-#ifdef TAPAS_MEASURE
-    double beg_all, end_all;
-    double beg_trv, end_trv;
-    double beg_req, end_req;
-    double beg_sel, end_sel;
-    double beg_res, end_res;
-    double beg_reg, end_reg;
-#endif
-  
-    KeySet req_keys_attr; // cells of which attributes are to be transfered from remotes to local
-    KeySet req_keys_body; // cells of which bodies are to be transfered from remotes to local
+  static void ShowHistogram(const Data &data) {
+    const int d = data.max_depth_;
 
-#ifdef TAPAS_MEASURE
-    beg_all = MPI_Wtime();
-    beg_trv = MPI_Wtime();
-#endif
-
-    const int d = root.data().max_depth_;
-
-#ifdef TAPAS_DEBUG
-    const long ncells = root.data().ht_.size();
+    const long ncells = data.ht_.size();
     const long nall   = (pow(8.0, d+1) - 1) / 7;
     BarrierExec([&](int,int) {
         std::cout << "Cells: " << ncells << std::endl;
         std::cout << "depth: " << d << std::endl;
         std::cout << "filling rate: " << ((double)ncells / nall) << std::endl;
       });
-#endif
 
     std::vector<int> hist(d + 1, 0);
-    for (auto p : root.data().ht_) {
+    for (auto p : data.ht_) {
       const auto *cell = p.second;
       if (cell->IsLeaf()) {
         hist[cell->depth()]++;
       }
     }
 
-#ifdef TAPAS_DEBUG
     BarrierExec([&](int, int) {
         std::cout << "Depth histogram" << std::endl;
         for (int i = 0; i <= d; i++) {
           std::cout << i << " " << hist[i] << std::endl;
         }
       });
-#endif
+  }
+
+  /**
+   * \brief Traverse hypothetical global tree and construct a cell list.
+   */
+  template<class UserFunct>
+  static void DoTraverse(UserFunct f, CellType &root,
+                         KeySet &req_keys_attr, KeySet &req_keys_body) {
+    double beg = MPI_Wtime();
+    
+    req_keys_attr.clear(); // cells of which attributes are to be transfered from remotes to local
+    req_keys_body.clear(); // cells of which bodies are to be transfered from remotes to local
     
     // Construct request lists of necessary cells
     req_keys_attr.insert(root.key());
@@ -741,29 +731,32 @@ struct LET {
     Traverse(f, root.key(), root.key(), root.data(), req_keys_attr, req_keys_body);
 #endif
 
-    //MPI_Finalize();
-    //exit(0);
+    double end = MPI_Wtime();
+    root.data().time_let_traverse = end - beg;
+  }
 
-#ifdef TAPAS_MEASURE
-    end_trv = MPI_Wtime();
-#endif
+  /**
+   * \brief Send request to remote processes
+   */
+  static void Request(Data &data,
+                      KeySet &req_keys_attr, KeySet &req_keys_body,
+                      std::vector<KeyType> &keys_attr_recv,
+                      std::vector<KeyType> &keys_body_recv,
+                      std::vector<int> &attr_src,
+                      std::vector<int> &body_src) {
+    double beg = MPI_Wtime();
+    
+    const auto &ht = data.ht_;
+
+    // return values
+    keys_attr_recv.clear(); // keys of which attributes are requested
+    keys_body_recv.clear(); // keys of which attributes are requested
   
-#ifdef TAPAS_DEBUG
-    BarrierExec([&](int rank, int) {
-        std::cout << "rank " << rank << "  root.local_nb() = "   << root.local_nb() << std::endl;
-        std::cout << "rank " << rank << "  req_keys_attr.size() = " << req_keys_attr.size() << std::endl;
-        std::cout << "rank " << rank << "  req_keys_body.size() = " << req_keys_body.size() << std::endl;
-        std::cout << std::endl;
-      });
-#endif
-  
-    const auto &ht = root.data().ht_;
-    auto &data = root.data();
-  
+    attr_src.clear(); // Process IDs that requested attr_keys_recv[i]
+    body_src.clear(); // Process IDs that requested attr_body_recv[i]
+    
     // Local cells don't need to be transfered.
-    // FIXME: here we calculate difference of sets
-    //   {necessary cells} - {local cells}
-    // in a naive way.
+    // FIXME: here we calculate difference of sets {necessary cells} - {local cells} in a naive way.
     auto orig_req_keys_attr = req_keys_attr;
     req_keys_attr.clear();
     for (auto &v : orig_req_keys_attr) {
@@ -805,46 +798,22 @@ struct LET {
 
     // Step 1 : Exchange requests
 
-#ifdef TAPAS_MEASURE
-    beg_req = MPI_Wtime();
-#endif
-
     // vectorized req_keys_attr. A list of cells (keys) that the local process requires.
     // (send buffer)
     std::vector<KeyType> keys_attr_send(req_keys_attr.begin(), req_keys_attr.end());
     std::vector<KeyType> keys_body_send(req_keys_body.begin(), req_keys_body.end());
   
-    // BarrierExec([&](int rank, int) {
-    //     if (rank == 0) {
-    //       std::cout << "data.proc_first_keys = " << std::endl;
-    //       for (int i = 0; i < data.mpi_size_; i++) {
-    //         std::cout << "\t" << i << " : " << SFC::Decode(data.proc_first_keys_[i]) << std::endl;
-    //       }
-    //       std::cout << std::endl;
-    //     }
-    //   });
-
     TAPAS_ASSERT(data.proc_first_keys_.size() == data.mpi_size_);
     
     // Determine the destination process of each cell request
     std::vector<int> attr_dest = Partitioner<TSP>::FindOwnerProcess(data.proc_first_keys_, keys_attr_send);
     std::vector<int> body_dest = Partitioner<TSP>::FindOwnerProcess(data.proc_first_keys_, keys_body_send);
     
-    std::vector<KeyType> keys_attr_recv; // keys of which attributes are requested
-    std::vector<KeyType> keys_body_recv; // keys of which attributes are requested
-  
-    std::vector<int> attr_src; // Process IDs that requested attr_keys_recv[i]
-    std::vector<int> body_src; // Process IDs that requested attr_body_recv[i]
-    
     tapas::mpi::Alltoallv<KeyType>(keys_attr_send, attr_dest,
                                    keys_attr_recv, attr_src, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv<KeyType>(keys_body_send, body_dest,
                                    keys_body_recv, body_src, MPI_COMM_WORLD);
-
-#ifdef TAPAS_MEASURE
-    end_req = MPI_Wtime();
-#endif
-  
+    
 #ifdef TAPAS_DEBUG
     {
       assert(keys_body_recv.size() == body_src.size());
@@ -855,38 +824,50 @@ struct LET {
     }
 #endif
 
-#ifdef TAPAS_MEASURE
-    beg_sel = MPI_Wtime();
+#ifdef TAPAS_DEBUG
+    BarrierExec([&](int rank, int) {
+        std::cout << "rank " << rank << "  req_keys_attr.size() = " << req_keys_attr.size() << std::endl;
+        std::cout << "rank " << rank << "  req_keys_body.size() = " << req_keys_body.size() << std::endl;
+        std::cout << std::endl;
+      });
 #endif
 
+    double end = MPI_Wtime();
+    data.time_let_req = end - beg;
+  }
+  
+
+  /**
+   * \brief Select cells and send response to the requesters.
+   */
+  static void Response(Data &data,
+                       std::vector<KeyType> &req_attr_keys, std::vector<int> &attr_src,
+                       std::vector<KeyType> &req_leaf_keys, std::vector<int> &body_src,
+                       std::vector<CellAttrType> &res_cell_attrs, std::vector<BodyType> &res_bodies, std::vector<index_t> &res_nb){
     // Now create and send responses to the src processes of requests.
     // (note that sender/receiver are reversed.
   
-    Partitioner<TSP>::SelectResponseCells(keys_attr_recv, attr_src,
-                                          keys_body_recv, body_src,
+    Partitioner<TSP>::SelectResponseCells(req_attr_keys, attr_src,
+                                          req_leaf_keys, body_src,
                                           data.ht_);
 
-#ifdef TAPAS_MEASURE
-    end_sel = MPI_Wtime();
-#endif
-  
-#ifdef TAPAS_MEASURE
-    beg_res = MPI_Wtime();
-#endif
-                     
     // swap send/recv buffer (because response is sent to the original requester)
-    keys_attr_recv.swap(keys_attr_send);
-    keys_body_recv.swap(keys_body_send);
-    attr_src.swap(attr_dest);
-    body_src.swap(body_dest);
+    std::vector<KeyType> keys_attr_send = req_attr_keys;
+    std::vector<KeyType> keys_body_send = req_leaf_keys;
+    std::vector<int> attr_dest = attr_src;
+    std::vector<int> body_dest = body_src;
   
     // Prepare data to be transferred
-    std::vector<CellAttrType> attr_send, attr_recv;
+    res_cell_attrs.clear();
+    std::vector<CellAttrType> attr_send;
     Partitioner<TSP>::KeysToAttrs(keys_attr_send, attr_send, data.ht_);
 
-    std::vector<BodyType> body_send, body_recv;
-    std::vector<index_t> nb_send, nb_recv;
+    res_bodies.clear();
+    std::vector<BodyType> body_send;
+    std::vector<index_t> nb_send;
     Partitioner<TSP>::KeysToBodies(keys_body_send, nb_send, body_send, data.ht_);
+
+    res_nb.clear();
 
 #ifdef TAPAS_DEBUG
     for (size_t i = 0; i < attr_send.size(); i++) {
@@ -900,25 +881,54 @@ struct LET {
 #endif
   
     // Send response keys and attributes
-    tapas::mpi::Alltoallv(keys_attr_send, attr_dest, keys_attr_recv, attr_src, MPI_COMM_WORLD);
-    tapas::mpi::Alltoallv(attr_send, attr_dest, attr_recv, attr_src, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv(keys_attr_send, attr_dest, req_attr_keys, attr_src, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv(attr_send, attr_dest, res_cell_attrs, attr_src, MPI_COMM_WORLD);
   
     // Send response keys and bodies
-    tapas::mpi::Alltoallv(keys_body_send, body_dest, keys_body_recv, body_src, MPI_COMM_WORLD);
-    tapas::mpi::Alltoallv(nb_send,        body_dest, nb_recv,        body_src, MPI_COMM_WORLD);
-    tapas::mpi::Alltoallv(body_send,      body_dest, body_recv,      body_src, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv(keys_body_send, body_dest, req_leaf_keys, body_src, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv(nb_send,        body_dest, res_nb,        body_src, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv(body_send,      body_dest, res_bodies,    body_src, MPI_COMM_WORLD);
 
-#ifdef TAPAS_MEASURE
-    end_res = MPI_Wtime();
-#endif
     // TODO: send body attributes
 
-#ifdef TAPAS_MEASURE
-    beg_reg = MPI_Wtime();
+    data.let_bodies_ = res_bodies;
+  }
+  
+  /**
+   * \brief Build Locally essential tree
+   */
+  template<class UserFunct>
+  static void Exchange(UserFunct f, CellType &root) {
+    double beg = MPI_Wtime();
+    
+#ifdef TAPAS_DEBUG
+    ShowHistogram(root.data());
 #endif
   
-    data.let_bodies_ = body_recv;
+    // Traverse
+    KeySet req_cell_attr_keys; // cells of which attributes are to be transfered from remotes to local
+    KeySet req_leaf_keys; // cells of which bodies are to be transfered from remotes to local
+    
+    DoTraverse(f, root, req_cell_attr_keys, req_leaf_keys);
+    
+    std::vector<KeyType> keys_attr_recv; // keys of which attributes are requested
+    std::vector<KeyType> keys_body_recv; // keys of which attributes are requested
   
+    std::vector<int> attr_src; // Process IDs that requested attr_keys_recv[i] (output from Request())
+    std::vector<int> body_src; // Process IDs that requested attr_body_recv[i] (output from Request())
+    
+    // Request
+    Request(root.data(), req_cell_attr_keys, req_leaf_keys,
+            keys_attr_recv, keys_body_recv, attr_src, body_src);
+
+    // Response
+    std::vector<CellAttrType> res_cell_attrs;
+    std::vector<BodyType> res_bodies;
+    std::vector<index_t> res_nb; // number of bodies responded from remote processes
+    Response(root.data(), keys_attr_recv, attr_src, keys_body_recv, body_src, res_cell_attrs, res_bodies, res_nb);
+
+    auto &data = root.data();
+    
     // Register received LET cells to local ht_let_ hash table.
     for (size_t i = 0; i < keys_attr_recv.size(); i++) {
       KeyType k = keys_attr_recv[i];
@@ -927,10 +937,10 @@ struct LET {
 #if TAPAS_DEBUG
       Stderr e("recv_attr");
       e.out() << "k = " << k << ", attr = ["
-              << attr_recv[i].x << ", "
-              << attr_recv[i].y << ", "
-              << attr_recv[i].z << ", "
-              << attr_recv[i].w << "]" << std::endl;
+              << res_cell_attrs[i].x << ", "
+              << res_cell_attrs[i].y << ", "
+              << res_cell_attrs[i].z << ", "
+              << res_cell_attrs[i].w << "]" << std::endl;
 #endif
 
       Cell<TSP> *c = nullptr;
@@ -940,7 +950,7 @@ struct LET {
       } else {
         c = Cell<TSP>::CreateRemoteCell(k, 0, root.data_);
       }
-      c->attr() = attr_recv[i];
+      c->attr() = res_cell_attrs[i];
       c->is_leaf_ = false;
       c->nb_ = 0;
       data.ht_let_[k] = c;
@@ -948,7 +958,7 @@ struct LET {
 
     for (size_t i = 0; i < keys_body_recv.size(); i++) {
       KeyType k = keys_body_recv[i];
-      index_t nb = nb_recv[i];
+      index_t nb = res_nb[i];
       Cell<TSP> *c = nullptr;
 
       if (data.ht_let_.count(k) > 0) {
@@ -967,15 +977,11 @@ struct LET {
       
       c->nb_ = nb;
       if (nb > 0) {
-        c->remote_bodies_.assign(body_recv.begin() + i, body_recv.begin() + i + 1);
+        c->remote_bodies_.assign(res_bodies.begin() + i, res_bodies.begin() + i + 1);
       } else {
         c->remote_bodies_.clear();
       }
     }
-  
-#ifdef TAPAS_MEASURE
-    end_reg = MPI_Wtime();
-#endif
   
 #ifdef TAPAS_DEBUG
     // Debug
@@ -1002,18 +1008,10 @@ struct LET {
     }
 #endif
 
-#ifdef TAPAS_MEASURE
-    end_all = MPI_Wtime();
-    BarrierExec( [=](int rank, int) {
-        std::cout << "time " << rank << " ExchangeLET/All "         << (end_all - beg_all) << std::endl;
-        std::cout << "time " << rank << " ExchangeLET/Traverse "    << (end_trv - beg_trv) << std::endl;
-        std::cout << "time " << rank << " ExchangeLET/Request "     << (end_req - beg_req) << std::endl;
-        std::cout << "time " << rank << " ExchangeLET/Select "      << (end_sel - beg_sel) << std::endl;
-        std::cout << "time " << rank << " ExchangeLET/Response "    << (end_res - beg_res) << std::endl;
-        std::cout << "time " << rank << " ExchangeLET/Register "    << (end_reg - beg_reg) << std::endl;
-      });
-#endif
+    double end = MPI_Wtime();
+    root.data().time_let_all = end - beg;
   }
+
 };
 
 } // namespace hot
