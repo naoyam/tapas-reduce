@@ -271,7 +271,7 @@ class Cell: public tapas::BasicCell<TSP> {
 
   static Cell *CreateRemoteCell(KeyType k, int nb, std::shared_ptr<Data> data) {
     auto reg = CalcRegion(k, data->region_);
-
+    
     Cell *c = new Cell(reg, 0, 0);
     c->key_ = k;
     c->is_leaf_ = false;

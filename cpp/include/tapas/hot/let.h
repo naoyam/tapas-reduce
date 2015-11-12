@@ -896,7 +896,76 @@ struct LET {
     double end = MPI_Wtime();
     data.time_let_response = end - beg;
   }
-  
+
+  /**
+   * \breif Register response cells to local LET hash table
+   */
+  static void Register(std::shared_ptr<Data> data,
+                       const std::vector<KeyType> &res_cell_attr_keys,
+                       const std::vector<CellAttrType> &res_cell_attrs,
+                       const std::vector<KeyType> &res_leaf_keys,
+                       const std::vector<BodyType> &res_bodies,
+                       const std::vector<index_t> &res_nb) {
+    double beg = MPI_Wtime();
+    
+    // received LET cells to local ht_let_ hash table.
+    for (size_t i = 0; i < res_cell_attr_keys.size(); i++) {
+      KeyType k = res_cell_attr_keys[i];
+      TAPAS_ASSERT(data->ht_.count(k) == 0); // Received cell must not exit in local hash.
+
+#if TAPAS_DEBUG
+      Stderr e("recv_attr");
+      e.out() << "k = " << k << ", attr = ["
+              << res_cell_attrs[i].x << ", "
+              << res_cell_attrs[i].y << ", "
+              << res_cell_attrs[i].z << ", "
+              << res_cell_attrs[i].w << "]" << std::endl;
+#endif
+
+      Cell<TSP> *c = nullptr;
+
+      if (data->ht_gtree_.count(k) > 0) {
+        c = data->ht_gtree_.at(k);
+      } else {
+        c = Cell<TSP>::CreateRemoteCell(k, 0, data);
+      }
+      c->attr() = res_cell_attrs[i];
+      c->is_leaf_ = false;
+      c->nb_ = 0;
+      data->ht_let_[k] = c;
+    }
+
+    for (size_t i = 0; i < res_leaf_keys.size(); i++) {
+      KeyType k = res_leaf_keys[i];
+      index_t nb = res_nb[i];
+      Cell<TSP> *c = nullptr;
+
+      if (data->ht_let_.count(k) > 0) {
+        // If the cell is already registered to ht_let_, the cell has attributes but not body info.
+        c = data->ht_let_.at(k);
+      } else if (data->ht_gtree_.count(k) > 0) {
+        c = data->ht_gtree_.at(k);
+      } else {
+        c = Cell<TSP>::CreateRemoteCell(k, 1, data);
+        data->ht_let_[k] = c;
+      }
+
+      c->is_leaf_ = true;
+    
+      TAPAS_ASSERT(nb == 1 || nb == 0); // restriction of Tapas
+      
+      c->nb_ = nb;
+      if (nb > 0) {
+        c->remote_bodies_.assign(res_bodies.begin() + i, res_bodies.begin() + i + 1);
+      } else {
+        c->remote_bodies_.clear();
+      }
+    }
+
+    double end = MPI_Wtime();
+    data->time_let_register = end - beg;
+  }
+
   /**
    * \brief Build Locally essential tree
    */
@@ -914,78 +983,34 @@ struct LET {
     
     DoTraverse(f, root, req_cell_attr_keys, req_leaf_keys);
     
-    std::vector<KeyType> keys_attr_recv; // keys of which attributes are requested
-    std::vector<KeyType> keys_body_recv; // keys of which attributes are requested
+    std::vector<KeyType> res_cell_attr_keys; // cell keys of which attributes are requested
+    std::vector<KeyType> res_leaf_keys; // leaf cell keys of which bodies are requested
   
     std::vector<int> attr_src; // Process IDs that requested attr_keys_recv[i] (output from Request())
     std::vector<int> body_src; // Process IDs that requested attr_body_recv[i] (output from Request())
     
     // Request
     Request(root.data(), req_cell_attr_keys, req_leaf_keys,
-            keys_attr_recv, keys_body_recv, attr_src, body_src);
+            res_cell_attr_keys, res_leaf_keys, attr_src, body_src);
 
     // Response
     std::vector<CellAttrType> res_cell_attrs;
     std::vector<BodyType> res_bodies;
     std::vector<index_t> res_nb; // number of bodies responded from remote processes
-    Response(root.data(), keys_attr_recv, attr_src, keys_body_recv, body_src, res_cell_attrs, res_bodies, res_nb);
+    Response(root.data(), res_cell_attr_keys, attr_src, res_leaf_keys, body_src, res_cell_attrs, res_bodies, res_nb);
 
-    auto &data = root.data();
-    
-    // Register received LET cells to local ht_let_ hash table.
-    for (size_t i = 0; i < keys_attr_recv.size(); i++) {
-      KeyType k = keys_attr_recv[i];
-      TAPAS_ASSERT(data.ht_.count(k) == 0); // Received cell must not exit in local hash.
-
-#if TAPAS_DEBUG
-      Stderr e("recv_attr");
-      e.out() << "k = " << k << ", attr = ["
-              << res_cell_attrs[i].x << ", "
-              << res_cell_attrs[i].y << ", "
-              << res_cell_attrs[i].z << ", "
-              << res_cell_attrs[i].w << "]" << std::endl;
+    // Register
+    Register(root.data_, res_cell_attr_keys, res_cell_attrs, res_leaf_keys, res_bodies, res_nb);
+  
+#ifdef TAPAS_DEBUG
+    DebugDumpCells(root.data());
 #endif
 
-      Cell<TSP> *c = nullptr;
+    double end = MPI_Wtime();
+    root.data().time_let_all = end - beg;
+  }
 
-      if (data.ht_gtree_.count(k) > 0) {
-        c = data.ht_gtree_.at(k);
-      } else {
-        c = Cell<TSP>::CreateRemoteCell(k, 0, root.data_);
-      }
-      c->attr() = res_cell_attrs[i];
-      c->is_leaf_ = false;
-      c->nb_ = 0;
-      data.ht_let_[k] = c;
-    }
-
-    for (size_t i = 0; i < keys_body_recv.size(); i++) {
-      KeyType k = keys_body_recv[i];
-      index_t nb = res_nb[i];
-      Cell<TSP> *c = nullptr;
-
-      if (data.ht_let_.count(k) > 0) {
-        // If the cell is already registered to ht_let_, the cell has attributes but not body info.
-        c = data.ht_let_.at(k);
-      } else if (data.ht_gtree_.count(k) > 0) {
-        c = data.ht_gtree_.at(k);
-      } else {
-        c = Cell<TSP>::CreateRemoteCell(k, 1, root.data_);
-        data.ht_let_[k] = c;
-      }
-
-      c->is_leaf_ = true;
-    
-      TAPAS_ASSERT(nb == 1 || nb == 0); // restriction of Tapas
-      
-      c->nb_ = nb;
-      if (nb > 0) {
-        c->remote_bodies_.assign(res_bodies.begin() + i, res_bodies.begin() + i + 1);
-      } else {
-        c->remote_bodies_.clear();
-      }
-    }
-  
+  static void DebugDumpCells(Data &data) {
 #ifdef TAPAS_DEBUG
     // Debug
     // Dump all received cells to a file
@@ -1010,9 +1035,6 @@ struct LET {
       }
     }
 #endif
-
-    double end = MPI_Wtime();
-    root.data().time_let_all = end - beg;
   }
 };
 
