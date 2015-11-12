@@ -844,8 +844,9 @@ struct LET {
                        std::vector<KeyType> &req_attr_keys, std::vector<int> &attr_src,
                        std::vector<KeyType> &req_leaf_keys, std::vector<int> &body_src,
                        std::vector<CellAttrType> &res_cell_attrs, std::vector<BodyType> &res_bodies, std::vector<index_t> &res_nb){
-    // Now create and send responses to the src processes of requests.
-    // (note that sender/receiver are reversed.
+    double beg = MPI_Wtime();
+    
+    // Create and send responses to the src processes of requests.
   
     Partitioner<TSP>::SelectResponseCells(req_attr_keys, attr_src,
                                           req_leaf_keys, body_src,
@@ -892,6 +893,8 @@ struct LET {
     // TODO: send body attributes
 
     data.let_bodies_ = res_bodies;
+    double end = MPI_Wtime();
+    data.time_let_response = end - beg;
   }
   
   /**
@@ -1011,22 +1014,9 @@ struct LET {
     double end = MPI_Wtime();
     root.data().time_let_all = end - beg;
   }
-
 };
 
 } // namespace hot
-
-namespace iterator {
-
-// BodyIteratorの特殊化無しで、なんとか可能にならないか？
-// operator-> : returns const BodyType *
-// attr() : ProxyBodyAttr()
-// Map側で、Cell::BodyIteratorと呼び出すようにしないと駄目なのでは？
-
-} // namespace iterator
-
-// Overload tapas::Map to ignore Map of product(ProxyCell::subcells, ProxyCell)
-
 } // namespace tapas
 
 #endif // __TAPAS_HOT_LET__

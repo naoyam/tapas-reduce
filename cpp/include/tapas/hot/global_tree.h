@@ -38,6 +38,8 @@ class GlobalTree {
    * 3. Build global tree locally
    */
   static void Build(Data &data) {
+    double beg = MPI_Wtime();
+    
     HashTable &ltree = data.ht_;       // hash table for the local tree
     HashTable &gtree = data.ht_gtree_; // hash table for the global tree
     KeySet &gleaves = data.gleaves_;
@@ -52,6 +54,9 @@ class GlobalTree {
 
     // Glow the global tree locally in each process
     GrowGlobalTree(gleaves, data.ht_, data.ht_gtree_);
+
+    double end = MPI_Wtime();
+    data.time_tree_growglobal = end - beg;
   }
 
   /**

@@ -122,8 +122,7 @@ struct ComputeForce {
     real_t invR = 1.0 / std::sqrt(R2);
     real_t invR3 = invR * invR * invR;
 
-    // コンストラクタは消せない？
-    auto tmp = p1.attr();  // const ProxyBodyAttrType &BodyIterator::attr() const; 場合によってはキャスト演算子
+    auto tmp = p1.attr();  // const ProxyBodyAttrType &BodyIterator::attr() const;
     tmp.x += dx * invR3 * approx.w;
     tmp.y += dy * invR3 * approx.w;
     tmp.z += dz * invR3 * approx.w;
@@ -213,6 +212,8 @@ f4vec calc(f4vec &source) {
   int nb = root->local_nb();
   f4vec out(&root->local_body_attr(0), &root->local_body_attr(0) + nb);
   source = f4vec(&root->local_body(0), &root->local_body(0) + nb);
+
+  root->Report();
 
   return out;
 }
@@ -351,12 +352,7 @@ int main(int argc, char **argv) {
   // NOTE: Total number of particles is N * size (weak scaling)
   assert(N_total % mpi_size == 0);
   int N = N_total / mpi_size;
-  OPS = 20. * N_total * N_total * 1e-9;  
-
-  tapas::debug::BarrierExec([=](int rank, int) {
-      std::cout << "time " << rank << " n_total " << N_total << std::endl;
-      std::cout << "time " << rank << " n_per_proc " << (N_total / mpi_size) << std::endl;
-    });
+  OPS = 20. * N_total * N_total * 1e-9;
 
   f4vec sourceHost(N);
 
@@ -388,6 +384,7 @@ int main(int argc, char **argv) {
   double tic = get_time();
   f4vec targetTapas = calc(sourceHost);
   double toc = get_time();
+  
   tapas::debug::BarrierExec([=](int rank, int) {
       std::cout << "time " << rank << " total_calc "   << std::scientific << toc-tic << " s" << std::endl;
       std::cout << "time " << rank << " total_gflops " << std::scientific << OPS / (toc-tic) << " GFlops" << std::endl;
@@ -396,7 +393,7 @@ int main(int argc, char **argv) {
   CheckResult(std::min(100, N), sourceHost, targetTapas);
   
   // DEALLOCATE
-  
+
 #ifdef USE_MPI
   MPI_Finalize();
 #endif

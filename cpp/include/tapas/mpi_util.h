@@ -282,12 +282,36 @@ void Alltoallv(std::vector<T>& send_buf, std::vector<int>& dest,
 }
 
 template<class T>
+void Gather(const T& val, std::vector<T> &recvbuf, int root, MPI_Comm comm) {
+  int size = -1;
+  int rank = -1;
+
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &size);
+
+  auto type = MPI_DatatypeTraits<T>::type();
+  int count = MPI_DatatypeTraits<T>::count(1);
+  
+  if (rank == root) {
+    recvbuf.clear();
+    recvbuf.resize(size);
+  } else {
+    recvbuf.clear();
+  }
+  
+  int ret = ::MPI_Gather(reinterpret_cast<const void*>(&val), count, type,
+                         reinterpret_cast<void*>(&recvbuf[0]), count, type, root, comm);
+  
+  TAPAS_ASSERT(ret == MPI_SUCCESS); (void)ret;
+}
+
+template<class T>
 void Gather(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, int root, MPI_Comm comm) {
   int size = -1;
   int rank = -1;
 
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &size);
 
   auto type = MPI_DatatypeTraits<T>::type();
   int count = MPI_DatatypeTraits<T>::count(sendbuf.size());
@@ -309,8 +333,8 @@ template<class T>
 void Allgatherv(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, MPI_Comm comm) {
   int size = -1, rank = -1;
 
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &size);
           
   int count = sendbuf.size();
   std::vector<int> recvcounts(size);

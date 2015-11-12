@@ -189,6 +189,9 @@ class Cell: public tapas::BasicCell<TSP> {
   int depth() const {
     return SFC::GetDepth(key_);
   }
+
+  void Report() const {
+  }
   
  protected:
     HashTable *ht() { return ht_; }

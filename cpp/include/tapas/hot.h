@@ -43,6 +43,7 @@
 #include "tapas/hot/buildtree.h"
 #include "tapas/hot/global_tree.h"
 #include "tapas/hot/let.h"
+#include "tapas/hot/report.h"
 
 #define DEBUG_SENDRECV
 
@@ -408,6 +409,8 @@ class Cell: public tapas::BasicCell<TSP> {
 
   static Region<TSP>  CalcRegion(KeyType, const Region<TSP>& r);
   static tapas::Vec<Dim, FP> CalcCenter(KeyType, const Region<TSP>& r);
+
+  void Report() const { tapas::hot::Report<Data>(*data_); }
   
 #ifdef DEPRECATED
   typename TSP::BT_ATTR *particle_attrs() const {
@@ -1135,17 +1138,17 @@ class Partitioner {
    * If attribute of a cell is requested but the cell is actually a leaf, 
    * both of the attribut and body must be sent.
    */
-  static void SelectResponseCells(std::vector<KeyType> &attr_keys, std::vector<int> &attr_src_pids,
-                                  std::vector<KeyType> &body_keys, std::vector<int> &body_src_pids,
+  static void SelectResponseCells(std::vector<KeyType> &cell_attr_keys, std::vector<int> &attr_src_pids,
+                                  std::vector<KeyType> &leaf_keys, std::vector<int> &leaf_src_pids,
                                   const HT& hash) {
     std::set<std::pair<int, KeyType>> res_attr; // keys (and their destinations) of which attributes will be sent as response.
     std::set<std::pair<int, KeyType>> res_body; // keys (and their destinations) of which bodies will be sent as response.
 
-    TAPAS_ASSERT(attr_keys.size() == attr_src_pids.size());
-    TAPAS_ASSERT(body_keys.size() == body_src_pids.size());
+    TAPAS_ASSERT(cell_attr_keys.size() == attr_src_pids.size());
+    TAPAS_ASSERT(leaf_keys.size() == leaf_src_pids.size());
 
-    for (size_t i = 0; i < attr_keys.size(); i++) {
-      KeyType k = attr_keys[i];
+    for (size_t i = 0; i < cell_attr_keys.size(); i++) {
+      KeyType k = cell_attr_keys[i];
       int src_pid = attr_src_pids[i]; // PID of the process that requested k.
 
       while(hash.count(k) == 0) {
@@ -1166,9 +1169,9 @@ class Partitioner {
       }
     }
         
-    for (size_t i = 0; i < body_keys.size(); i++) {
-      KeyType k = body_keys[i];
-      int src_pid = body_src_pids[i];
+    for (size_t i = 0; i < leaf_keys.size(); i++) {
+      KeyType k = leaf_keys[i];
+      int src_pid = leaf_src_pids[i];
 
       while(hash.count(k) == 0) {
         k = SFC::Parent(k);
@@ -1189,23 +1192,23 @@ class Partitioner {
 #endif
 
     // Set values to the vectors
-    attr_keys.resize(res_attr.size());
+    cell_attr_keys.resize(res_attr.size());
     attr_src_pids.resize(res_attr.size());
 
     int idx = 0;
     for (auto & iter : res_attr) {
       attr_src_pids[idx] = iter.first;
-      attr_keys[idx] = iter.second;
+      cell_attr_keys[idx] = iter.second;
       idx++;
     }
 
-    body_keys.resize(res_body.size());
-    body_src_pids.resize(res_body.size());
+    leaf_keys.resize(res_body.size());
+    leaf_src_pids.resize(res_body.size());
 
     idx = 0;
     for (auto & iter : res_body) {
-      body_src_pids[idx] = iter.first;
-      body_keys[idx] = iter.second;
+      leaf_src_pids[idx] = iter.first;
+      leaf_keys[idx] = iter.second;
 
       idx++;
     }

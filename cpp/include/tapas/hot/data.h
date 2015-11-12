@@ -61,7 +61,14 @@ struct HotData {
   
   std::vector<KeyType> proc_first_keys_; //!< first SFC key of each process
 
-  // time measurements of the local process
+  // log and time measurements (mainly of the local process)
+  double sampling_rate; // sampling rate of tree construction
+  index_t nb_total;  // total number of bodies.
+  index_t nb_before; // local bodies before tree construction (given by the user)
+  index_t nb_after;  // local bodies after tree construction  (actuall)
+  index_t nleaves;   // number of leaves assigned to the local process
+  index_t ncells;    // number of cells (note: some non-leaf cells are shared between processes)
+  
   double time_tree_all;
   double time_tree_sample;     // Tree construction / sampling phase
   double time_tree_exchange;   // Tree construction / body exchange
@@ -71,7 +78,6 @@ struct HotData {
   double time_let_all;      // ExchangeLET/All
   double time_let_traverse; // ExchangeLET/Traverse
   double time_let_req;      // ExchangeLET/Request
-  double time_let_select;   // ExchangeLET/Select
   double time_let_response; // ExchangeLET/Response
   double time_let_register; // ExchangeLET/register
   

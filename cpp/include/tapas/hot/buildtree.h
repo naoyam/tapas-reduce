@@ -164,6 +164,10 @@ class SamplingOctree {
     const double R = SamplingRate();
     double beg = MPI_Wtime();
 
+    
+
+    data_->sampling_rate = R;
+
     // todo:
     // record R
 
@@ -207,6 +211,8 @@ class SamplingOctree {
   void Exchange() {
     double beg = MPI_Wtime();
     
+    data_->nb_before = bodies_.size();
+
     // Exchange bodies according to proc_first_keys_
     // new_bodies is the received bodies
     bodies_ = ExchangeBodies(bodies_, proc_first_keys_, region_, MPI_COMM_WORLD);
@@ -222,6 +228,8 @@ class SamplingOctree {
     data_->local_body_attrs_.resize(bodies_.size());
     bzero(data_->local_body_attrs_.data(), sizeof(BodyAttrType) * bodies_.size());
 
+    data_->nb_after = data_->local_bodies_.size();
+    
     double end = MPI_Wtime();
     data_->time_tree_exchange = end - beg;
   }
@@ -253,6 +261,10 @@ class SamplingOctree {
       MPI_Finalize();
       exit(-1);
     }
+
+    data_->nleaves = data_->leaf_keys_.size();
+    data_->ncells = data_->ht_.size();
+    
     double end = MPI_Wtime();
     data_->time_tree_all = end - beg;
   }
