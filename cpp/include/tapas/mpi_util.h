@@ -182,6 +182,11 @@ void Allreduce(const std::vector<T>& sendbuf, std::vector<T> &recvbuf,
 }
 
 template<typename T>
+void Allreduce(T sendval, T &recvval, MPI_Op op, MPI_Comm comm) {
+  Allreduce(&sendval, &recvval, 1, op, comm);
+}
+
+template<typename T>
 void Alltoall(const T *sendbuf, T *recvbuf, int count, MPI_Comm comm) {
   const auto kType = MPI_DatatypeTraits<T>::type();
   int size = MPI_DatatypeTraits<T>::IsEmbType() ? count : count * sizeof(T);

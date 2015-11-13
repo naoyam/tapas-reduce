@@ -238,9 +238,11 @@ void setRandSeed() {
 void parseOption(int *argc, char ***argv) {
   int result;
   int mpi_size = 1;
+  int mpi_rank = 0;
 
 #ifdef USE_MPI
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 #endif
   
   while((result = getopt(*argc, *argv, "s:w:")) != -1) {
@@ -251,14 +253,19 @@ void parseOption(int *argc, char ***argv) {
       case 's':
         N_total = atoi(optarg);
         break;
-      case '?':
-        std::cerr << "Usage:"
-                  << "   $ " << (*argv)[0] << " -w N_per_proc -s N_total" << std::endl;
+      case '?': 
+        if (mpi_rank == 0) {
+          std::cerr << "Usage:"
+                    << "   $ " << (*argv)[0] << " -w N_per_proc -s N_total" << std::endl;
+        }
+#ifdef USE_MPI
+        MPI_Finalize();
+#endif
         exit(0);
         break;
     }
   }
-
+  
   *argc = optind;
 }
 

@@ -37,8 +37,9 @@ struct HotData {
   
   int mpi_rank_;
   int mpi_size_;
+  //MPI_Comm mpi_comm_;
   int max_depth_; //!< Actual maximum depth of the tree
-
+  
   std::vector<KeyType> leaf_keys_; //!< SFC keys of (all) leaves
   std::vector<index_t> leaf_nb_;   //!< Number of bodies in each leaf cell
   std::vector<int>     leaf_owners_; //!< Owner process of leaf[i]

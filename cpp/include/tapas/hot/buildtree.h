@@ -164,8 +164,6 @@ class SamplingOctree {
     const double R = SamplingRate();
     double beg = MPI_Wtime();
 
-    
-
     data_->sampling_rate = R;
 
     // todo:
@@ -239,6 +237,10 @@ class SamplingOctree {
    */
   void Build() {
     double beg = MPI_Wtime();
+
+    index_t nb_total = 0;
+    tapas::mpi::Allreduce((index_t)bodies_.size(), nb_total, MPI_SUM, MPI_COMM_WORLD);
+    data_->nb_total = nb_total;
     
     Sample();
       
