@@ -1,13 +1,20 @@
 #ifndef TAPAS_COMMON_H_
 #define TAPAS_COMMON_H_
 
-#if defined(__GNUG__) && !defined(__llvm__)
-# define GCC_VERSION (__GNUC__ * 10000              \
+#if defined(__clang__)
+/* Clang/LLVM. ---------------------------------------------- */
+
+#elif defined(__ICC) || defined(__INTEL_COMPILER)
+/* Intel ICC/ICPC. ------------------------------------------ */
+
+#elif defined(__GNUC__) || defined(__GNUG__)
+/* GNU GCC/G++. --------------------------------------------- */
+#  define GCC_VERSION (__GNUC__ * 10000             \
                       + __GNUC_MINOR__ * 100        \
                       + __GNUC_PATCHLEVEL__)
-# if GCC_VERSION < 40801
-#  error "Tapas requires gcc/g++ >= 4.8.1"
-# endif
+#  if GCC_VERSION < 40801
+#    error "Tapas requires gcc/g++ >= 4.8.1"
+#  endif
 #endif
 
 #if __cplusplus >= 201402L   // C++14
