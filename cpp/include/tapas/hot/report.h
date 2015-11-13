@@ -43,12 +43,12 @@ void Report(const Data &data, std::ostream &os = std::cout) {
     tapas::mpi::Gather(hostname, buf, 0, comm);
 
     if (rank == 0) {
-      os << "// begin hostnames" << std::endl;
+      os << "---- begin hostnames" << std::endl;
       os << "rank hostname" << std::endl;
       for (size_t i = 0; i < size; i++) {
         os << i << "\t" << buf[i].value << std::endl;
       }
-      os << "// end hostnames" << std::endl;
+      os << "--- end hostnames" << std::endl;
       os << std::endl;
     }
   }
@@ -68,7 +68,7 @@ void Report(const Data &data, std::ostream &os = std::cout) {
 
   if (rank == 0) {
     os << std::endl;
-    os << "---- load balancing" << std::endl;
+    os << "---- begin load balancing" << std::endl;
     os << std::setw(5) << std::right << "rank"
        << std::setw(W) << std::right << "nb_before"
        << std::setw(W) << std::right << "nb_after"
@@ -83,7 +83,7 @@ void Report(const Data &data, std::ostream &os = std::cout) {
          << std::setw(W) << std::right << ncells[i]
          << std::endl;
     }
-    os << "---- load balancing" << std::endl;
+    os << "---- end load balancing" << std::endl;
     os << std::endl;
   }
 
@@ -96,7 +96,7 @@ void Report(const Data &data, std::ostream &os = std::cout) {
 
   if (rank == 0) {
     os << std::endl;
-    os << "---- tree construction" << std::endl;
+    os << "---- begin tree construction" << std::endl;
     os << std::setw(5) << std::scientific << std::right << "rank"
        << std::setw(WS) << std::scientific << std::right << "all"
        << std::setw(WS) << std::scientific << std::right << "sample"
@@ -113,7 +113,7 @@ void Report(const Data &data, std::ostream &os = std::cout) {
          << std::setw(WS) << std::scientific << std::right << tree_growglobal[i]
          << std::endl;
     }
-    os << "----- tree construction" << std::endl;
+    os << "----- end tree construction" << std::endl;
     os << std::endl;
   }
 
@@ -126,7 +126,7 @@ void Report(const Data &data, std::ostream &os = std::cout) {
   
   if (rank == 0) {
     os << std::endl;
-    os << "---- LET" << std::endl;
+    os << "---- begin LET" << std::endl;
     os << std::setw(5) << std::scientific << std::right << "rank"
        << std::setw(WS) << std::scientific << std::right << "all"
        << std::setw(WS) << std::scientific << std::right << "Traversal"
@@ -143,7 +143,7 @@ void Report(const Data &data, std::ostream &os = std::cout) {
          << std::setw(WS) << std::scientific << std::right << let_reg[i]
          << std::endl;
     }
-    os << "----- LET" << std::endl;
+    os << "----- end LET" << std::endl;
     os << std::endl;
   }
 
