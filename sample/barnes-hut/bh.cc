@@ -341,18 +341,22 @@ void CheckResult(int np_check,
 
 int main(int argc, char **argv) {
 #ifdef USE_MPI
-  int provided, required = MPI_THREAD_MULTIPLE;
-  MPI_Init_thread(&argc, &argv, required, &provided);
-  assert(provided >= required);
+  MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 #endif
 
+  if (mpi_rank == 0) {
+    std::cout << "=======================================================" << std::endl;
+    std::cout << "               Tapas Barnes-Hut sample app             " << std::endl;
+    std::cout << "=======================================================" << std::endl;
+  }
+    
   // print time and environment
   parseOption(&argc, &argv);
 
   if (N_total <= 0) {
-    std::cerr << "Error: particle number is not specified." << std::endl;
+    std::cerr << "Error: particle number is invalid or not specified." << std::endl;
     exit(-1);
   }
   
