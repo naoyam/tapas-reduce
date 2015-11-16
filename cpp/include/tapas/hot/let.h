@@ -839,29 +839,44 @@ struct LET {
 
   /**
    * \brief Select cells and send response to the requesters.
+   * \param data Data structure
+   * \param [in,out] req_attr_keys Vector of SFC keys of cells of which attributes are sent in response
+   * \param [in,out] attr_src      Vector of process ranks which requested req_attr_keys[i]
+   * \param [in,out] req_leaf_keys Vector of SFC keys of leaf cells of which bodies are sent in response
+   * \param [in,out] leaf_src      Vector of process ranks which requested req_leaf_keys[i]
+   * \param [out] res_cell_attrs Vector of cell attributes which are recieved from remote ranks
+   * \param [out] res_bodies     Vector of bodies which are received from remote ranks
+   * \param [out] res_nb         Vector of number of bodies which res_cell_attrs[i] owns.
    */
   static void Response(Data &data,
                        std::vector<KeyType> &req_attr_keys, std::vector<int> &attr_src,
-                       std::vector<KeyType> &req_leaf_keys, std::vector<int> &body_src,
+                       std::vector<KeyType> &req_leaf_keys, std::vector<int> &leaf_src,
                        std::vector<CellAttrType> &res_cell_attrs, std::vector<BodyType> &res_bodies, std::vector<index_t> &res_nb){
     double beg = MPI_Wtime();
+
+    // req_attr_keys : list of cell keys of which cell attributes are requested
+    // req_leaf_keys : list of cell keys of which bodies are requested
+    // attr_src      : source process ranks of req_attr_keys (which are response target ranks)
+    // leaf_src      : source process ranks of req_leaf_keys (which are response target ranks)
+
     
     // Create and send responses to the src processes of requests.
   
     Partitioner<TSP>::SelectResponseCells(req_attr_keys, attr_src,
-                                          req_leaf_keys, body_src,
+                                          req_leaf_keys, leaf_src,
                                           data.ht_);
 
-    // swap send/recv buffer (because response is sent to the original requester)
-    std::vector<KeyType> keys_attr_send = req_attr_keys;
-    std::vector<KeyType> keys_body_send = req_leaf_keys;
+    // Prepare cell attributes to send to requester processes
+    std::vector<KeyType> attr_keys_send = req_attr_keys;
     std::vector<int> attr_dest = attr_src;
-    std::vector<int> body_dest = body_src;
+    res_cell_attrs.clear();
+
+    std::vector<KeyType> keys_body_send = req_leaf_keys;
+    std::vector<int> body_dest = leaf_src;
   
     // Prepare data to be transferred
-    res_cell_attrs.clear();
     std::vector<CellAttrType> attr_send;
-    Partitioner<TSP>::KeysToAttrs(keys_attr_send, attr_send, data.ht_);
+    Partitioner<TSP>::KeysToAttrs(attr_keys_send, attr_send, data.ht_);
 
     res_bodies.clear();
     std::vector<BodyType> body_send;
@@ -873,7 +888,7 @@ struct LET {
 #ifdef TAPAS_DEBUG
     for (size_t i = 0; i < attr_send.size(); i++) {
       Stderr e("send_attr");
-      e.out() << "k = " << keys_attr_send[i] << ", attr = ["
+      e.out() << "k = " << attr_keys_send[i] << ", attr = ["
               << attr_send[i].x << ", "
               << attr_send[i].y << ", "
               << attr_send[i].z << ", "
@@ -882,13 +897,13 @@ struct LET {
 #endif
   
     // Send response keys and attributes
-    tapas::mpi::Alltoallv(keys_attr_send, attr_dest, req_attr_keys, attr_src, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv(attr_keys_send, attr_dest, req_attr_keys, attr_src, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv(attr_send, attr_dest, res_cell_attrs, attr_src, MPI_COMM_WORLD);
   
     // Send response keys and bodies
-    tapas::mpi::Alltoallv(keys_body_send, body_dest, req_leaf_keys, body_src, MPI_COMM_WORLD);
-    tapas::mpi::Alltoallv(nb_send,        body_dest, res_nb,        body_src, MPI_COMM_WORLD);
-    tapas::mpi::Alltoallv(body_send,      body_dest, res_bodies,    body_src, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv(keys_body_send, body_dest, req_leaf_keys, leaf_src, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv(nb_send,        body_dest, res_nb,        leaf_src, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv(body_send,      body_dest, res_bodies,    leaf_src, MPI_COMM_WORLD);
 
     // TODO: send body attributes
 
