@@ -847,6 +847,8 @@ struct LET {
    * \param [out] res_cell_attrs Vector of cell attributes which are recieved from remote ranks
    * \param [out] res_bodies     Vector of bodies which are received from remote ranks
    * \param [out] res_nb         Vector of number of bodies which res_cell_attrs[i] owns.
+   *
+   * \todo Parallelize operations
    */
   static void Response(Data &data,
                        std::vector<KeyType> &req_attr_keys, std::vector<int> &attr_src,
@@ -866,22 +868,48 @@ struct LET {
                                           req_leaf_keys, leaf_src,
                                           data.ht_);
 
-    // Prepare cell attributes to send to requester processes
-    std::vector<KeyType> attr_keys_send = req_attr_keys;
+    const auto &ht = data.ht_;
+
+    // Prepare cell attributes to send to <attr_src> processes
+    std::vector<KeyType> attr_keys_send = req_attr_keys; // copy (split senbuf and recvbuf)
     std::vector<int> attr_dest = attr_src;
     res_cell_attrs.clear();
-
-    std::vector<KeyType> keys_body_send = req_leaf_keys;
-    std::vector<int> body_dest = leaf_src;
-  
-    // Prepare data to be transferred
     std::vector<CellAttrType> attr_send;
     Partitioner<TSP>::KeysToAttrs(attr_keys_send, attr_send, data.ht_);
-
+    
+    // Preapre all bodies to send to <leaf_src> processes
+    // body_destは、いまのままalltoallvに渡すとエラーになる。
+    // TODO: leaf_keys_send と body_dest と一緒にSortByKeysして（すでにされている？）、
+    //       leaf_src を body_dest に書き換える必要がある（ループをまわす）
+    std::vector<KeyType> leaf_keys_send = req_leaf_keys; // copy (split senbuf and recvbuf)
     res_bodies.clear();
-    std::vector<BodyType> body_send;
+    
     std::vector<index_t> nb_send;
-    Partitioner<TSP>::KeysToBodies(keys_body_send, nb_send, body_send, data.ht_);
+    
+    std::vector<BodyType> body_send;
+    std::vector<int> body_dest;
+    //Partitioner<TSP>::KeysToBodies(leaf_keys_send, nb_send, body_send, data.ht_);
+
+    for (size_t i = 0; i < leaf_keys_send.size(); i++) {
+      nb_send[i] = ht.at(leaf_keys_send[i])->nb();
+    }
+
+    index_t nb_total = std::accumulate(nb_send.begin(), nb_send.end(), 0);
+
+    body_send.resize(nb_total);
+    body_dest.resize(nb_total);
+    size_t bi = 0;
+    for (size_t li = 0; li < leaf_keys_send.size(); li++) {
+      const CellType *leaf = ht.at(leaf_keys_send[li]);
+      for (size_t bj = 0; bj < leaf->nb(); bj++) {
+        body_send[bi] = leaf->body(bj);
+        body_dest[bi] = leaf_src[li];
+      }
+    }
+    
+    Stderr e("response");
+    e.out() << "nb_send.size() = " << nb_send.size() << ", " << "body_send.size() = " << body_send.size() << std::endl;
+    e.out() << "sum(nb_send) = " << std::accumulate(nb_send.begin(), nb_send.end(), 0) << std::endl;
 
     res_nb.clear();
 
@@ -895,13 +923,13 @@ struct LET {
               << attr_send[i].w << "]" << std::endl;
     }
 #endif
-  
+    
     // Send response keys and attributes
     tapas::mpi::Alltoallv(attr_keys_send, attr_dest, req_attr_keys, attr_src, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv(attr_send, attr_dest, res_cell_attrs, attr_src, MPI_COMM_WORLD);
   
     // Send response keys and bodies
-    tapas::mpi::Alltoallv(keys_body_send, body_dest, req_leaf_keys, leaf_src, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv(leaf_keys_send, body_dest, req_leaf_keys, leaf_src, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv(nb_send,        body_dest, res_nb,        leaf_src, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv(body_send,      body_dest, res_bodies,    leaf_src, MPI_COMM_WORLD);
 
@@ -914,6 +942,7 @@ struct LET {
 
   /**
    * \breif Register response cells to local LET hash table
+   * \param [in,out] data Data structure (cells are registered to data->ht_lt_)
    */
   static void Register(std::shared_ptr<Data> data,
                        const std::vector<KeyType> &res_cell_attr_keys,
@@ -923,7 +952,7 @@ struct LET {
                        const std::vector<index_t> &res_nb) {
     double beg = MPI_Wtime();
     
-    // received LET cells to local ht_let_ hash table.
+    // Register received LET cells to local ht_let_ hash table.
     for (size_t i = 0; i < res_cell_attr_keys.size(); i++) {
       KeyType k = res_cell_attr_keys[i];
       TAPAS_ASSERT(data->ht_.count(k) == 0); // Received cell must not exit in local hash.
@@ -950,6 +979,8 @@ struct LET {
       data->ht_let_[k] = c;
     }
 
+    // Register received leaf cells to local ht_let_ hash table.
+    index_t body_offset = 0;
     for (size_t i = 0; i < res_leaf_keys.size(); i++) {
       KeyType k = res_leaf_keys[i];
       index_t nb = res_nb[i];
@@ -970,11 +1001,14 @@ struct LET {
       TAPAS_ASSERT(nb == 1 || nb == 0); // restriction of Tapas
       
       c->nb_ = nb;
+      c->bid_ = body_offset;
       if (nb > 0) {
-        c->remote_bodies_.assign(res_bodies.begin() + i, res_bodies.begin() + i + 1);
-      } else {
-        c->remote_bodies_.clear();
+        data->let_bodies_.insert(data->let_bodies_.end(),
+                                 res_bodies.begin() + body_offset,
+                                 res_bodies.begin() + body_offset + nb);
+        data->let_body_attrs_.resize(body_offset + nb);
       }
+      body_offset += nb;
     }
 
     double end = MPI_Wtime();

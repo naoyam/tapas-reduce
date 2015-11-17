@@ -275,11 +275,9 @@ class Cell: public tapas::BasicCell<TSP> {
     Cell *c = new Cell(reg, 0, 0);
     c->key_ = k;
     c->is_leaf_ = false;
-    c->is_local_ = false;
+    c->is_local_ = false; // This cell is 
     c->is_local_subtree_ = false;
     c->nb_ = nb;
-    c->remote_bodies_.clear();
-    c->remote_body_attrs_.resize(nb);
     c->data_ = data;
     bzero(&c->attr_, sizeof(c->attr_));
     
@@ -305,7 +303,7 @@ class Cell: public tapas::BasicCell<TSP> {
   // 1-parameter Map function
   template <class Funct>
   static void Map(Funct f, Cell<TSP> &c);
-
+  
   // 2-argument Map() function
   template<class Funct>
   static void Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2);
@@ -443,8 +441,8 @@ class Cell: public tapas::BasicCell<TSP> {
   
   bool is_local_; //!< if it's a local cell or LET cell.
   bool is_local_subtree_; //!< If all of its descendants are local.
-  std::vector<BodyType> remote_bodies_; //!< LET bodies (if !is_local_)
-  std::vector<BodyAttrType> remote_body_attrs_; //!< LET body attrs (If !is_local_)
+
+  void CheckBodyIndex(index_t idx) const;
 }; // class Cell
 
 template<class T>
@@ -970,15 +968,27 @@ Cell<TSP> &Cell<TSP>::parent() const {
 }
 
 template <class TSP>
-const typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
-  TAPAS_ASSERT(this->IsLeaf() && "Cell::body(...) is not allowed for non-leaf cells.");
+void Cell<TSP>::CheckBodyIndex(index_t idx) const {
+  (void)idx;
   TAPAS_ASSERT(this->nb() >= 0);
   TAPAS_ASSERT((size_t)idx < this->nb());
+  TAPAS_ASSERT(this->IsLeaf() && "body or body attribute access is not allowed for non-leaf cells.");
+
+  if (is_local_) {
+    TAPAS_ASSERT(this->bid() + idx < data_->local_bodies_.size());
+  } else {
+    TAPAS_ASSERT(this->bid() + idx < data_->let_bodies_.size());
+  }
+}
+
+template <class TSP>
+const typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
+  CheckBodyIndex(idx);
   
   if (is_local_) {
     return data_->local_bodies_[this->bid() + idx];
   } else {
-    return remote_bodies_[idx];
+    return data_->let_bodies_[this->bid() + idx];
   }
 }
 
@@ -989,8 +999,8 @@ typename TSP::BT::type &Cell<TSP>::body(index_t idx) {
 
 template <class TSP>
 const typename TSP::BT::type &Cell<TSP>::local_body(index_t idx) const {
-  TAPAS_ASSERT(idx < (index_t)data_->local_bodies_.size());
   TAPAS_ASSERT(this->IsLocal() && "Cell::local_body() can be called only for local cells.");
+  CheckBodyIndex(idx);
   
   return data_->local_bodies_[this->bid() + idx];
 }
@@ -1002,12 +1012,12 @@ typename TSP::BT::type &Cell<TSP>::local_body(index_t idx) {
 
 template <class TSP>
 const typename TSP::BT_ATTR *Cell<TSP>::body_attrs() const {
-  TAPAS_ASSERT(this->IsLeaf() && "Cell::body_attrs(...) is not allowed for non-leaf cells.");
-
+  CheckBodyIndex(0);
+  
   if (is_local_) {
     return data_->local_body_attrs_.data() + this->bid();
   } else {
-    return remote_body_attrs_.data();
+    return data_->let_body_attrs_.data() + this->bid();
   }
 }
 
@@ -1018,14 +1028,12 @@ typename TSP::BT_ATTR *Cell<TSP>::body_attrs() {
 
 template <class TSP>
 const typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) const {
-  TAPAS_ASSERT(this->IsLeaf() && "Cell::body_attr(...) is not allowed for non-leaf cells.");
-  TAPAS_ASSERT(idx < (index_t)this->nb());
+  CheckBodyIndex(idx);
   
   if (is_local_) {
     return this->data_->local_body_attrs_[this->bid() + idx];
   } else {
-    TAPAS_ASSERT((size_t)this->nb() == remote_body_attrs_.size());
-    return remote_body_attrs_[idx];
+    return this->data_->let_body_attrs_[this->bid() + idx];
   }
 }
 
@@ -1230,20 +1238,21 @@ class Partitioner {
                            std::vector<index_t> &nb,
                            std::vector<BodyType> &bodies,
                            const HT& hash) {
-    bodies.resize(keys.size());
     nb.resize(keys.size());
+    bodies.clear();
 
     // In BH, each leaf has 0 or 1 body (while every cell has attribute)
     for (size_t i = 0; i < keys.size(); i++) {
       KeyType k = keys[i];
       auto *c = hash.at(k);
       nb[i] = c->IsLeaf() ? c->nb() : 0;
-      if (nb[i] > 0) {
-        bodies[i] = hash.at(k)->body(0);
+
+      for (size_t bi = 0; bi < nb[i]; bi++) {
+        bodies.push_back(c->body(bi));
       }
     }
   }
-
+  
 }; // class Partitioner
 
 /**
