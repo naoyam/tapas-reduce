@@ -809,10 +809,10 @@ struct LET {
     std::vector<int> attr_dest = Partitioner<TSP>::FindOwnerProcess(data.proc_first_keys_, keys_attr_send);
     std::vector<int> body_dest = Partitioner<TSP>::FindOwnerProcess(data.proc_first_keys_, keys_body_send);
     
-    tapas::mpi::Alltoallv<KeyType>(keys_attr_send, attr_dest,
-                                   keys_attr_recv, attr_src, MPI_COMM_WORLD);
-    tapas::mpi::Alltoallv<KeyType>(keys_body_send, body_dest,
-                                   keys_body_recv, body_src, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv2<KeyType>(keys_attr_send, attr_dest,
+                                    keys_attr_recv, attr_src, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv2<KeyType>(keys_body_send, body_dest,
+                                    keys_body_recv, body_src, MPI_COMM_WORLD);
     
 #ifdef TAPAS_DEBUG
     {
@@ -851,65 +851,84 @@ struct LET {
    * \todo Parallelize operations
    */
   static void Response(Data &data,
-                       std::vector<KeyType> &req_attr_keys, std::vector<int> &attr_src,
-                       std::vector<KeyType> &req_leaf_keys, std::vector<int> &leaf_src,
+                       std::vector<KeyType> &req_attr_keys, std::vector<int> &attr_src_ranks,
+                       std::vector<KeyType> &req_leaf_keys, std::vector<int> &leaf_src_ranks,
                        std::vector<CellAttrType> &res_cell_attrs, std::vector<BodyType> &res_bodies, std::vector<index_t> &res_nb){
     double beg = MPI_Wtime();
 
     // req_attr_keys : list of cell keys of which cell attributes are requested
     // req_leaf_keys : list of cell keys of which bodies are requested
-    // attr_src      : source process ranks of req_attr_keys (which are response target ranks)
-    // leaf_src      : source process ranks of req_leaf_keys (which are response target ranks)
+    // attr_src_ranks      : source process ranks of req_attr_keys (which are response target ranks)
+    // leaf_src_ranks      : source process ranks of req_leaf_keys (which are response target ranks)
 
     
     // Create and send responses to the src processes of requests.
   
-    Partitioner<TSP>::SelectResponseCells(req_attr_keys, attr_src,
-                                          req_leaf_keys, leaf_src,
+    Partitioner<TSP>::SelectResponseCells(req_attr_keys, attr_src_ranks,
+                                          req_leaf_keys, leaf_src_ranks,
                                           data.ht_);
 
     const auto &ht = data.ht_;
 
-    // Prepare cell attributes to send to <attr_src> processes
+    // Prepare cell attributes to send to <attr_src_ranks> processes
     std::vector<KeyType> attr_keys_send = req_attr_keys; // copy (split senbuf and recvbuf)
-    std::vector<int> attr_dest = attr_src;
+    std::vector<int> attr_dest_ranks = attr_src_ranks;
     res_cell_attrs.clear();
     std::vector<CellAttrType> attr_send;
     Partitioner<TSP>::KeysToAttrs(attr_keys_send, attr_send, data.ht_);
     
-    // Preapre all bodies to send to <leaf_src> processes
+    // Preapre all bodies to send to <leaf_src_ranks> processes
     // body_destは、いまのままalltoallvに渡すとエラーになる。
     // TODO: leaf_keys_send と body_dest と一緒にSortByKeysして（すでにされている？）、
-    //       leaf_src を body_dest に書き換える必要がある（ループをまわす）
+    //       leaf_src_ranks を body_dest に書き換える必要がある（ループをまわす）
+    std::vector<int> leaf_dest = leaf_src_ranks;               // copy
     std::vector<KeyType> leaf_keys_send = req_leaf_keys; // copy (split senbuf and recvbuf)
     res_bodies.clear();
     
-    std::vector<index_t> nb_send;
+    std::vector<index_t> nb_send (leaf_keys_send.size());
     
     std::vector<BodyType> body_send;
     std::vector<int> body_dest;
     //Partitioner<TSP>::KeysToBodies(leaf_keys_send, nb_send, body_send, data.ht_);
 
     for (size_t i = 0; i < leaf_keys_send.size(); i++) {
-      nb_send[i] = ht.at(leaf_keys_send[i])->nb();
+      KeyType k = leaf_keys_send[i];
+      CellType *c = ht.at(k);
+      TAPAS_ASSERT(c->IsLeaf());
+      nb_send[i] = c->nb();
     }
 
     index_t nb_total = std::accumulate(nb_send.begin(), nb_send.end(), 0);
+
+    std::cerr << "nb_total = " << nb_total << std::endl;
 
     body_send.resize(nb_total);
     body_dest.resize(nb_total);
     size_t bi = 0;
     for (size_t li = 0; li < leaf_keys_send.size(); li++) {
       const CellType *leaf = ht.at(leaf_keys_send[li]);
+
+      // debug
+      KeyType k = leaf_keys_send[li];
+      if (k == 2) {
+        std::cerr << __FILE__ << ":" << __LINE__
+                  << " found Key=2: body(0).x = " << leaf->body(0).x << std::endl;
+      }
       for (size_t bj = 0; bj < leaf->nb(); bj++) {
         body_send[bi] = leaf->body(bj);
-        body_dest[bi] = leaf_src[li];
+        body_dest[bi] = leaf_src_ranks[li];
+        bi++;
       }
     }
+    TAPAS_ASSERT(bi == nb_total);
     
     Stderr e("response");
-    e.out() << "nb_send.size() = " << nb_send.size() << ", " << "body_send.size() = " << body_send.size() << std::endl;
-    e.out() << "sum(nb_send) = " << std::accumulate(nb_send.begin(), nb_send.end(), 0) << std::endl;
+
+    // 長さを変えたvectorのどれかが破壊されている？
+    // body_send
+    // body_dest
+    // res_nb
+    // res_bodies
 
     res_nb.clear();
 
@@ -923,23 +942,31 @@ struct LET {
               << attr_send[i].w << "]" << std::endl;
     }
 #endif
+
+    // This information is not necessary because source ranks of boides can be computed from
+    // leaf_src_ranks_ranks and res_nb.
+    std::vector<int> body_src_ranks; 
     
     // Send response keys and attributes
-    tapas::mpi::Alltoallv(attr_keys_send, attr_dest, req_attr_keys, attr_src, MPI_COMM_WORLD);
-    tapas::mpi::Alltoallv(attr_send, attr_dest, res_cell_attrs, attr_src, MPI_COMM_WORLD);
-  
+    tapas::mpi::Alltoallv2(attr_keys_send, attr_dest_ranks, req_attr_keys,  attr_src_ranks, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv2(attr_send,      attr_dest_ranks, res_cell_attrs, attr_src_ranks, MPI_COMM_WORLD);
+    
     // Send response keys and bodies
-    tapas::mpi::Alltoallv(leaf_keys_send, body_dest, req_leaf_keys, leaf_src, MPI_COMM_WORLD);
-    tapas::mpi::Alltoallv(nb_send,        body_dest, res_nb,        leaf_src, MPI_COMM_WORLD);
-    tapas::mpi::Alltoallv(body_send,      body_dest, res_bodies,    leaf_src, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv2(leaf_keys_send, leaf_dest, req_leaf_keys, leaf_src_ranks, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv2(nb_send,        leaf_dest, res_nb,        leaf_src_ranks, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv2(body_send,      body_dest, res_bodies,    body_src_ranks, MPI_COMM_WORLD);
 
     // TODO: send body attributes
+    // Now we assume body_attrs from remote process is all "0" data.
 
     data.let_bodies_ = res_bodies;
+    data.let_body_attrs_.resize(res_bodies.size());
+    bzero(&data.let_body_attrs_[0], data.let_body_attrs_.size() * sizeof(data.let_body_attrs_[0]));
+
     double end = MPI_Wtime();
     data.time_let_response = end - beg;
   }
-
+  
   /**
    * \breif Register response cells to local LET hash table
    * \param [in,out] data Data structure (cells are registered to data->ht_lt_)
@@ -976,8 +1003,11 @@ struct LET {
       c->attr() = res_cell_attrs[i];
       c->is_leaf_ = false;
       c->nb_ = 0;
+      c->bid_ = 0;
       data->ht_let_[k] = c;
     }
+
+    TAPAS_ASSERT(res_leaf_keys.size() == res_nb.size());
 
     // Register received leaf cells to local ht_let_ hash table.
     index_t body_offset = 0;
@@ -986,6 +1016,11 @@ struct LET {
       index_t nb = res_nb[i];
       Cell<TSP> *c = nullptr;
 
+      if (k == 2) {
+        std::cerr << __FILE__ << ":" << __LINE__
+                  << " found Key=2: body(0).x = " << res_bodies[body_offset].x << std::endl;
+      }
+      
       if (data->ht_let_.count(k) > 0) {
         // If the cell is already registered to ht_let_, the cell has attributes but not body info.
         c = data->ht_let_.at(k);
@@ -996,23 +1031,31 @@ struct LET {
         data->ht_let_[k] = c;
       }
 
-      c->is_leaf_ = true;
-    
-      TAPAS_ASSERT(nb == 1 || nb == 0); // restriction of Tapas
+      if (nb > 0) {
+        Stderr e("nb_let");
+        e.out() << SFC::Simplify(k) << " " << data->let_bodies_[body_offset].x << std::endl;
+      }
       
+      c->is_leaf_ = true;
       c->nb_ = nb;
       c->bid_ = body_offset;
-      if (nb > 0) {
-        data->let_bodies_.insert(data->let_bodies_.end(),
-                                 res_bodies.begin() + body_offset,
-                                 res_bodies.begin() + body_offset + nb);
-        data->let_body_attrs_.resize(body_offset + nb);
-      }
+      
       body_offset += nb;
     }
+    
+    TAPAS_ASSERT(body_offset == res_bodies.size());
 
     double end = MPI_Wtime();
     data->time_let_register = end - beg;
+
+    Stderr e("nb_local");
+    for (auto pair : data->ht_) {
+      auto k = pair.first;
+      auto *c = pair.second;
+      if (c->IsLeaf() && c->nb() > 0) {
+        e.out() << SFC::Simplify(k) << " " << c->body(0).x << std::endl;
+      }
+    }
   }
 
   /**
@@ -1036,17 +1079,17 @@ struct LET {
     std::vector<KeyType> res_leaf_keys; // leaf cell keys of which bodies are requested
   
     std::vector<int> attr_src; // Process IDs that requested attr_keys_recv[i] (output from Request())
-    std::vector<int> body_src; // Process IDs that requested attr_body_recv[i] (output from Request())
+    std::vector<int> leaf_src; // Process IDs that requested attr_body_recv[i] (output from Request())
     
     // Request
     Request(root.data(), req_cell_attr_keys, req_leaf_keys,
-            res_cell_attr_keys, res_leaf_keys, attr_src, body_src);
+            res_cell_attr_keys, res_leaf_keys, attr_src, leaf_src);
 
     // Response
     std::vector<CellAttrType> res_cell_attrs;
     std::vector<BodyType> res_bodies;
     std::vector<index_t> res_nb; // number of bodies responded from remote processes
-    Response(root.data(), res_cell_attr_keys, attr_src, res_leaf_keys, body_src, res_cell_attrs, res_bodies, res_nb);
+    Response(root.data(), res_cell_attr_keys, attr_src, res_leaf_keys, leaf_src, res_cell_attrs, res_bodies, res_nb);
 
     // Register
     Register(root.data_, res_cell_attr_keys, res_cell_attrs, res_leaf_keys, res_bodies, res_nb);

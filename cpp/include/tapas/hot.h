@@ -1000,8 +1000,10 @@ typename TSP::BT::type &Cell<TSP>::body(index_t idx) {
 template <class TSP>
 const typename TSP::BT::type &Cell<TSP>::local_body(index_t idx) const {
   TAPAS_ASSERT(this->IsLocal() && "Cell::local_body() can be called only for local cells.");
-  CheckBodyIndex(idx);
-  
+
+  TAPAS_ASSERT(idx < data_->local_bodies_.size());
+
+  // TODO is it correct?
   return data_->local_bodies_[this->bid() + idx];
 }
 

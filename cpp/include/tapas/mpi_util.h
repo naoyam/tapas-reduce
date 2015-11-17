@@ -214,9 +214,9 @@ void Alltoall(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, int count,
  * Caution: send_buf and dest will be sorted in-place.
  */
 template<typename T>
-void Alltoallv(std::vector<T>& send_buf, std::vector<int>& dest,
-               std::vector<T>& recv_buf, std::vector<int>& src,
-               MPI_Comm comm) {
+void Alltoallv2(std::vector<T>& send_buf, std::vector<int>& dest,
+                std::vector<T>& recv_buf, std::vector<int>& src,
+                MPI_Comm comm) {
   int mpi_size;
 
   MPI_Comm_size(comm, &mpi_size);
@@ -242,7 +242,8 @@ void Alltoallv(std::vector<T>& send_buf, std::vector<int>& dest,
 
   std::vector<int> send_disp(mpi_size, 0); // displacement 
   std::vector<int> recv_disp(mpi_size, 0);
-  
+
+  // exclusive scan
   for (int p = 1; p < mpi_size; p++) {
     send_disp[p] = send_disp[p-1] + send_counts[p-1];
 
@@ -284,6 +285,12 @@ void Alltoallv(std::vector<T>& send_buf, std::vector<int>& dest,
     }
     src[i] = p;
   }
+}
+
+template<class T>
+void Alltoallv(const std::vector<T> &send_buf, const std::vector<int> &send_counts,
+               const std::vector<T> &recv_buf, std::vector<int> &recv_counts,
+               MPI_Comm comm) {
 }
 
 template<class T>

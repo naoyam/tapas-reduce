@@ -373,7 +373,7 @@ class SamplingOctree {
     std::vector<BodyType> recv_bodies;
     std::vector<int> src;
 
-    tapas::mpi::Alltoallv(bodies, dest, recv_bodies, src, comm);
+    tapas::mpi::Alltoallv2(bodies, dest, recv_bodies, src, comm);
 
     return recv_bodies;
   }

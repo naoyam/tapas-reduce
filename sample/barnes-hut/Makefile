@@ -58,7 +58,7 @@ bh: bh.o
 	$(CXX) $^ -o $@
 
 bh_mpi.o: bh.cc
-	$(MPICXX) -o $@ $(CXXFLAGS) $(OPT) $(DEBUG) $(LOG) -c $^ -I$(TAPAS_DIR)/include $(PROF)
+	$(MPICXX) -o $@ $(CXXFLAGS)  -I$(TAPAS_DIR)/include $(OPT) $(DEBUG) $(LOG) -c $^ $(PROF)
 
 bh_mpi: bh_mpi.o
 	$(MPICXX) $^ $(PROF) -o $@ $(PROF)
