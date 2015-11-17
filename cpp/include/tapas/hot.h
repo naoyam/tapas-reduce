@@ -377,7 +377,7 @@ class Cell: public tapas::BasicCell<TSP> {
 
   BodyAttrType &body_attr(index_t idx);
   const BodyAttrType &body_attr(index_t idx) const;
-  
+
   BodyAttrType *body_attrs();
   const BodyAttrType *body_attrs() const;
   

@@ -273,7 +273,7 @@ void Alltoallv2(std::vector<T>& send_buf, std::vector<int>& dest,
                       (void*)recv_buf.data(), recv_counts.data(), recv_disp.data(), kType,
                       comm);
   TAPAS_ASSERT(err == MPI_SUCCESS);
-
+  
   // Build src[] array
   src.clear();
   src.resize(total_recv_counts, 0);
@@ -285,12 +285,87 @@ void Alltoallv2(std::vector<T>& send_buf, std::vector<int>& dest,
     }
     src[i] = p;
   }
+
+  auto src2 = src;
+  src2.clear(); src2.resize(src.size(), 0);
+  
+  index_t pos = 0;
+  for (size_t p = 0; p < recv_counts.size(); p++) {
+    int num_recv_from_p = recv_counts[p];
+    
+    if(!MPI_DatatypeTraits<T>::IsEmbType()) {
+      num_recv_from_p /= sizeof(T);
+    }
+
+    for (int i = 0; i < num_recv_from_p; i++, pos++) {
+      src2[pos] = p;
+    }
+  }
+  
+#if 0
+  // TODO: bug? May be src2 is the correct answer?
+  src = src2;
+#endif
 }
 
 template<class T>
-void Alltoallv(const std::vector<T> &send_buf, const std::vector<int> &send_counts,
-               const std::vector<T> &recv_buf, std::vector<int> &recv_counts,
+void Alltoallv(const std::vector<T> &send_buf,
+               const std::vector<int> &send_count,
+               std::vector<T> &recv_buf, std::vector<int> &recv_count,
                MPI_Comm comm) {
+  int mpi_size;
+  
+  MPI_Comm_size(comm, &mpi_size);
+
+  recv_count.clear();
+  recv_count.resize(mpi_size);
+
+  int err = MPI_Alltoall((void*)send_count.data(), 1, MPI_INT,
+                         (void*)recv_count.data(), 1, MPI_INT,
+                         comm);
+
+  if (err != MPI_SUCCESS) {
+    TAPAS_ASSERT(!"MPI_Alltoall failed.");
+  }
+
+  std::vector<int> send_disp(mpi_size, 0); // displacement 
+  std::vector<int> recv_disp(mpi_size, 0);
+
+  // exclusive scan
+  for (int p = 1; p < mpi_size; p++) {
+    send_disp[p] = send_disp[p-1] + send_count[p-1];
+
+    recv_disp[p] = recv_disp[p-1] + recv_count[p-1];
+  }
+
+  int total_recv_count = std::accumulate(recv_count.begin(), recv_count.end(), 0);
+  
+  recv_buf.resize(total_recv_count);
+
+  auto kType = MPI_DatatypeTraits<T>::type();
+
+  auto send_count2 = send_count;
+  auto send_disp2 = send_disp;
+  auto recv_count2 = recv_count;
+  auto recv_disp2 = recv_disp;
+
+  if(!MPI_DatatypeTraits<T>::IsEmbType()) {
+    kType = MPI_BYTE;
+    // If T is not an embedded type, MPI_BYTE and sizeof(T) is used.
+    for (size_t i = 0; i < recv_disp.size(); i++) {
+      recv_disp2[i] = recv_disp[i] * sizeof(T);
+      recv_count2[i] = recv_count[i] * sizeof(T);
+    }
+    for (size_t i = 0; i < send_disp.size(); i++) {
+      send_disp2[i] = send_disp[i] * sizeof(T);
+      send_count2[i] = send_count[i] * sizeof(T);
+    }
+  }
+
+  err = MPI_Alltoallv((void*)send_buf.data(), send_count2.data(), send_disp2.data(), kType,
+                      (void*)recv_buf.data(), recv_count2.data(), recv_disp2.data(), kType,
+                      comm);
+  TAPAS_ASSERT(err == MPI_SUCCESS);
 }
 
 template<class T>
