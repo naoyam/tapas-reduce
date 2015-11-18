@@ -20,22 +20,22 @@ typedef tapas::BodyInfo<Body, 0> BodyInfo;
 #include "tapas/hot.h"
 using HOT = tapas::HOT<3, tapas::sfc::Morton>;
 
-#else
+#else /* USE_MPI */
 
 // Use single-process version of hashed octree
 #include "tapas/single_node_hot.h"
 using HOT = tapas::SingleNodeHOT<3, tapas::sfc::Morton>;
 
-#endif
+#endif /* USE_MPI */
 
 
 // Select threading component: serial or MassiveThreads
 #ifdef MTHREADS
 #include "tapas/threading/massivethreads.h"
 using Threading = tapas::threading::MassiveThreads;
-#else
+#else /* MTHREADS */
 using Threading = tapas::threading::Default;
-#endif
+#endif /* MTHREADS */
 
 typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr,
                      HOT, Threading

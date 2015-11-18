@@ -161,7 +161,7 @@
 
 
 /* No C++ or serial */
-#elif TO_SERIAL || TO_TBB || TO_MTHREAD || TO_MTHREAD_NATIVE || TO_QTHREAD || TO_NANOX
+#elif defined(TO_SERIAL) || defined(TO_TBB) || defined(TO_MTHREAD) || defined(TO_MTHREAD_NATIVE) || defined(TO_QTHREAD) || defined(TO_NANOX)
 
 #if TO_TBB || TO_MTHREAD || TO_MTHREAD_NATIVE || TO_QTHREAD || TO_NANOX
 #warning "you define either TO_TBB, TO_MTHREAD, TO_MTHREAD_NATIVE, TO_QTHREAD, or TO_NANOX in your C program. create_task and other task parallel primitives are IGNORED in this file"
