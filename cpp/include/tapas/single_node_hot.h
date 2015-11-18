@@ -597,7 +597,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                   << "parent=" << SFC::Simplify(SFC::Parent(k))  << " "
                   << std::endl;
           // Print bodies which belong to Cell c
-#if 1
+#if 0
           if (c->IsLeaf()) {
             index_t body_beg, body_end;
             SFC::FindRangeByKey(recv_keys, k, body_beg, body_end);

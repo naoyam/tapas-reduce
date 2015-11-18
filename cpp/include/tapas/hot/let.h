@@ -883,6 +883,8 @@ struct LET {
     // Send response keys and attributes
     tapas::mpi::Alltoallv2(attr_keys_send, attr_dest_ranks, req_attr_keys,  attr_src_ranks, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv2(attr_sendbuf,   attr_dest_ranks, res_cell_attrs, attr_src_ranks, MPI_COMM_WORLD);
+
+    
     
     // ----- Send bodies  -----
     
@@ -920,12 +922,14 @@ struct LET {
       }
     }
 
+#ifdef TAPAS_DEBUG
     index_t nb_total  = std::accumulate(leaf_nb_sendbuf.begin(), leaf_nb_sendbuf.end(), 0);
     index_t nb_total2 = body_sendbuf.size();
     index_t nb_total3 = std::accumulate(body_sendcnt.begin(), body_sendcnt.end(), 0);
 
     TAPAS_ASSERT(nb_total  == nb_total2);
     TAPAS_ASSERT(nb_total2 == nb_total3);
+#endif
 
     res_nb.clear();
 
@@ -938,6 +942,14 @@ struct LET {
     tapas::mpi::Alltoallv(leaf_keys_sendbuf, leaf_sendcnt, req_leaf_keys, leaf_recvcnt, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv(leaf_nb_sendbuf,   leaf_sendcnt, res_nb,        leaf_recvcnt, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv(body_sendbuf,      body_sendcnt, res_bodies,    body_recvcnt, MPI_COMM_WORLD);
+    
+    tapas::debug::BarrierExec([&](int, int) {
+        std::cout << "ht.size() = " << ht.size() << std::endl;
+        std::cout << "req_attr_keys.size() = " << req_attr_keys.size() << std::endl;
+        std::cout << "body_sendbuf.size() = " << body_sendbuf.size() << std::endl;
+        std::cout << "local_bodies.size() = " << data.local_bodies_.size() << std::endl;
+        std::cout << "res_bodies.size() = " << res_bodies.size() << std::endl;
+      });
     
     // TODO: send body attributes
     // Now we assume body_attrs from remote process is all "0" data.
@@ -958,8 +970,7 @@ struct LET {
                        const std::vector<KeyType> &res_cell_attr_keys,
                        const std::vector<CellAttrType> &res_cell_attrs,
                        const std::vector<KeyType> &res_leaf_keys,
-                       const std::vector<index_t> &res_nb,
-                       const std::vector<BodyType> &res_bodies) {
+                       const std::vector<index_t> &res_nb) {
     double beg = MPI_Wtime();
     
     // Register received LET cells to local ht_let_ hash table.
@@ -969,11 +980,12 @@ struct LET {
 
 #if TAPAS_DEBUG
       Stderr e("recv_attr");
-      e.out() << "k = " << k << ", attr = ["
-              << res_cell_attrs[i].x << ", "
-              << res_cell_attrs[i].y << ", "
-              << res_cell_attrs[i].z << ", "
-              << res_cell_attrs[i].w << "]" << std::endl;
+      CellAttrType attr = res_cell_attrs[i];
+      e.out() << SFC::Simplify(k) << " attr = ["
+              << attr.x << " "
+              << attr.y << " "
+              << attr.z << " "
+              << attr.w << "]" << std::endl;
 #endif
 
       Cell<TSP> *c = nullptr;
@@ -990,6 +1002,22 @@ struct LET {
       data->ht_let_[k] = c;
     }
 
+#ifdef TAPAS_DEBUG
+    {
+      Stderr e("orig_attr");
+      for (auto p : data->ht_) {
+        KeyType k = p.first;
+        CellType *c = p.second;
+        CellAttrType attr = c->attr();
+        e.out() << SFC::Simplify(k) << " attr = ["
+                << attr.x << " "
+                << attr.y << " "
+                << attr.z << " "
+                << attr.w << "]" << std::endl;
+      }
+    }
+#endif
+    
     TAPAS_ASSERT(res_leaf_keys.size() == res_nb.size());
 
     // Register received leaf cells to local ht_let_ hash table.
@@ -998,11 +1026,6 @@ struct LET {
       KeyType k = res_leaf_keys[i];
       index_t nb = res_nb[i];
       Cell<TSP> *c = nullptr;
-      
-      if (k == 2) {
-        std::cerr << __FILE__ << ":" << __LINE__
-                  << " found Key=2: body(0).x = " << res_bodies[body_offset].x << std::endl;
-      }
       
       if (data->ht_let_.count(k) > 0) {
         // If the cell is already registered to ht_let_, the cell has attributes but not body info.
@@ -1021,8 +1044,6 @@ struct LET {
       body_offset += nb;
     }
     
-    TAPAS_ASSERT(body_offset == res_bodies.size());
-
     double end = MPI_Wtime();
     data->time_let_register = end - beg;
   }
@@ -1061,7 +1082,7 @@ struct LET {
     Response(root.data(), res_cell_attr_keys, attr_src, res_leaf_keys, leaf_src, res_cell_attrs, res_bodies, res_nb);
 
     // Register
-    Register(root.data_, res_cell_attr_keys, res_cell_attrs, res_leaf_keys, res_nb, res_bodies);
+    Register(root.data_, res_cell_attr_keys, res_cell_attrs, res_leaf_keys, res_nb);
   
 #ifdef TAPAS_DEBUG
     DebugDumpCells(root.data());

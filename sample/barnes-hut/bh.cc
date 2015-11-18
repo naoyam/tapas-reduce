@@ -334,6 +334,7 @@ void CheckResult(int np_check,
             + (tattrs[i].z - targetTapas[i].z) * (tattrs[i].z - targetTapas[i].z);
       fn += tattrs[i].x * tattrs[i].x + tattrs[i].y * tattrs[i].y + tattrs[i].z * tattrs[i].z;
     }
+
     std::cout << std::scientific << "P ERR  : " << sqrtf(pd/pn) << std::endl;
     std::cout << std::scientific << "F ERR  : " << sqrtf(fd/fn) << std::endl;
   }

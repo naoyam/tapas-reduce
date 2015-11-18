@@ -378,8 +378,8 @@ class Cell: public tapas::BasicCell<TSP> {
   BodyAttrType &body_attr(index_t idx);
   const BodyAttrType &body_attr(index_t idx) const;
 
-  BodyAttrType *body_attrs();
-  const BodyAttrType *body_attrs() const;
+  //BodyAttrType *body_attrs();
+  //const BodyAttrType *body_attrs() const;
   
   BodyAttrType &local_body_attr(index_t idx);
   const BodyAttrType &local_body_attr(index_t idx) const;
@@ -1012,21 +1012,21 @@ typename TSP::BT::type &Cell<TSP>::local_body(index_t idx) {
   return const_cast<typename TSP::BT::type &>(const_cast<const Cell<TSP>*>(this)->local_body(idx));
 }
 
-template <class TSP>
-const typename TSP::BT_ATTR *Cell<TSP>::body_attrs() const {
-  CheckBodyIndex(0);
+// template <class TSP>
+// const typename TSP::BT_ATTR *Cell<TSP>::body_attrs() const {
+//   CheckBodyIndex(0);
   
-  if (is_local_) {
-    return data_->local_body_attrs_.data() + this->bid();
-  } else {
-    return data_->let_body_attrs_.data() + this->bid();
-  }
-}
+//   if (is_local_) {
+//     return data_->local_body_attrs_.data() + this->bid();
+//   } else {
+//     return data_->let_body_attrs_.data() + this->bid();
+//   }
+// }
 
-template <class TSP>
-typename TSP::BT_ATTR *Cell<TSP>::body_attrs() {
-  return const_cast<typename TSP::BT_ATTR &>(const_cast<const Cell<TSP>*>(this)->local_attrs());
-}
+// template <class TSP>
+// typename TSP::BT_ATTR *Cell<TSP>::body_attrs() {
+//   return const_cast<typename TSP::BT_ATTR &>(const_cast<const Cell<TSP>*>(this)->local_attrs());
+// }
 
 template <class TSP>
 const typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) const {

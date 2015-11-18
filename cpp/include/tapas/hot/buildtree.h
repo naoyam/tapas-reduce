@@ -102,6 +102,15 @@ class SamplingOctree {
     const KeyType K = SFC::AppendDepth(0, L);
     const int W = pow(B, L); // number of cells in level L
 
+#ifdef TAPAS_DEBUG
+    std::cerr << "mpi_size = " << mpi_size << std::endl;
+    std::cerr << "B = " << B << std::endl;
+    std::cerr << "L = " << L << std::endl;
+    std::cerr << "W = " << W << std::endl;
+#endif
+
+    TAPAS_ASSERT(W > mpi_size);
+
     const int q = keys.size() / mpi_size; // each process should have roughly q bodies
     
     std::vector<int> nb(W); // number of bodies each L-level key owns
@@ -172,12 +181,16 @@ class SamplingOctree {
     ExchangeRegion();
     data_->region_ = region_;
 
+    int min_sample_nb = std::min((int)100, (int)bodies_.size());
+
     // sample particles in this process
-    int sample_nb = bodies_.size() * R;
+    int sample_nb = std::max((int)(bodies_.size() * R),
+                             (int)min_sample_nb);
+    
     std::vector<BodyType> sampled_bodies = std::vector<BodyType>(bodies_.begin(), bodies_.begin() + sample_nb);
     std::vector<KeyType> sampled_keys_local = BodiesToKeys(sampled_bodies, data_->region_);
     std::vector<KeyType> sampled_keys;
-    
+
     // Gather the sampled particles into the DD-process
     int dd_proc_id = DDProcId();
 
