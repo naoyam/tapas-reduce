@@ -202,7 +202,7 @@ typedef tapas::Vec<DIM, real_t> Vec3;
 f4vec calc(f4vec &source) {
   Tapas::Region r(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 1.0, 1.0));
   Tapas::Cell *root = Tapas::Partition(source.data(), source.size(), r, 1);
-  
+
   tapas::UpwardMap(approximate, *root); // or, simply: approximate(*root);
   
   real_t theta = 0.5;
@@ -269,6 +269,9 @@ void parseOption(int *argc, char ***argv) {
   *argc = optind;
 }
 
+/**
+ * \brief Evaluate the accuracy of Tapas computation by comparing Tapas' result against direct N-body method.
+ */
 void CheckResult(int np_check,
                  f4vec &sourceHost,
                  f4vec &targetTapas) {
@@ -276,6 +279,10 @@ void CheckResult(int np_check,
   // targetTapas : target attrs computed by Tapas
   // tbodies : sampled target bodies (small portion of sourceHost)
   // tattrs  : target attrs to be computed directly in this function
+
+  TAPAS_ASSERT(np_check <= sourceHost.size());
+  TAPAS_ASSERT(np_check <= targetTapas.size());
+      
   f4vec tbodies(sourceHost.begin(), sourceHost.begin() + np_check);
   f4vec tattrs(np_check);
   
@@ -340,6 +347,20 @@ void CheckResult(int np_check,
   }
 }
 
+namespace {
+template<class T>
+inline T xmin(T t) {
+  return t;
+}
+
+template<class T, class U, class ... Args>
+inline T xmin(T t, U u, Args...args) {
+  T m = (T) xmin(u, args...);
+  return t > m ? m : t;
+}
+
+}
+
 int main(int argc, char **argv) {
 #ifdef USE_MPI
   MPI_Init(&argc, &argv);
@@ -362,7 +383,6 @@ int main(int argc, char **argv) {
   }
   
   // NOTE: Total number of particles is N * size (weak scaling)
-  assert(N_total % mpi_size == 0);
   int N = N_total / mpi_size;
   OPS = 20. * N_total * N_total * 1e-9;
 
@@ -402,7 +422,16 @@ int main(int argc, char **argv) {
       std::cout << "time " << rank << " total_gflops " << std::scientific << OPS / (toc-tic) << " GFlops" << std::endl;
     });
 
-  CheckResult(std::min(100, N), sourceHost, targetTapas);
+  // check result
+  // Compute interactions between sampled bodies and all others in all processes.
+  // Determine how many bodies to sample
+  int np_check = xmin(100, targetTapas.size(), sourceHost.size());
+
+#ifdef USE_MPI
+  MPI_Allreduce(MPI_IN_PLACE, &np_check, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+#endif
+
+  CheckResult(np_check, sourceHost, targetTapas);
   
   // DEALLOCATE
 
