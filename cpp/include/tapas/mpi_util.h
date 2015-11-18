@@ -9,6 +9,7 @@
 
 #include <tapas/common.h>
 
+#include "tapas/debug_util.h"
 
 namespace tapas {
 namespace util {
@@ -204,7 +205,7 @@ void Alltoall(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, int count,
 }
 
 /**
- * \brief Perform MPI_Alltoallv (version 1)
+ * \brief Perform MPI_Alltoallv
  * \tparam T data type
  * \param send_buf Data to be sent
  * \param dest Destination process number of each element of send_buf (i.e. send_buf[i] is sent to dest[i])
@@ -302,7 +303,7 @@ void Alltoallv2(std::vector<T>& send_buf, std::vector<int>& dest,
     }
   }
   
-#if 0
+#if 1
   // TODO: bug? May be src2 is the correct answer?
   src = src2;
 #endif
