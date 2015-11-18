@@ -186,7 +186,7 @@ static inline void CopyBackResult(Bodies &bodies, Tapas::Cell *root) {
 }
 
 
-// Dump the M vectors of all cells.
+// Debug function: Dump the M vectors of all cells.
 void dumpM(Tapas::Cell &root) {
   std::stringstream ss;
 #ifdef USE_MPI
@@ -211,7 +211,7 @@ void dumpM(Tapas::Cell &root) {
   ofs.close();
 }
 
-// Dump the L vectors of all cells.
+// Debug function: Dump the L vectors of all cells.
 void dumpL(Tapas::Cell &root) {
   std::stringstream ss;
 #ifdef USE_MPI
@@ -236,7 +236,7 @@ void dumpL(Tapas::Cell &root) {
   ofs.close();
 }
 
-// Dump the body attrs of all cells
+// Debug function: Dump the body attrs of all cells
 void dumpBodies(Tapas::Cell &root) {
   std::stringstream ss;
 #ifdef USE_MPI
@@ -270,6 +270,7 @@ void dumpBodies(Tapas::Cell &root) {
   ofs.close();
 }
 
+// Debug function: dump all leaves
 void dumpLeaves(Tapas::Cell &root) {
   std::stringstream ss;
 #ifdef USE_MPI
@@ -490,7 +491,7 @@ int main(int argc, char ** argv) {
     bodies = bodies3;
     data.initTarget(bodies);
   } /* for */
-    
+
 #ifdef USE_MPI
   MPI_Finalize();
 #endif
