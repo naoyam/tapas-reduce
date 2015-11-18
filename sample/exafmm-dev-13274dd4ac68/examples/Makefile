@@ -24,8 +24,8 @@ serial_tapas.o: tapas_exafmm.cxx
 serial_tapas: serial_tapas.o LaplaceSphericalCPU_tapas.o LaplaceP2PCPU_tapas.o $(OBJECTS)
 	$(CXX) $^ $(LFLAGS) -o $@
 
-parallel_tapas.o: tapas_exafmm.cxx
-	$(CXX) -DUSE_MPI -c $^ $(LFLAGS) -o $@
+parallel_tapas: tapas_exafmm.cxx LaplaceSphericalCPU_tapas.cxx LaplaceP2PCPU_tapas.cxx $(OBJECTS)
+	$(MPICXX) -DUSE_MPI $^ $(LFLAGS) -o $@
 
 # Test for parallel FMM
 parallel: parallel.o $(OBJECTS)

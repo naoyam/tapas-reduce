@@ -20,11 +20,14 @@ DEVICE	= CPU
 #DEVICE	= GPU (not integrated)
 
 CXX ?= clang++
+MPICXX ?= mpicxx -cxx=$(CXX)
 
 ifneq (,$(findstring clang++,$(CXX)))
 	CXX += -std=c++11 -ggdb3 -Wall -Wextra -O2 -funroll-loops -fcolor-diagnostics -Wno-sign-compare
+	MPICXX += -std=c++11 -ggdb3 -Wall -Wextra -O2 -funroll-loops -fcolor-diagnostics -Wno-sign-compare
 else ifneq (, $(findstring g++, $(CXX)))
 	CXX += -std=c++11 -ggdb3 -Wall -Wextra -O2 -funroll-loops -Wno-sign-compare -fdiagnostics-color=auto
+	MPICXX += -std=c++11 -ggdb3 -Wall -Wextra -O2 -funroll-loops -Wno-sign-compare -fdiagnostics-color=auto
 else ifneq (, $(findstring icpc, $(CXX)))
 endif
 
