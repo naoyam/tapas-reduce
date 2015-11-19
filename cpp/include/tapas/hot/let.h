@@ -978,7 +978,7 @@ struct LET {
       KeyType k = res_cell_attr_keys[i];
       TAPAS_ASSERT(data->ht_.count(k) == 0); // Received cell must not exit in local hash.
 
-#if TAPAS_DEBUG
+#ifdef TAPAS_DEBUG
       Stderr e("recv_attr");
       CellAttrType attr = res_cell_attrs[i];
       e.out() << SFC::Simplify(k) << " attr = ["

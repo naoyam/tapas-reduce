@@ -1194,7 +1194,7 @@ class Partitioner {
       res_body.insert(std::make_pair(src_pid, k));
     }
 
-#if TAPAS_DEBUG
+#ifdef TAPAS_DEBUG
     BarrierExec([&res_attr, &res_body](int rank, int) {
         std::cerr << "Rank " << rank << " SelectResponseCells: keys_attr.size() = " << res_attr.size() << std::endl;
         std::cerr << "Rank " << rank << " SelectResponseCells: keys.body.size() = " << res_body.size() << std::endl;
