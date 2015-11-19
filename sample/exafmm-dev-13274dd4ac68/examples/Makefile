@@ -5,6 +5,17 @@ include ../Makefile.include
 LFLAGS	+= -DDIRECT # Compare with direct summation
 LFLAGS	+= -DWRITE_TIME # Write timings to file
 
+MODE ?= debug
+ifeq ($(MODE),debug)
+	OPT = -O0
+	DEBUG = -DTAPAS_DEBUG=1 -g -gdwarf-2
+	LOG = -DTAPAS_LOG_LEVEL=1
+else
+	OPT = -O3 # -O3 is also OK, but when gprof is used, gprof command misunderstand names of functions called as 'frame_dummy'
+	DEBUG = -DTAPAS_DEBUG=0
+	LOG = -DTAPAS_LOG_LEVEL=0
+endif
+
 # Test for tree construction
 tree: tree.o $(OBJECTS)
 	$(CXX) $? $(LFLAGS)
@@ -22,10 +33,10 @@ tapas: serial_tapas parallel_tapas
 serial_tapas.o: tapas_exafmm.cxx
 	$(CXX) -c $^ $(LFLAGS) -o $@
 serial_tapas: serial_tapas.o LaplaceSphericalCPU_tapas.o LaplaceP2PCPU_tapas.o $(OBJECTS)
-	$(CXX) $^ $(LFLAGS) -o $@
+	$(CXX) $(DEBUG) $(LOG) $^ $(LFLAGS) -o $@
 
 parallel_tapas: tapas_exafmm.cxx LaplaceSphericalCPU_tapas.cxx LaplaceP2PCPU_tapas.cxx $(OBJECTS)
-	$(MPICXX) -DUSE_MPI $^ $(LFLAGS) -o $@
+	$(MPICXX) $(DEBUG) $(LOG) -DUSE_MPI $^ $(LFLAGS) -o $@
 
 # Test for parallel FMM
 parallel: parallel.o $(OBJECTS)
