@@ -25,10 +25,10 @@ MPICXX ?= mpicxx -cxx=$(CXX)
 ifneq (,$(findstring clang++,$(CXX)))
 	CXX += -std=c++11 -ggdb3 -Wall -Wextra -O2 -funroll-loops -fcolor-diagnostics -Wno-sign-compare
 	MPICXX += -std=c++11 -ggdb3 -Wall -Wextra -O2 -funroll-loops -fcolor-diagnostics -Wno-sign-compare
-else ifneq (, $(findstring g++, $(CXX)))
+else ifneq (,$(findstring g++, $(CXX)))
 	CXX += -std=c++11 -ggdb3 -Wall -Wextra -O2 -funroll-loops -Wno-sign-compare -fdiagnostics-color=auto
 	MPICXX += -std=c++11 -ggdb3 -Wall -Wextra -O2 -funroll-loops -Wno-sign-compare -fdiagnostics-color=auto
-else ifneq (, $(findstring icpc, $(CXX)))
+else ifneq (,$(findstring icpc, $(CXX)))
 endif
 
 ### choose C++ compiler
@@ -93,8 +93,6 @@ OBJECTS	= $(SOURCES:.cxx=.o)
 endif
 
 MAKEFLAGS += --no-print-directory
-
-CXX += -DTAPAS_LOG_LEVEL=0 -DTAPAS_DEBUG=0
 
 .c.o	:
 	$(CXX) -c $< -o $@ $(LFLAGS)

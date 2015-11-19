@@ -73,7 +73,7 @@ void TraverseLET_old(typename Cell<TSP>::BodyType &p,
   
   if (is_src_local_leaf) {
     // if the source cell is a remote leaf, we need it (the cell is not longer splittable anyway).
-    //Stderr("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " is_src_local_leaf" << std::endl;
+    //tapas::debug::DebugStream("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " is_src_local_leaf" << std::endl;
     return;
   }
 
@@ -81,7 +81,7 @@ void TraverseLET_old(typename Cell<TSP>::BodyType &p,
     // If the source cell is a remote leaf, we need it (with it's bodies).
     list_attr.insert(src_key);
     list_body.insert(src_key);
-    //Stderr("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " is_src_remote_leaf" << std::endl;
+    //tapas::debug::DebugStream("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " is_src_remote_leaf" << std::endl;
     return;
   }
 
@@ -108,12 +108,12 @@ void TraverseLET_old(typename Cell<TSP>::BodyType &p,
     FP s = CellType::CalcRegion(ckey, r).width(0); // width
     FP d = std::sqrt(distR2(ctr));
     
-    // Stderr("traverse_count").out() << "particle(" << SFC::Simplify(trg_key) << ") [" << p.x << "," << p.y << "," << p.z << "]"
+    // tapas::debug::DebugStream("traverse_count").out() << "particle(" << SFC::Simplify(trg_key) << ") [" << p.x << "," << p.y << "," << p.z << "]"
     //                                << " " << SFC::Simplify(ckey) << " s=" << s << " d=" << d << " "
     //                                << (s/d > theta ? "SplitRight" : "Approx")
     //                                << std::endl;
 
-    // Stderr("comp_count_hardcoded").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(ckey) << " "
+    // tapas::debug::DebugStream("comp_count_hardcoded").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(ckey) << " "
     //                                      << "s=" << s << " d=" << d << std::endl;
     if (s/d > theta) { // if the cell(ckey) is close
       TraverseLET_old<TSP, SetType>(p, trg_key, ckey, data, list_attr, list_body);
@@ -141,7 +141,7 @@ void TraverseLET_old_slow(typename Cell<TSP>::KeyType trg_key, typename Cell<TSP
 
   const auto &ht = data.ht_;
 
-  //Stderr("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << std::endl;
+  //tapas::debug::DebugStream("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << std::endl;
 
   if (ht.count(trg_key) == 0) {
     return;
@@ -256,12 +256,12 @@ struct InteractionPred {
     real_t d = std::sqrt(distR2(p1, src_key));
     real_t s = CT::CalcRegion(src_key, data_.region_).width(0);
     
-    // Stderr("traverse_count").out() << "particle(" << SFC::Simplify(trg_key) << ") [" << p1.x << "," << p1.y << "," << p1.z << "]"
+    // tapas::debug::DebugStream("traverse_count").out() << "particle(" << SFC::Simplify(trg_key) << ") [" << p1.x << "," << p1.y << "," << p1.z << "]"
     //                                << " " << SFC::Simplify(src_key) << " s=" << s << " d=" << d << " "
     //                                << (s/d > theta ? "SplitRight" : "Approx")
     //                                << std::endl;
     
-    // Stderr("comp_count_manual").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " "
+    // tapas::debug::DebugStream("comp_count_manual").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " "
     //                                   << "s=" << s << " d=" << d << std::endl;
     if ((s/d) < theta) {
       return SplitType::Approx;
@@ -622,11 +622,11 @@ struct LET {
     bool is_src_local_leaf = is_src_local && ht[src_key]->IsLeaf();
     bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= max_depth;
 
-    //Stderr("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << std::endl;
+    //tapas::debug::DebugStream("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << std::endl;
 
     if (is_src_local_leaf) {
       // the cell is local. everythig's fine. nothing to do.
-      //Stderr("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " is_src_local_leaf" << std::endl;
+      //tapas::debug::DebugStream("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " is_src_local_leaf" << std::endl;
       return; // SplitType::None;
     }
 
@@ -634,7 +634,7 @@ struct LET {
       // If the source cell is a remote leaf, we need it (with it's bodies).
       list_attr.insert(src_key);
       list_body.insert(src_key);
-      //Stderr("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " is_src_remote_leaf" << std::endl;
+      //tapas::debug::DebugStream("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " is_src_remote_leaf" << std::endl;
       return; // SplitType::Body;
     }
     TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
@@ -817,7 +817,7 @@ struct LET {
 #ifdef TAPAS_DEBUG
     {
       assert(keys_body_recv.size() == body_src.size());
-      Stderr e("body_keys_recv");
+      tapas::debug::DebugStream e("body_keys_recv");
       for (size_t i = 0; i < keys_body_recv.size(); i++) {
         e.out() << SFC::Decode(keys_body_recv[i]) << " from " << body_src[i] << std::endl;
       }
@@ -979,7 +979,7 @@ struct LET {
       TAPAS_ASSERT(data->ht_.count(k) == 0); // Received cell must not exit in local hash.
 
 #ifdef TAPAS_DEBUG
-      Stderr e("recv_attr");
+      tapas::debug::DebugStream e("recv_attr");
       CellAttrType attr = res_cell_attrs[i];
       e.out() << SFC::Simplify(k) << " attr = ["
               << attr.x << " "
@@ -1004,7 +1004,7 @@ struct LET {
 
 #ifdef TAPAS_DEBUG
     {
-      Stderr e("orig_attr");
+      tapas::debug::DebugStream e("orig_attr");
       for (auto p : data->ht_) {
         KeyType k = p.first;
         CellType *c = p.second;
@@ -1097,7 +1097,7 @@ struct LET {
     // Debug
     // Dump all received cells to a file
     {
-      Stderr e("cells_let");
+      tapas::debug::DebugStream e("cells_let");
       e.out() << "ht_let.size() = " << data.ht_let_.size() << std::endl;
       for (auto& iter : data.ht_let_) {
         KeyType k = iter.first;

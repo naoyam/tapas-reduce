@@ -58,6 +58,48 @@ void BarrierExec(F func) {
 
 #endif
 
+/**
+ * \class DebugStream
+ * Debug file stream
+ */
+class DebugStream {
+  std::ostream *fs_;
+
+ public:
+  DebugStream(const char *label) : fs_(nullptr) {
+#ifdef TAPAS_DEBUG
+#if defined(USE_MPI)
+    pid_t tid = syscall(SYS_gettid);
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+#else /* USE_MPI */
+    const char *rank="s";
+    int tid=0;
+#endif /* USE_MPI */
+    std::stringstream ss;
+    ss << label << "."
+       << rank  << "."
+       << tid
+       << ".stderr.txt";
+    fs_ = new std::ofstream(ss.str().c_str(), std::ios_base::app);
+#else /* TAPAS_DEBUG */
+    fs_ = new std::stringstream();
+#endif /* TAPAS_DEBUG */
+  }
+  
+  ~DebugStream() noexcept {
+    assert(fs_ != nullptr);
+    delete fs_;
+    fs_ = nullptr;
+  }
+
+  std::ostream &out() {
+    assert(fs_ != nullptr);
+    return *fs_;
+  }
+};
+
+
 } // debug
 } // tapas
 

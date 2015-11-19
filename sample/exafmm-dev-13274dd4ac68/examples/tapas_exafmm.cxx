@@ -71,7 +71,7 @@ static inline void FMM_P2M(Tapas::Cell &c, real_t theta) {
   
 #ifdef TAPAS_DEBUG
   {
-    Stderr e("FMM_P2M");
+    tapas::debug::DebugStream e("FMM_P2M");
     e.out() << Tapas::SFC::Simplify(c.key()) << " (1) " << c.IsLeaf() << " ";
     e.out() << "c.attr().R = " << std::fixed << std::setprecision(6) << c.attr().R << " ";
     e.out() << std::endl;
@@ -346,7 +346,7 @@ int main(int argc, char ** argv) {
   // Dump all bodies data for debugging
 #ifdef TAPAS_DEBUG
   {
-    Stderr err("bodies");
+    tapas::debug::DebugStream err("bodies");
     err.out() << "numBodies = " << args.numBodies << ", " << args.mpi_rank << ", " << args.mpi_size << std::endl;
     for (auto &b : bodies) {
       err.out() << b.X << " " << b.SRC << std::endl;

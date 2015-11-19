@@ -59,45 +59,6 @@
 
 namespace {
 
-#define DEBUG_WRITE
-
-class Stderr {
-  std::ostream *fs_;
-
- public:
-  Stderr(const char *label) : fs_(nullptr) {
-#ifdef DEBUG_WRITE
-#if defined(EXAFMM_TAPAS_MPI) || defined(USE_MPI)  // FIXME: EXAFMM_TAPAS_MPI is only for debug
-    pid_t tid = syscall(SYS_gettid);
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-#else
-    const char *rank="s";
-    int tid=0;
-#endif
-    std::stringstream ss;
-    ss << label << "."
-       << rank  << "."
-       << tid
-       << ".stderr.txt";
-    fs_ = new std::ofstream(ss.str().c_str(), std::ios_base::app);
-#else
-    fs_ = new std::stringstream();
-#endif
-  }
-  
-  ~Stderr() {
-    assert(fs_ != nullptr);
-    delete fs_;
-    fs_ = nullptr;
-  }
-
-  std::ostream &out() {
-    assert(fs_ != nullptr);
-    return *fs_;
-  }
-};
-
 template<class T>
 std::string join(const char *glue, const std::vector<T>& v) {
   std::stringstream ss;

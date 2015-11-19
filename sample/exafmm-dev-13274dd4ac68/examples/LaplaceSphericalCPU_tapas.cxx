@@ -2,11 +2,11 @@
 #include <iomanip>
 
 #include "tapas_exafmm.h"
+#include "tapas/debug_util.h" // for t::d::DebugStream
 
 #define ODDEVEN(n) ((((n) & 1) == 1) ? -1 : 1)
 #define IPOW2N(n) ((n >= 0) ? 1 : ODDEVEN(n))
 
-// for debugging
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -145,8 +145,6 @@ void evalLocal(real_t rho, real_t alpha, real_t beta, complex_t * Ynm) {
 void tapas_kernel::P2M(Tapas::Cell &C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
   
-  //Stderr e("P2M");
-  
   for (tapas::index_t i = 0; i < C.nb(); ++i) {
     const Body &B = C.body(i);
     vec3 dX = B.X - tovec(C.center());
@@ -170,30 +168,8 @@ void tapas_kernel::P2M(Tapas::Cell &C) {
 void tapas_kernel::M2M(Tapas::Cell & C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
 
-  Tapas::SFC::KeyType debug_key = 7905;
-  
-  if (C.key() % 10000 == debug_key) {
-    Stderr e("M2M");
-    e.out() << "M2M "
-            << Tapas::SFC::Simplify(C.key()) << ", "
-            << C.depth() << ", "
-            << C.center() << std::endl;
-  }
-  
   for (int i = 0; i < C.nsubcells(); ++i) {
     Tapas::Cell &Cj=C.subcell(i);
-    
-    if (C.key() % 10000 == debug_key) {
-      Stderr e("M2M");
-      e.out() << "Cj=subcell " << i << std::endl;
-      e.out() << "Cj.key = " << Tapas::SFC::Simplify(Cj.key()) << std::endl;
-      e.out() << "Cj.nb() = " << Cj.nb() << std::endl;
-      e.out() << "Cj.center() = " << Cj.center() << std::endl;
-      e.out() << "Cj.M = " << Cj.attr().M << std::endl;
-#if USE_MPI
-      //e.out() << "Cj.IsLocal() = " << Cj.IsLocal() << std::endl;
-#endif
-    }
     
     // Skip empty cell
     if (Cj.nb() == 0) continue;
@@ -202,19 +178,6 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
     real_t rho, alpha, beta;
     cart2sph(rho, alpha, beta, dX);
     evalMultipole(rho, alpha, beta, Ynm, YnmTheta);
-
-    if (C.key() % 10000 == debug_key) {
-      Stderr e("M2M");
-      e.out() << "dX=" << dX << std::endl;
-      e.out() << "rho=" << rho << std::endl;
-      e.out() << "alpha=" << alpha << std::endl;
-      e.out() << "Ynm=";
-      for (auto &y: Ynm) e.out() << y << ",";
-      e.out() << std::endl;
-      e.out() << "YnmTheta=";
-      for (auto &y: YnmTheta) e.out() << y << ",";
-      e.out() << std::endl;
-    }
 
     for (int j=0; j<P; j++) {
       for (int k=0; k<=j; k++) {
@@ -235,23 +198,6 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
         C.attr().M[jks] += M;
       }
     }
-  }
-
-  if (C.key() % 10000 == debug_key) {
-    Stderr e("M2M");
-    for (int i = 0; i < C.nsubcells(); i++) {
-      Tapas::Cell &Cj = C.subcell(i);
-      e.out() << "C[" << i << "].key = " << Tapas::SFC::Simplify(Cj.key()) << std::endl;
-      e.out() << "C[" << i << "].IsLeaf = " << Cj.IsLeaf() << std::endl;
-#if USE_MPI
-      //e.out() << "C[" << i << "].Local  = " << Cj.IsLocal() << std::endl;
-#endif 
-      e.out() << "C[" << i << "].depth  = " << Cj.depth() << std::endl;
-      e.out() << "C[" << i << "].center = " << Cj.center() << std::endl;
-      e.out() << "C[" << i << "].M = " << Cj.attr().M << std::endl;
-    }
-    
-    e.out() << "M=" << C.attr().M << std::endl;
   }
 }
 

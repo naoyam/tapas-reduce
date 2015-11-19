@@ -467,7 +467,7 @@ void ReportSplitType(typename Cell<TSP>::KeyType trg_key,
                      SplitType by_pred, SplitType orig) {
   using SFC = typename Cell<TSP>::SFC;
   
-  Stderr e("check");
+  tapas::debug::DebugStream e("check");
   e.out() << SFC::Simplify(trg_key) << " - " << SFC::Simplify(src_key) << "  ";
 
   e.out() << "Pred:";
@@ -892,9 +892,10 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) {
     std::stringstream ss;
     ss << "In MPI rank " << data_->mpi_rank_ << ": " 
        << "Cell not found for key "
-       << child_key << " "
        << SFC::Simplify(child_key) << " "
-       << SFC::Decode(child_key) << std::endl;
+       << SFC::Decode(child_key) << " "
+       << child_key
+       << std::endl;
     ss << "In MPI rank " << data_->mpi_rank_ << ": Anscestors are:" << std::endl;
 
     for (KeyType k = key_; k != 0; k = SFC::Parent(k)) {

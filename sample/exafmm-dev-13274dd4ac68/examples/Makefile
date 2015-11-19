@@ -30,8 +30,9 @@ serial: serial.o $(OBJECTS)
 #	$(CXX) $? $(LFLAGS) -o $@
 
 tapas: serial_tapas parallel_tapas
+
 serial_tapas.o: tapas_exafmm.cxx
-	$(CXX) -c $^ $(LFLAGS) -o $@
+	$(CXX) $(DEBUG) $(LOG) -c $^ $(LFLAGS) -o $@
 serial_tapas: serial_tapas.o LaplaceSphericalCPU_tapas.o LaplaceP2PCPU_tapas.o $(OBJECTS)
 	$(CXX) $(DEBUG) $(LOG) $^ $(LFLAGS) -o $@
 

@@ -576,12 +576,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     // Dump all (local) cells to a file
 #ifdef TAPAS_DEBUG
     {
-      std::vector<KeyType> recv_keys;
-      for (auto &i : hn) {
-        recv_keys.push_back(i.key);
-      }
-      
-      Stderr e("cells");
+      tapas::debug::DebugStream e("cells");
     
       for (auto&& iter : (*ht)) {
         KeyType k = iter.first;
@@ -596,19 +591,6 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
                   << "next_key=" << SFC::Simplify(SFC::GetNext(k)) << " "
                   << "parent=" << SFC::Simplify(SFC::Parent(k))  << " "
                   << std::endl;
-          // Print bodies which belong to Cell c
-#if 0
-          if (c->IsLeaf()) {
-            index_t body_beg, body_end;
-            SFC::FindRangeByKey(recv_keys, k, body_beg, body_end);
-            for (int i = body_beg; i < body_end; i++) {
-              e.out() << "\t\t\t| "
-                      << SFC::Simplify(recv_keys[i]) << ": "
-                      << b[i].x
-                      << std::endl;
-            }
-          }
-#endif
         }
       }
     }
