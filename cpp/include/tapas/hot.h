@@ -9,6 +9,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 
 #include <algorithm>
 #include <memory>
@@ -787,10 +788,23 @@ void GlobalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
   f(c);
 }
 
+
+#define LOG(k_, code) do {                            \
+    using SFC = typename TSP::SFC;                    \
+    typename SFC::KeyType k = (k_);                   \
+    std::string ks = SFC::Simplify(k);                \
+    std::string kd = SFC::Decode(k);                  \
+    tapas::debug::DebugStream ds("upward");           \
+    int d = SFC::GetDepth((c).key());                 \
+    for (int i = 0; i < d; i++) { ds.out() << "  "; } \
+    code;                                             \
+    ds.out() << std::endl;                            \
+  } while(0)
+    
 template<class TSP>
 void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
   auto &data = c.data();
-  
+
   // perform post-order (upward) traverse
   // algorithm:
   //   if c is in the global tree:
@@ -810,6 +824,7 @@ void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
     // 2. allgatherv the results
     // 3. culculate the global tree in each process
 
+    // compute upward towards all local roots
     for (auto && key_lr : data.lroots_) {
       TAPAS_ASSERT(data.ht_.count(key_lr) == 1);
       auto *cell = data.ht_[key_lr];
@@ -1321,6 +1336,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   MPI_Comm_rank(MPI_COMM_WORLD, &data->mpi_rank_);
   MPI_Comm_size(MPI_COMM_WORLD, &data->mpi_size_);
 
+  // Build local trees
   SamplingOctree<TSP, SFC> stree(b, num_bodies, reg, data, max_nb_);
   stree.Build();
     
@@ -1335,8 +1351,30 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     attr_vector_allocator;
 #endif /*TAPAS_USE_VECTORMAP*/
 
+  // Build Global trees
   GlobalTree<TSP>::Build(*data);
 
+#ifdef TAPAS_DEBUG
+  {
+    tapas::debug::DebugStream e("cells");
+    
+    for (auto&& iter : data->ht_) {
+      KeyType k = iter.first;
+      Cell<TSP> *c = iter.second;
+      e.out() << SFC::Simplify(k) << " "
+              << "d=" << SFC::GetDepth(k) << " "
+              << "leaf=" << c->IsLeaf() << " "
+          //<< "owners=" << std::setw(2) << std::right << 0 << " "
+              << "nb=" << std::setw(3) << (c->IsLeaf() ? (int)c->nb() : -1) << " "
+              << "center=[" << c->center() << "] "
+          //<< "next_key=" << SFC::Simplify(SFC::GetNext(k)) << " "
+          //<< "parent=" << SFC::Simplify(SFC::Parent(k))  << " "
+              << std::endl;
+    }
+  }
+#endif
+
+  
   // return the root cell (root key is always 0)
   return data->ht_[0];
 }

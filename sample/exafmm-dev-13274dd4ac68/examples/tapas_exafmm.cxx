@@ -61,9 +61,12 @@ static Region &asn(Region &x, const Bounds &y) {
 
 // UpDownPass::upwardPass
 static inline void FMM_P2M(Tapas::Cell &c, real_t theta) {
+#if 0
+  // In new Tapas, Upward functions do not need to recursively call Map.
   if (!c.IsLeaf()) {
     tapas::Map(FMM_P2M, c.subcells(), theta);
   }
+#endif
   
   c.attr().R = 0;
   c.attr().M = 0;
@@ -203,9 +206,8 @@ void dumpM(Tapas::Cell &root) {
     ofs << cell.IsLeaf() << " ";
     ofs << cell.attr().M << std::endl;
     mtx.unlock();
-    tapas::Map(dump, cell.subcells());
   };
-  tapas::Map(dump, root);
+  tapas::UpwardMap(dump, root);
   ofs.close();
 }
 
@@ -347,7 +349,6 @@ int main(int argc, char ** argv) {
 #ifdef TAPAS_DEBUG
   {
     tapas::debug::DebugStream err("bodies");
-    err.out() << "numBodies = " << args.numBodies << ", " << args.mpi_rank << ", " << args.mpi_size << std::endl;
     for (auto &b : bodies) {
       err.out() << b.X << " " << b.SRC << std::endl;
     }

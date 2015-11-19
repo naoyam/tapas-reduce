@@ -581,17 +581,15 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
       for (auto&& iter : (*ht)) {
         KeyType k = iter.first;
         Cell<TSP> *c = iter.second;
-        if (c->key() != 0) {
-          e.out() << SFC::Simplify(k) << " "
-                  << "d=" << SFC::GetDepth(k) << " "
-                  << "leaf=" << c->IsLeaf() << " "
-                  << "owners=" << std::setw(2) << std::right << 0 << " "
-                  << "nb=" << std::setw(3) << c->nb() << " "
-                  << "center=[" << c->center() << "] "
-                  << "next_key=" << SFC::Simplify(SFC::GetNext(k)) << " "
-                  << "parent=" << SFC::Simplify(SFC::Parent(k))  << " "
-                  << std::endl;
-        }
+        e.out() << SFC::Simplify(k) << " "
+                << "d=" << SFC::GetDepth(k) << " "
+                << "leaf=" << c->IsLeaf() << " "
+            //<< "owners=" << std::setw(2) << std::right << 0 << " "
+                << "nb=" << std::setw(3) << (c->IsLeaf() ? (int)c->nb() : -1) << " "
+                << "center=[" << c->center() << "] "
+            //<< "next_key=" << SFC::Simplify(SFC::GetNext(k)) << " "
+            //<< "parent=" << SFC::Simplify(SFC::Parent(k))  << " "
+                << std::endl;
       }
     }
 #endif

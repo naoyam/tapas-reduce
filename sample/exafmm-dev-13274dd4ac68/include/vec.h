@@ -1,5 +1,6 @@
 #ifndef vec_h
 #define vec_h
+#include <cmath>
 #include <cassert>
 #include <ostream>
 #define NEWTON 1

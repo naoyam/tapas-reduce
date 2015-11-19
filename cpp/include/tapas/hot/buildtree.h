@@ -321,7 +321,8 @@ class SamplingOctree {
     int body_beg = is_leaf ? range_beg - bbeg : 0;
 
     // Construct a cell.
-    CellType *c = new CellType(data_->region_, body_beg, nb);
+    auto reg = CellType::CalcRegion(k, data_->region_);
+    CellType *c = new CellType(reg, body_beg, nb);
     c->key_ = k;
     c->is_leaf_ = is_leaf;
     c->is_local_ = true;

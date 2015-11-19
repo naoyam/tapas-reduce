@@ -172,7 +172,10 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
     Tapas::Cell &Cj=C.subcell(i);
     
     // Skip empty cell
-    if (Cj.nb() == 0) continue;
+    // NOTE: This is not allowed in
+    // TODO: Do we want to allow this?
+    //if (Cj.nb() == 0) continue;
+    
     vec3 dX = tovec(C.center() - Cj.center());
     
     real_t rho, alpha, beta;
