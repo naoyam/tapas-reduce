@@ -51,6 +51,7 @@ typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr,
 
 typedef Tapas::Region Region;
 
+#if 0 // to be deleted 
 namespace tapas_kernel {
 
 void P2M(Tapas::Cell &C);
@@ -65,5 +66,6 @@ void P2P(Tapas::BodyIterator &Ci, Tapas::BodyIterator &Cj, vec3 Xperiodic);
 #endif /*TAPAS_USE_VECTORMAP*/
 
 } // tapas_kernel
+#endif /* if 0 */
 
 #endif // EXAFMM_TAPAS_H_

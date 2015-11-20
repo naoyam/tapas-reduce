@@ -978,16 +978,6 @@ struct LET {
       KeyType k = res_cell_attr_keys[i];
       TAPAS_ASSERT(data->ht_.count(k) == 0); // Received cell must not exit in local hash.
 
-#ifdef TAPAS_DEBUG
-      tapas::debug::DebugStream e("recv_attr");
-      CellAttrType attr = res_cell_attrs[i];
-      e.out() << SFC::Simplify(k) << " attr = ["
-              << attr.x << " "
-              << attr.y << " "
-              << attr.z << " "
-              << attr.w << "]" << std::endl;
-#endif
-
       Cell<TSP> *c = nullptr;
 
       if (data->ht_gtree_.count(k) > 0) {
@@ -1001,22 +991,6 @@ struct LET {
       c->bid_ = 0;
       data->ht_let_[k] = c;
     }
-
-#ifdef TAPAS_DEBUG
-    {
-      tapas::debug::DebugStream e("orig_attr");
-      for (auto p : data->ht_) {
-        KeyType k = p.first;
-        CellType *c = p.second;
-        CellAttrType attr = c->attr();
-        e.out() << SFC::Simplify(k) << " attr = ["
-                << attr.x << " "
-                << attr.y << " "
-                << attr.z << " "
-                << attr.w << "]" << std::endl;
-      }
-    }
-#endif
     
     TAPAS_ASSERT(res_leaf_keys.size() == res_nb.size());
 
@@ -1121,6 +1095,7 @@ struct LET {
 };
 
 } // namespace hot
+
 } // namespace tapas
 
 #endif // __TAPAS_HOT_LET__

@@ -26,7 +26,7 @@ struct tapas_kernel::P2P {
   }
 };
 
-#else
+#else /* TAPAS_USE_VECTORMAP */
 
 void tapas_kernel::P2P(Tapas::BodyIterator &Bi, Tapas::BodyIterator &Bj, vec3 Xperiodic) {
   kreal_t pot = 0; 

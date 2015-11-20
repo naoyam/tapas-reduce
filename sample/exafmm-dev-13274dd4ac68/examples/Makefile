@@ -31,12 +31,10 @@ serial: serial.o $(OBJECTS)
 
 tapas: serial_tapas parallel_tapas
 
-serial_tapas.o: tapas_exafmm.cxx
-	$(CXX) $(DEBUG) $(LOG) -c $^ $(LFLAGS) -o $@
-serial_tapas: serial_tapas.o LaplaceSphericalCPU_tapas.o LaplaceP2PCPU_tapas.o $(OBJECTS)
+serial_tapas: tapas_exafmm.cxx $(OBJECTS)
 	$(CXX) $(DEBUG) $(LOG) $^ $(LFLAGS) -o $@
 
-parallel_tapas: tapas_exafmm.cxx LaplaceSphericalCPU_tapas.cxx LaplaceP2PCPU_tapas.cxx $(OBJECTS)
+parallel_tapas: tapas_exafmm.cxx $(OBJECTS)
 	$(MPICXX) $(DEBUG) $(LOG) -DUSE_MPI $^ $(LFLAGS) -o $@
 
 # Test for parallel FMM

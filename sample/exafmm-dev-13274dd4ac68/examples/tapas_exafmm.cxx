@@ -29,6 +29,8 @@
 #include "verify.h"
 
 #include "tapas_exafmm.h"
+#include "LaplaceSphericalCPU_tapas.h"
+#include "LaplaceP2PCPU_tapas.h"
 
 #ifdef TAPAS_USE_VECTORMAP
 #  include "LaplaceP2PCPU_tapas.cxx"
@@ -82,9 +84,9 @@ static inline void FMM_P2M(Tapas::Cell &c, real_t theta) {
 #endif
   
   if (c.IsLeaf()) {
-    tapas_kernel::P2M(c);
+    P2M(c);
   } else {
-    tapas_kernel::M2M(c);
+    M2M(c);
   }
   
   for (int i = 0; i < 3; ++i) {
@@ -97,9 +99,9 @@ static inline void FMM_P2M(Tapas::Cell &c, real_t theta) {
 
 static inline void FMM_L2P(Tapas::Cell &c) {
   if (c.nb() == 0) return;
-  if (!c.IsRoot()) tapas_kernel::L2L(c);
+  if (!c.IsRoot()) L2L(c);
   if (c.IsLeaf()) {
-    tapas::Map(tapas_kernel::L2P, c.bodies());
+    tapas::Map(L2P, c.bodies());
   } else {
     tapas::Map(FMM_L2P, c.subcells());
   }
@@ -107,7 +109,7 @@ static inline void FMM_L2P(Tapas::Cell &c) {
 
 
 // Perform ExaFMM's Dual Tree Traversal (M2L & P2P)
-class FMM_DTT {
+struct FMM_DTT {
   template<class Cell>
   inline void operator()(Cell &Ci, Cell &Cj, int mutual, int nspawn) {
     //static inline void FMM_DTT(TapasCell &Ci, TapasCell &Cj, int
@@ -121,12 +123,12 @@ class FMM_DTT {
   
     if (R2 > (Ci.attr().R+Cj.attr().R) * (Ci.attr().R+Cj.attr().R)) {                   // If distance is far enough
       numM2L++;
-      tapas_kernel::M2L(Ci, Cj, Xperiodic, mutual);                   //  M2L kernel
+      M2L(Ci, Cj, Xperiodic, mutual);                   //  M2L kernel
     } else if (Ci.IsLeaf() && Cj.IsLeaf()) {            // Else if both cells are bodies
 #ifdef TAPAS_USE_VECTORMAP
-      tapas::Map(tapas_kernel::P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic);
+      tapas::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic);
 #else 
-      tapas::Map(tapas_kernel::P2P, tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic);
+      tapas::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic);
 #endif /*TAPAS_USE_VECTORMAP*/
 
       numP2P++;
@@ -140,14 +142,14 @@ class FMM_DTT {
     if (Cj.IsLeaf()) {
       assert(!Ci.IsLeaf());                                   //  Make sure Ci is not leaf
       //for (C_iter ci=Ci0+Ci->ICHILD; ci!=Ci0+Ci->ICHILD+Ci->NCHILD; ci++) {// Loop over Ci's children
-      //traverse(ci, Cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
+      //  traverse(ci, Cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
       //}                                                         //
       //End loop over Ci's children
       tapas::Map(*this, tapas::Product(Ci.subcells(), Cj), mutual, nspawn);
     } else if (Ci.IsLeaf()) {                               // Else if Ci is leaf
       assert(!Cj.IsLeaf());                                   //  Make sure Cj is not leaf
       //for (C_iter cj=Cj0+Cj->ICHILD; cj!=Cj0+Cj->ICHILD+Cj->NCHILD; cj++) {// Loop over Cj's children
-      //traverse(Ci, cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
+      //  traverse(Ci, cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
       //}                                                         //
       //End loop over Cj's children
       tapas::Map(*this, tapas::Product(Ci, Cj.subcells()), mutual, nspawn);
@@ -159,12 +161,12 @@ class FMM_DTT {
       tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn);
     } else if (Ci.attr().R >= Cj.attr().R) {                                // Else if Ci is larger than Cj
       //for (C_iter ci=Ci0+Ci->ICHILD; ci!=Ci0+Ci->ICHILD+Ci->NCHILD; ci++) {// Loop over Ci's children
-      //traverse(ci, Cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
+      //  traverse(ci, Cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
       //}                                                         //  End loop over Ci's children
       tapas::Map(*this, tapas::Product(Ci.subcells(), Cj), mutual, nspawn);
     } else {                                                    // Else if Cj is larger than Ci
       //for (C_iter cj=Cj0+Cj->ICHILD; cj!=Cj0+Cj->ICHILD+Cj->NCHILD; cj++) {// Loop over Cj's children
-      // traverse(Ci, cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
+      //  traverse(Ci, cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
       //}                                                         //  End loop over Cj's children
       tapas::Map(*this, tapas::Product(Ci, Cj.subcells()), mutual, nspawn);
     }
@@ -395,8 +397,6 @@ int main(int argc, char ** argv) {
 #endif
     exit(0);
 
-#if 0 /* Implementing parallel tapas */
-    
     //dumpLeaves(*root);
     //dumpM(*root);
 
@@ -411,7 +411,7 @@ int main(int argc, char ** argv) {
     
 #ifdef TAPAS_USE_VECTORMAP
     vec3 Xperiodic = 0; // dummy; periodic not ported
-    Tapas::Cell::TSPClass::Vectormap::vectormap_finish(tapas_kernel::P2P(),
+    Tapas::Cell::TSPClass::Vectormap::vectormap_finish(P2P(),
                                                        *root,
                                                        Xperiodic);
 #endif /*TAPAS_USE_VECTORMAP*/
@@ -421,6 +421,8 @@ int main(int argc, char ** argv) {
     TAPAS_LOG_DEBUG() << "Dual Tree Traversal done\n";
     jbodies = bodies;
 
+#if 0 /* Implementing parallel tapas */
+    
     //dumpBodies(*root);
     //dumpL(*root);
 

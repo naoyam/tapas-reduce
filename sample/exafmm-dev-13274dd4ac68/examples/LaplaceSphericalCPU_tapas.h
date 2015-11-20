@@ -22,21 +22,6 @@ namespace {
 const complex_t I(0.,1.);                                       // Imaginary
                                                                 // unit
 template <int DIM, class FP> inline
-tapas::Vec<DIM, FP> &asn(tapas::Vec<DIM, FP> &dst, const vec<DIM, FP> &src) {
-  for (int i = 0; i < DIM; ++i) {
-    dst[i] = src[i];
-  }
-  return dst;
-}
-template <int DIM, class FP> inline
-vec<DIM, FP> &asn(vec<DIM, FP> &dst, const tapas::Vec<DIM, FP> &src) {
-  for (int i = 0; i < DIM; ++i) {
-    dst[i] = src[i];
-  }
-  return dst;
-}
-
-template <int DIM, class FP> inline
 vec<DIM, FP> tovec(const tapas::Vec<DIM, FP> &src) {
   vec<DIM, FP> dst;
   for (int i = 0; i < DIM; ++i) {
@@ -140,9 +125,8 @@ void evalLocal(real_t rho, real_t alpha, real_t beta, complex_t * Ynm) {
   }                                                             // End loop over m in Ynm
 }
 
-} // anon namespace
 
-void tapas_kernel::P2M(Tapas::Cell &C) {
+void P2M(Tapas::Cell &C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
   
   for (tapas::index_t i = 0; i < C.nb(); ++i) {
@@ -165,7 +149,7 @@ void tapas_kernel::P2M(Tapas::Cell &C) {
   //e.out() << std::setw(10) << Tapas::SFC::Simplify(C.key()) << "M=" << C.attr().M << std::endl;
 }
 
-void tapas_kernel::M2M(Tapas::Cell & C) {
+void M2M(Tapas::Cell & C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
 
   for (int i = 0; i < C.nsubcells(); ++i) {
@@ -204,7 +188,8 @@ void tapas_kernel::M2M(Tapas::Cell & C) {
   }
 }
 
-void tapas_kernel::M2L(Tapas::Cell &Ci, Tapas::Cell &Cj, vec3 Xperiodic, bool mutual) {
+template<class Cell>
+void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
   complex_t Ynmi[P*P], Ynmj[P*P];
   //vec3 dX = Ci.attr().X - Cj.attr().X - Xperiodic;
   vec3 dX;
@@ -258,7 +243,7 @@ void tapas_kernel::M2L(Tapas::Cell &Ci, Tapas::Cell &Cj, vec3 Xperiodic, bool mu
 }
 
 
-void tapas_kernel::L2P(Tapas::BodyIterator &B) {
+void L2P(Tapas::BodyIterator &B) {
   complex_t Ynm[P*P], YnmTheta[P*P];
   const Tapas::Cell &C = B.cell();
   vec3 dX = B->X - tovec(C.center());
@@ -293,7 +278,7 @@ void tapas_kernel::L2P(Tapas::BodyIterator &B) {
   B.attr()[3] += cartesian[2]; 
 }
 
-void tapas_kernel::L2L(Tapas::Cell &C) {
+void L2L(Tapas::Cell &C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
   const Tapas::Cell &Cj = C.parent();
   vec3 dX = tovec(C.center() - Cj.center());
@@ -326,3 +311,5 @@ void tapas_kernel::L2L(Tapas::Cell &C) {
     }
   }
 }
+
+} // anon namespace
