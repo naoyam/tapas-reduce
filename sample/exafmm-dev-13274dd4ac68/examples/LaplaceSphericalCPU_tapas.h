@@ -200,12 +200,16 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
   cart2sph(rho, alpha, beta, dX);
   evalLocal(rho, alpha, beta, Ynmi);
   if (mutual) evalLocal(rho, alpha+M_PI, beta, Ynmj);
+  
+  auto attr_i = Ci.attr();
+    
   for (int j=0; j<P; j++) {
 #if MASS
     real_t Cnm = std::real(Ci->M[0] * Cj->M[0]) * ODDEVEN(j);
 #else
     real_t Cnm = ODDEVEN(j);
 #endif
+
     for (int k=0; k<=j; k++) {
       int jks = j * (j + 1) / 2 + k;
       complex_t Li = 0, Lj = 0;
@@ -235,11 +239,16 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
           if (mutual) Lj += Ci.attr().M[nms] * Cnm2 * Ynmj[jnkm];
         }
       }
-      Ci.attr().L[jks] += Li;
+      attr_i.L[jks] += Li;
       //std::cerr << "Li: " << Li << std::endl;
-      if (mutual) Cj.attr().L[jks] += Lj;
+      if (mutual) {
+        auto attr_j = Cj.attr();
+        attr_j.L[jks] += Lj;
+        Cj.attr() = attr_j;
+      }
     }
   }
+  Ci.attr() = attr_i;
 }
 
 

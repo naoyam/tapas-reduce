@@ -23,7 +23,7 @@ class BodyIterator {
   index_t size() const {
     return c_.nb();
   }
-  BodyIterator &operator*() const {
+  const BodyIterator &operator*() const {
     return *this;
   }
   BodyIterator &operator*() {
@@ -71,9 +71,8 @@ class BodyIterator {
   template <class T>
   bool operator==(const T &) const { return false; }
   bool AllowMutualInteraction(const BodyIterator &x) const {
-    // unconditionally returns false.
-    // This function is created to support ExaFMM's mutual interaction behavior
-    // but it is not supported in Tapas.
+    // If two bodies belong to a same cell, they are guaranteed to be in the same process.
+    // TODO: Can this condition be relaxed? (if c_.IsLocal() && x.c_.IsLocal())
     return c_ == x.c_;
   }
 };
@@ -375,7 +374,15 @@ Product(CELL &c1, SubCellIterator<CELL> c2) { // cand 1
   return ProductIterator<CellIterator<CELL>, SubCellIterator<CELL>>(c1, c2);
 }
 
-// <body, body>
+// For any other object-object combination
+template<class IterType>
+ProductIterator<IterType>
+Product(IterType iter1, IterType iter2) {
+  return ProductIterator<IterType>(iter1, iter2);
+}
+
+#if 0 /* to be deleted. */
+
 template <class CELL>
 ProductIterator<BodyIterator<CELL>>
 Product(BodyIterator<CELL> c1, BodyIterator<CELL> c2) {
@@ -389,6 +396,8 @@ Product(Cell &c1, Cell &c2) {
   typedef CellIterator<Cell> CellIterType;
   return ProductIterator<CellIterType, CellIterType>(CellIterType(c1), CellIterType(c2));
 }
+
+#endif /* to be deleted */
 
 // template <class T1, class Cell>
 // ProductIterator<T1, CellIterator<Cell>>
