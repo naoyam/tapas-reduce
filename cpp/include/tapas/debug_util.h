@@ -83,6 +83,7 @@ class DebugStream {
        << ".stderr.txt";
     fs_ = new std::ofstream(ss.str().c_str(), std::ios_base::app);
 #else /* TAPAS_DEBUG */
+    (void)label;
     fs_ = new std::stringstream();
 #endif /* TAPAS_DEBUG */
   }
