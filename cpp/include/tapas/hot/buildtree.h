@@ -286,9 +286,8 @@ class SamplingOctree {
 
   void GrowLocal() {
     double beg = MPI_Wtime();
-    
     proc_first_keys_.push_back(SFC::GetNext(0));
-    
+
     GenerateCell((KeyType)0, std::begin(body_keys_), std::end(body_keys_));
     
     proc_first_keys_.pop_back();
@@ -340,7 +339,9 @@ class SamplingOctree {
     if (SFC::GetDepth(k) > data_->max_depth_) {
       data_->max_depth_ = SFC::GetDepth(k);
     }
-
+    TAPAS_ASSERT(SFC::GetDepth(k) <= SFC::MaxDepth() &&
+                 data_->max_depth_ <= SFC::MaxDepth());
+    
     if (is_leaf) {
       // The cell [k] is a leaf.
       data_->leaf_keys_.push_back(k);

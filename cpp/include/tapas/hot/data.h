@@ -80,7 +80,11 @@ struct HotData {
   double time_let_response; // ExchangeLET/Response
   double time_let_register; // ExchangeLET/register
   
-  HotData() { }
+  HotData() :
+      mpi_rank_(0),
+      mpi_size_(1),
+      max_depth_(0)
+  { }
   HotData(const HotData<TSP, SFC>& rhs) = delete; // no copy
   HotData(HotData<TSP, SFC>&& rhs) = delete; // no move
 };

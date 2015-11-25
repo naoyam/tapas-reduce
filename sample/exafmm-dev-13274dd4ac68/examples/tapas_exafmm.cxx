@@ -112,10 +112,9 @@ static inline void FMM_L2P(Tapas::Cell &c) {
 struct FMM_DTT {
   template<class Cell>
   inline void operator()(Cell &Ci, Cell &Cj, int mutual, int nspawn) {
-    //static inline void FMM_DTT(TapasCell &Ci, TapasCell &Cj, int
-
-    //mutual) {
-    if (Ci.nb() == 0 || Cj.nb() == 0) return;
+    // TODO:
+    //if (Ci.nb() == 0 || Cj.nb() == 0) return;
+    
     vec3 dX;
     asn(dX, Ci.center() - Cj.center());
     real_t R2 = norm(dX);
@@ -139,6 +138,24 @@ struct FMM_DTT {
   
   template<class Cell>
   inline void tapas_splitCell(Cell &Ci, Cell &Cj, int mutual, int nspawn) {
+    {
+      tapas::debug::DebugStream ds("let");
+
+      ds.out() << Ci.key() << " " << Cj.key() << " ";
+      
+      if (Cj.IsLeaf()) {
+        ds.out() << "Cj.IsLeaf()";
+      } else if (Ci.IsLeaf()) {
+        ds.out() << "Ci.IsLeaf()";
+      } else if (Ci.attr().R >= Cj.attr().R) {
+        ds.out() << "Ci.attr().R >= Cj.attr().R" << ", where Ci.attr().R = " << Ci.attr().R << ", Cj.attr().R = " << Cj.attr().R;
+      } else {
+        ds.out() << "else";
+      }
+      
+      ds.out() << std::endl;
+    }
+    
     if (Cj.IsLeaf()) {
       assert(!Ci.IsLeaf());                                   //  Make sure Ci is not leaf
       //for (C_iter ci=Ci0+Ci->ICHILD; ci!=Ci0+Ci->ICHILD+Ci->NCHILD; ci++) {// Loop over Ci's children
@@ -153,12 +170,14 @@ struct FMM_DTT {
       //}                                                         //
       //End loop over Cj's children
       tapas::Map(*this, tapas::Product(Ci, Cj.subcells()), mutual, nspawn);
+#if 0
     } else if (Ci.nb() + Cj.nb() >= (tapas::index_t)nspawn || (mutual && Ci == Cj)) {// Else if cells are still large
       //TraverseRange traverseRange(this, Ci0+Ci->ICHILD, Ci0+Ci->ICHILD+Ci->NCHILD,// Instantiate recursive functor
       //Cj0+Cj->ICHILD, Cj0+Cj->ICHILD+Cj->NCHILD, Xperiodic, mutual, remote);
       //traverseRange();                                          //
       //Traverse for range of cell pairs
       tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn);
+#endif
     } else if (Ci.attr().R >= Cj.attr().R) {                                // Else if Ci is larger than Cj
       //for (C_iter ci=Ci0+Ci->ICHILD; ci!=Ci0+Ci->ICHILD+Ci->NCHILD; ci++) {// Loop over Ci's children
       //  traverse(ci, Cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
@@ -205,7 +224,7 @@ void dumpM(Tapas::Cell &root) {
     mtx.lock();
     ofs << std::setw(20) << std::right << Tapas::SFC::Simplify(cell.key()) << " ";
     ofs << std::setw(3) << cell.depth() << " ";
-    ofs << cell.IsLeaf() << " ";
+    ofs << (cell.IsLeaf() ? "L" : "_") << " ";
     ofs << cell.attr().M << std::endl;
     mtx.unlock();
   };
@@ -229,12 +248,11 @@ void dumpL(Tapas::Cell &root) {
     mtx.lock();
     ofs << std::setw(20) << std::right << Tapas::SFC::Simplify(cell.key()) << " ";
     ofs << std::setw(3) << cell.depth() << " ";
-    ofs << cell.IsLeaf() << " ";
+    ofs << (cell.IsLeaf() ? "L" : "_") << " ";
     ofs << cell.attr().L << std::endl;
     mtx.unlock();
-    tapas::Map(dump, cell.subcells());
   };
-  tapas::Map(dump, root);
+  tapas::UpwardMap(dump, root);
   ofs.close();
 }
 
@@ -264,11 +282,9 @@ void dumpBodies(Tapas::Cell &root) {
         ofs << std::endl;
       }
       mtx.unlock();
-    } else {
-      tapas::Map(dump, cell.subcells());
     }
   };
-  tapas::Map(dump, root);
+  tapas::UpwardMap(dump, root);
   ofs.close();
 }
 
@@ -392,11 +408,6 @@ int main(int argc, char ** argv) {
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
 
-#ifdef USE_MPI
-    MPI_Finalize();
-#endif
-    exit(0);
-
     //dumpLeaves(*root);
     //dumpM(*root);
 
@@ -421,11 +432,12 @@ int main(int argc, char ** argv) {
     TAPAS_LOG_DEBUG() << "Dual Tree Traversal done\n";
     jbodies = bodies;
 
+    
+    dumpBodies(*root);
+    dumpL(*root);
+
 #if 0 /* Implementing parallel tapas */
     
-    //dumpBodies(*root);
-    //dumpL(*root);
-
     logger::startTimer("Downward pass");
     tapas::Map(FMM_L2P, *root);
     logger::stopTimer("Downward pass");

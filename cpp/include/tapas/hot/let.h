@@ -765,6 +765,7 @@ struct LET {
 
   static void ShowHistogram(const Data &data) {
     const int d = data.max_depth_;
+    TAPAS_ASSERT(d <= SFC::MaxDepth());
 
     const long ncells = data.ht_.size();
     const long nall   = (pow(8.0, d+1) - 1) / 7;
