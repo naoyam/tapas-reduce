@@ -133,9 +133,7 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
         // if i and j are mutually interactive, f(i,j) is evaluated only once.
         bool am = AllowMutual<T1_Iter, T2_Iter>::value(iter1, iter2);
         if ((am && i <= j) || !am) {
-          if (iter1.IsLocal()) {
-            CellType::template Map<Callback>(callback, *(iter1+i), *(iter2+j));
-          }
+          CellType::template Map<Callback>(callback, *(iter1+i), *(iter2+j));
         }
       }
     }

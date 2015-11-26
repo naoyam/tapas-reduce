@@ -196,11 +196,14 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
   asn(dX, Ci.center() - Cj.center());
   dX -= Xperiodic;
 
+  tapas::debug::DebugStream e("M2L");
+  e.out() << Ci.key() << " " << Cj.key() << " ";
+
   real_t rho, alpha, beta;
   cart2sph(rho, alpha, beta, dX);
   evalLocal(rho, alpha, beta, Ynmi);
   if (mutual) evalLocal(rho, alpha+M_PI, beta, Ynmj);
-  
+
   auto attr_i = Ci.attr();
     
   for (int j=0; j<P; j++) {
@@ -249,6 +252,7 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
     }
   }
   Ci.attr() = attr_i;
+  e.out() << "L=" << Ci.attr().L << std::endl;
 }
 
 

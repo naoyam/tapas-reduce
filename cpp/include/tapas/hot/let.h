@@ -85,8 +85,6 @@ void TraverseLET_old(typename Cell<TSP>::BodyType &p,
     return;
   }
 
-  // ここまでOK
-  
   // the cell attributes is necessary (because traversal has come here.)
   list_attr.insert(src_key);
   TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
@@ -104,7 +102,7 @@ void TraverseLET_old(typename Cell<TSP>::BodyType &p,
   for (size_t i = 0; i < src_child_keys.size(); i++) {
     KeyType ckey = src_child_keys[i];
     auto ctr = CellType::CalcCenter(ckey, r);
-
+    
     FP s = CellType::CalcRegion(ckey, r).width(0); // width
     FP d = std::sqrt(distR2(ctr));
     
@@ -112,7 +110,7 @@ void TraverseLET_old(typename Cell<TSP>::BodyType &p,
     //                                << " " << SFC::Simplify(ckey) << " s=" << s << " d=" << d << " "
     //                                << (s/d > theta ? "SplitRight" : "Approx")
     //                                << std::endl;
-
+    
     // tapas::debug::DebugStream("comp_count_hardcoded").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(ckey) << " "
     //                                      << "s=" << s << " d=" << d << std::endl;
     if (s/d > theta) { // if the cell(ckey) is close
@@ -1122,7 +1120,7 @@ struct LET {
 #ifdef TAPAS_DEBUG
     ShowHistogram(root.data());
 #endif
-  
+
     // Traverse
     KeySet req_cell_attr_keys; // cells of which attributes are to be transfered from remotes to local
     KeySet req_leaf_keys; // cells of which bodies are to be transfered from remotes to local
@@ -1177,6 +1175,23 @@ struct LET {
                   << "next_key=" << SFC::Simplify(SFC::GetNext(k)) << " "
                   << "parent=" << SFC::Simplify(SFC::Parent(k)) << " "
                   << std::endl;
+        }
+      }
+    }
+
+    {
+      tapas::debug::DebugStream e("M_let");
+      
+      for (auto& iter : data.ht_let_) {
+        KeyType k = iter.first;
+        Cell<TSP> *c = iter.second;
+        if (c == nullptr) {
+          e.out() << "ERROR: " << SFC::Simplify(k) << " is NULL in hash LET." << std::endl;
+        } else {
+          e.out() << std::setw(20) << std::right << SFC::Simplify(c->key()) << " ";
+          e.out() << std::setw(3) << c->depth() << " ";
+          e.out() << (c->IsLeaf() ? "L" : "_") << " ";
+          e.out() << c->attr().M << std::endl;
         }
       }
     }

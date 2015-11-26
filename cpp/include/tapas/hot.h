@@ -688,8 +688,9 @@ void Cell<TSP>::Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2) {
   if (c1.key() == 0 && c2.key() == 0) {
     LET<TSP>::Exchange(f, c1);
     
-    tapas::debug::DebugStream ds("let");
-    ds.out() << "-------------exchane done---------------" << std::endl;
+    tapas::debug::DebugStream("let").out() << "-------------exchane done---------------" << std::endl;
+    tapas::debug::DebugStream("M2L").out() << "-------------exchane done---------------" << std::endl;
+    tapas::debug::DebugStream("DTT").out() << "-------------exchane done---------------" << std::endl;
   }
 
   f(c1, c2);
