@@ -170,6 +170,8 @@ struct FMM_DTT {
       //}                                                         //
       //End loop over Cj's children
       tapas::Map(*this, tapas::Product(Ci, Cj.subcells()), mutual, nspawn, theta);
+    } else if (mutual && Ci == Cj) {
+      tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
 #if 0
     } else if (Ci.nb() + Cj.nb() >= (tapas::index_t)nspawn || (mutual && Ci == Cj)) {// Else if cells are still large
       //TraverseRange traverseRange(this, Ci0+Ci->ICHILD, Ci0+Ci->ICHILD+Ci->NCHILD,// Instantiate recursive functor
