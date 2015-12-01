@@ -7,6 +7,7 @@
 #include <tuple>
 #include <functional>
 
+#include "tapas/debug_util.h"
 #include "tapas/cell.h"
 #include "tapas/iterator.h"
 
@@ -162,7 +163,6 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
   //using C2 = typename T2_Iter::value_type;
   using Th = typename CellType::Threading;
 
-
   using Callback = CallbackWrapper<Funct, Args...>;
   Callback callback(f, args...);
   
@@ -180,14 +180,13 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
         T2_Iter right = iter2 + j;
         // if i and j are mutually interactive, f(i,j) is evaluated only once.
 
-        IfCell<CellType, typename T1_Iter::value_type, typename T2_Iter::value_type, T1_Iter, T2_Iter>::debug("[A]", *(iter1+i), *(iter2+j), i, j, iter1, iter2);
+        //IfCell<CellType, typename T1_Iter::value_type, typename T2_Iter::value_type, T1_Iter, T2_Iter>::debug("[A]", *(iter1+i), *(iter2+j), i, j, iter1, iter2);
   
         //if (iter1.IsLocal()) {
         if (left.IsLocal()) {
           bool am = AllowMutual<T1_Iter, T2_Iter>::value(left, right);
-          am = false; // TODO
           if ((am && i <= j) || !am) {
-            IfCell<CellType, typename T1_Iter::value_type, typename T2_Iter::value_type, T1_Iter, T2_Iter>::debug("[B]", *(iter1+i), *(iter2+j), i, j, iter1, iter2);
+            //IfCell<CellType, typename T1_Iter::value_type, typename T2_Iter::value_type, T1_Iter, T2_Iter>::debug("[B]", *(iter1+i), *(iter2+j), i, j, iter1, iter2);
             CellType::template Map<Callback>(callback, *left, *right);
           }
         }
@@ -219,17 +218,17 @@ template <class Funct, class T1_Iter, class T2_Iter, class... Args>
 void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
   TAPAS_LOG_DEBUG() << "map product iterator size: "
                     << prod.size() << std::endl;
-      
-  product_map(prod.t1_, 0, prod.t1_.size(),
-              prod.t2_, 0, prod.t2_.size(),
-              f, args...);
-  
-#if 0
-  for (index_t i = 0; i < prod.size(); ++i) {
-    f(prod.first(), prod.second(), args...);
-    prod++;
+
+  if (prod.size() > 0) {
+    product_map(prod.t1_, 0, prod.t1_.size(),
+                prod.t2_, 0, prod.t2_.size(),
+                f, args...);
   }
-#endif
+  
+  // for (index_t i = 0; i < prod.size(); ++i) {
+  //   f(prod.first(), prod.second(), args...);
+  //   prod++;
+  // }
 }
   
 #ifdef TAPAS_USE_VECTORMAP
@@ -249,17 +248,16 @@ template <class Funct, class T1_Iter, class...Args>
 void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
   TAPAS_LOG_DEBUG() << "map product iterator size: "
                     << prod.size() << std::endl;
-#if 0
-  // TODO
-  product_map(prod.t1_, 0, prod.t1_.size(),
-              prod.t2_, 0, prod.t2_.size(),
-              f, args...);
-#else
-  for (index_t i = 0; i < prod.size(); ++i) {
-    f(prod.first(), prod.second(), args...);
-    prod++;
+
+  if (prod.size() > 0) {
+    product_map(prod.t1_, 0, prod.t1_.size(),
+                prod.t2_, 0, prod.t2_.size(),
+                f, args...);
   }
-#endif
+  // for (index_t i = 0; i < prod.size(); ++i) {
+  //   f(prod.first(), prod.second(), args...);
+  //   prod++;
+  // }
 }
 
 template <class Funct, class CellType, class... Args>

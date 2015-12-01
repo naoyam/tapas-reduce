@@ -311,14 +311,14 @@ class Cell: public tapas::BasicCell<TSP> {
 
   static void PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
   static void UpwardMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
-  
-  static void Map(BodyIterator &b1, BodyIterator &b2,
-                  std::function<void(BodyIterator&, BodyIterator&)> f) {
+
+  template<class Funct>
+  static void Map(Funct f, BodyIterator &b1, BodyIterator &b2) {
     f(b1, b2);
   }
 
-  static void Map(BodyIterator &b1,
-                  std::function<void(BodyIterator)> f) {
+  template<class Funct>
+  static void Map(Funct f, BodyIterator &b1) {
     f(b1);
   }
 
@@ -327,7 +327,7 @@ class Cell: public tapas::BasicCell<TSP> {
    */
   bool IsLeaf() const;
   void SetLeaf(bool);
-
+  
   /**
    * @brief Returns if the cell is local.
    */

@@ -39,6 +39,9 @@ class BodyIterator {
     tmp += n;
     return tmp;
   }
+  bool IsLocal() const {
+    return c_.IsLocal();
+  }
   const typename CellType::BodyType *operator->() const {
     return &(c_.body(idx_));
   }
@@ -137,7 +140,7 @@ class CellIterator {
     return 1;
   }
   bool AllowMutualInteraction(const CellIterator &x) const {
-    return c_ == x.c_;
+    return c_.IsLocal() && x.c_.IsLocal();
   }
 }; // class CellIterator
 

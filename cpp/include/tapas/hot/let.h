@@ -35,6 +35,7 @@ enum class SplitType {
   Body,         // Compute using right cell's bodies
   SplitLeft,    // Split Left (local) cell
   SplitRight,   // Split Right (remote) cell
+  SplitBoth,    // Split both cells
   None,         // Nothing. Use when a target cell isn't local in Traverse
 };
 
@@ -408,6 +409,13 @@ struct LET {
       return c_->body(idx_++);
     }
 
+    ProxyBodyIterator operator+(int i) {
+      ProxyBodyIterator ret = *this;
+      ret.idx_ += i;
+      TAPAS_ASSERT(ret.idx_ < size());
+      return ret;
+    }
+
     /**
      * \fn void ProxyBodyIterator::rewind(int idx)
      */
@@ -426,6 +434,10 @@ struct LET {
       return c_->nb();
     }
 
+    bool IsLocal() const {
+      return c_->IsLocal();
+    }
+
     ProxyBodyIterator &operator+=(int n) {
       idx_ += n;
       TAPAS_ASSERT(idx_ < c_->RealCell()->nb());
@@ -441,15 +453,13 @@ struct LET {
     }
 
     template<class Funct>
-    inline static void Map(Funct f, ProxyBodyIterator &p) {
-      f(p);
+    inline static void Map(Funct, ProxyBodyIterator &&) {
+      //f(p);
     }
-    
     template<class Funct>
-    inline static void Map(Funct f, ProxyBodyIterator &&p) {
-      f(p);
+    inline static void Map(Funct, ProxyBodyIterator &) {
+      //f(p);
     }
-    
   };
 
   /**
@@ -495,9 +505,24 @@ struct LET {
      */
     template<class Funct>
     static void Map(Funct, ProxyCell &, ProxyCell &) {
-      // empty
+      // f(c1, c2)
     }
 
+    template<class Funct>
+    inline static void Map(Funct, ProxyBodyIterator &) {
+      //f(p);
+    }
+    
+    template<class Funct>
+    inline static void Map(Funct, ProxyBodyIterator &, ProxyBodyIterator &) {
+      //f(p1, p2);
+    }
+    
+    template<class Funct>
+    inline static void Map(Funct, ProxyBodyIterator &&) {
+      //f(p);
+    }
+    
     template<class UserFunct>
     static SplitType Pred(UserFunct f, KeyType trg_key, KeyType src_key, const Data &data) {
       ProxyCell trg_cell(trg_key, data);
@@ -505,7 +530,9 @@ struct LET {
     
       f(trg_cell, src_cell);
 
-      if (trg_cell.marked_split_) {
+      if (trg_cell.marked_split_ && src_cell.marked_split_) {
+        return SplitType::SplitBoth;
+      } else if (trg_cell.marked_split_) {
         return SplitType::SplitLeft;
       } else if (src_cell.marked_split_) {
         return SplitType::SplitRight;
@@ -748,6 +775,15 @@ struct LET {
 #endif
 
     switch(split) {
+      case SplitType::SplitBoth:
+        for (KeyType trg_ch : SFC::GetChildren(trg_key)) {
+          if (ht.count(trg_ch) > 0) {
+            for (KeyType src_ch : SFC::GetChildren(src_key)) {
+              Traverse(f, trg_ch, src_ch, data, list_attr, list_body);
+            }
+          }
+        }
+        break;
       case SplitType::SplitLeft:
         for (KeyType ch : SFC::GetChildren(trg_key)) {
           if (ht.count(ch) > 0) {

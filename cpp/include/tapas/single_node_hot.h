@@ -110,9 +110,11 @@ class Cell: public tapas::BasicCell<TSP> {
   // 2-parameter Map function()
   template<class Funct>
   static void Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2);
-  
-  static void Map(BodyIterator &b1, BodyIterator &b2,
-                  std::function<void(BodyIterator&, BodyIterator&)> f);
+
+  template<class Funct>
+  static void Map(Funct f, BodyIterator &b1, BodyIterator &b2) {
+    f(b1, b2);
+  }
 
   static void PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
   static void UpwardMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
@@ -128,6 +130,8 @@ class Cell: public tapas::BasicCell<TSP> {
     index_t local_nb() const { return nb_; } 
     Cell &subcell(int idx) const;
     Cell &parent() const;
+
+  bool IsLocal() const { return true; }
   
 #ifdef DEPRECATED
     typename TSP::BT::type &particle(index_t idx) const {

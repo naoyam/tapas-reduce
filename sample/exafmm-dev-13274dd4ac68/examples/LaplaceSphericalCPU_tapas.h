@@ -197,15 +197,14 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
   dX -= Xperiodic;
 
   tapas::debug::DebugStream e("M2L");
-  e.out() << Ci.key() << " " << Cj.key() << " ";
-
+  
   real_t rho, alpha, beta;
   cart2sph(rho, alpha, beta, dX);
   evalLocal(rho, alpha, beta, Ynmi);
   if (mutual) evalLocal(rho, alpha+M_PI, beta, Ynmj);
 
   auto attr_i = Ci.attr();
-    
+
   for (int j=0; j<P; j++) {
 #if MASS
     real_t Cnm = std::real(Ci->M[0] * Cj->M[0]) * ODDEVEN(j);
@@ -242,6 +241,8 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
           if (mutual) Lj += Ci.attr().M[nms] * Cnm2 * Ynmj[jnkm];
         }
       }
+
+      // TODO: attr_j can be put out of the outer `for' loop
       attr_i.L[jks] += Li;
       //std::cerr << "Li: " << Li << std::endl;
       if (mutual) {
@@ -252,28 +253,7 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
     }
   }
   Ci.attr() = attr_i;
-  e.out() << "L=" << Ci.attr().L << std::endl;
-  
-  {// debug
-    using SFC = typename Cell::SFC;
-    using KeyType = typename SFC::KeyType;
-    KeyType ki = 2522015791327477762;
-    KeyType kj = 1;
-    KeyType pi = Cell::SFC::Parent(ki);
-    KeyType pj = Cell::SFC::Parent(kj);
-
-    tapas::debug::DebugStream e("DTT");
-      
-    if (Ci.key() == ki) {
-      e.out() << "DTT Ci = " << Ci.key() << ", "
-              << "Cj = " << Cj.key() << " "
-              << "Ci.L = " << attr_i.L << " "
-              << std::endl;
-    }
-  }
-  
 }
-
 
 void L2P(Tapas::BodyIterator &B) {
   complex_t Ynm[P*P], YnmTheta[P*P];

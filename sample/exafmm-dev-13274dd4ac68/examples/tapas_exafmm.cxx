@@ -345,9 +345,6 @@ int main(int argc, char ** argv) {
   Dataset data;
   Traversal traversal(args.nspawn, args.images);
 
-  // TODO
-  //args.mutual = false;
-  
   if (args.useRmax) {
     std::cerr << "Rmax not supported." << std::endl;
     std::cerr << "Use --useRmax 0 option." << std::endl;
@@ -438,8 +435,8 @@ int main(int argc, char ** argv) {
     dumpBodies(*root);
     dumpL(*root);
 
-#if 1 /* temporary: Implementing parallel tapas */
-    
+#if !defined(USE_MPI) /* temporary: Implementing parallel tapas */
+
     logger::startTimer("Downward pass");
     tapas::Map(FMM_L2P, *root);
     logger::stopTimer("Downward pass");
@@ -516,9 +513,9 @@ int main(int argc, char ** argv) {
     bodies = bodies3;
     data.initTarget(bodies);
 
-#endif /* Implementing parallel tapas */
+#endif /* if !defined(USE_MPI) Implementing parallel tapas */
     
-  } /* for */
+  } /* end for */
 
 #ifdef USE_MPI
   MPI_Finalize();
