@@ -495,7 +495,6 @@ void ReportSplitType(typename Cell<TSP>::KeyType trg_key,
 }
 
 
-
 // Utility functions on set-related operations on std::vector
 
 /**
@@ -686,13 +685,19 @@ template<class TSP>
 template<class Funct>
 void Cell<TSP>::Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2) {
   if (c1.key() == 0 && c2.key() == 0) {
+    putenv("TAPAS_IN_LET=1");
+    
     LET<TSP>::Exchange(f, c1);
     
-    tapas::debug::DebugStream("let").out() << "-------------exchane done---------------" << std::endl;
-    tapas::debug::DebugStream("M2L").out() << "-------------exchane done---------------" << std::endl;
-    tapas::debug::DebugStream("DTT").out() << "-------------exchane done---------------" << std::endl;
+    {tapas::debug::DebugStream("product_map").out() << "-------------exchange done---------------" << std::endl;}
+    unsetenv("TAPAS_IN_LET");
+    
+    tapas::debug::DebugStream("M2L").out() << "-------------exchange done---------------" << std::endl;
+    tapas::debug::DebugStream("DTT").out() << "-------------exchange done---------------" << std::endl;
   }
 
+  unsetenv("TAPAS_IN_LET");
+    
   f(c1, c2);
 }
 
@@ -1521,6 +1526,7 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, HOT<DIM, tapas::sfc::Morton>, Threa
 #ifdef AUTO_LET_SLOW
 extern volatile double dummy_value;
 #endif
+
 
 } // namespace tapas
 

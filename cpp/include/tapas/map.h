@@ -106,6 +106,51 @@ struct AllowMutual<C1, C1> {
   }
 };
 
+template<class T, class U, class V, class Iter1, class Iter2>
+struct IfCell {
+  static void debug(const char *label, T&, U&, V&, int, int, Iter1, Iter2) { }
+};
+
+template<class T, class Iter1, class Iter2>
+struct IfCell<T,T,T,Iter1,Iter2> {
+  static void debug(const char *label, T &c1, T &c2, int i, int j, Iter1 iter1, Iter2 iter2) {
+    tapas::debug::DebugStream e("product_map");
+    const char *LET = (getenv("TAPAS_IN_LET") ? "LET " : "");
+    using SFC = typename T::SFC;
+    bool am = AllowMutual<Iter1, Iter2>::value(iter1, iter2);
+
+    bool interact = (am && i <= j) || !am;
+    
+    e.out() << LET << label << " "
+            << SFC::Decode(c1.key()) << " " << SFC::Simplify(c1.key()) << " "
+#ifdef USE_MPI
+            << (c1.IsLocal() ? "Local" : "Remote") << " "
+#endif
+            << SFC::Decode(c2.key()) << " " << SFC::Simplify(c2.key()) << " "
+#ifdef USE_MPI
+            << (c2.IsLocal() ? "Local" : "Remote") << " "
+#endif
+            << "i=" << i << " j=" << j << " interact?=" << interact
+            << std::endl;
+
+#ifdef USE_MPI
+    e.out() << LET << label << " "
+            << "iter1.IsLocal() = " << iter1.IsLocal() << ", "
+            << "(*(iter1+i)).IsLocal = " << (*(iter1+i)).IsLocal() << " "
+            << "c1.IsLocal() = " << c1.IsLocal() << ", "
+            << std::endl;
+    if (iter1.IsLocal() != c1.IsLocal()) {
+      e.out() << LET << label << " " << "T=" << tapas::debug::GetClassName<T>() << std::endl;
+      e.out() << LET << label << " " << "Iter1=" << tapas::debug::GetClassName<Iter1>() << std::endl;
+      e.out() << LET << label << " " << "iter1.key     = " << SFC::Decode(iter1.key()) << " " << iter1.IsLocal() << std::endl;
+      e.out() << LET << label << " " << "(iter1+" << i << ").key = " << SFC::Decode((iter1+i).key()) << " " << (iter1+i).IsLocal() << std::endl;
+      e.out() << LET << label << " " << "c1.key        = " << SFC::Decode(c1.key())    << " " << c1.IsLocal()    << std::endl;
+      e.out() << LET << label << std::endl;
+    }
+#endif
+  }
+};
+
 template<class T1_Iter, class T2_Iter, class Funct, class...Args>
 static void product_map(T1_Iter iter1, int beg1, int end1,
                         T2_Iter iter2, int beg2, int end2,
@@ -116,6 +161,7 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
   //using C1 = typename T1_Iter::value_type; // Container type (actually Body or Cell)
   //using C2 = typename T2_Iter::value_type;
   using Th = typename CellType::Threading;
+
 
   using Callback = CallbackWrapper<Funct, Args...>;
   Callback callback(f, args...);
@@ -130,10 +176,20 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
 
     for(int i = beg1; i < end1; i++) {
       for(int j = beg2; j < end2; j++) {
+        T1_Iter left = iter1 + i;
+        T2_Iter right = iter2 + j;
         // if i and j are mutually interactive, f(i,j) is evaluated only once.
-        bool am = AllowMutual<T1_Iter, T2_Iter>::value(iter1, iter2);
-        if ((am && i <= j) || !am) {
-          CellType::template Map<Callback>(callback, *(iter1+i), *(iter2+j));
+
+        IfCell<CellType, typename T1_Iter::value_type, typename T2_Iter::value_type, T1_Iter, T2_Iter>::debug("[A]", *(iter1+i), *(iter2+j), i, j, iter1, iter2);
+  
+        //if (iter1.IsLocal()) {
+        if (left.IsLocal()) {
+          bool am = AllowMutual<T1_Iter, T2_Iter>::value(left, right);
+          am = false; // TODO
+          if ((am && i <= j) || !am) {
+            IfCell<CellType, typename T1_Iter::value_type, typename T2_Iter::value_type, T1_Iter, T2_Iter>::debug("[B]", *(iter1+i), *(iter2+j), i, j, iter1, iter2);
+            CellType::template Map<Callback>(callback, *left, *right);
+          }
         }
       }
     }
@@ -194,8 +250,7 @@ void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
   TAPAS_LOG_DEBUG() << "map product iterator size: "
                     << prod.size() << std::endl;
 #if 0
-  // This implementation using product_map is currently disabled because
-  // as of now 1-argument ProductIterator is not used.
+  // TODO
   product_map(prod.t1_, 0, prod.t1_.size(),
               prod.t2_, 0, prod.t2_.size(),
               f, args...);

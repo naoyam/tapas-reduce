@@ -370,6 +370,10 @@ struct LET {
       return *this;
     }
 
+    ProxyCell &cell() const {
+      return *c_;
+    }
+
     const ProxyBodyIterator &operator*() const {
       return *this;
     }
@@ -485,7 +489,10 @@ struct LET {
     bool operator==(const ProxyCell &rhs) const {
       return key_ == rhs.key_;
     }
-    
+
+    /**
+     * \fn void ProxyCell::Map
+     */
     template<class Funct>
     static void Map(Funct, ProxyCell &, ProxyCell &) {
       // empty
@@ -540,6 +547,10 @@ struct LET {
       Touched();
       if (is_local_) return cell_->IsLeaf();
       else           return data_.max_depth_ <= SFC::GetDepth(key_);
+    }
+
+    bool IsLocal() const {
+      return data_.ht_.count(key_) > 0;
     }
 
     size_t nb() {

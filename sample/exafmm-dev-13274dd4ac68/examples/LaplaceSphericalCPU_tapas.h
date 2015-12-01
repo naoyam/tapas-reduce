@@ -253,6 +253,25 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
   }
   Ci.attr() = attr_i;
   e.out() << "L=" << Ci.attr().L << std::endl;
+  
+  {// debug
+    using SFC = typename Cell::SFC;
+    using KeyType = typename SFC::KeyType;
+    KeyType ki = 2522015791327477762;
+    KeyType kj = 1;
+    KeyType pi = Cell::SFC::Parent(ki);
+    KeyType pj = Cell::SFC::Parent(kj);
+
+    tapas::debug::DebugStream e("DTT");
+      
+    if (Ci.key() == ki) {
+      e.out() << "DTT Ci = " << Ci.key() << ", "
+              << "Cj = " << Cj.key() << " "
+              << "Ci.L = " << attr_i.L << " "
+              << std::endl;
+    }
+  }
+  
 }
 
 

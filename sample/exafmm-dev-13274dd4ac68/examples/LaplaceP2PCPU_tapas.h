@@ -1,3 +1,4 @@
+#include "tapas/debug_util.h"
 #include "tapas_exafmm.h"
 
 const real_t EPS2 = 0.0;                                        //!< Softening parameter (squared)
@@ -28,6 +29,13 @@ struct P2P {
 
 #else /* TAPAS_USE_VECTORMAP */
 
+inline bool Close(double a, double b) { // for debug
+  double a1 = a * 0.999;
+  double a2 = a * 1.001;
+  if (a1 < a2) return a1 <= b && b <= a2;
+  else         return a2 <= b && b <= a1;
+}
+
 struct P2P {
   template<class BodyIterator>
   void operator()(BodyIterator &Bi, BodyIterator &Bj, vec3 Xperiodic) {
@@ -47,11 +55,14 @@ struct P2P {
       ax += dX[0];
       ay += dX[1];
       az += dX[2];
+      
+
       attr[0] += pot;
       attr[1] -= dX[0];
       attr[2] -= dX[1];
       attr[3] -= dX[2];
       Bi.attr() = attr; // Element-wise assignment to BodyAttribute is not allowed in Tapas
+
       if (Bi != Bj) {
         attr = Bj.attr();
         attr[0] += invR;
@@ -59,6 +70,24 @@ struct P2P {
         attr[2] += dX[1];
         attr[3] += dX[2];
         Bj.attr() = attr;
+        
+        {
+          if (!getenv("TAPAS_IN_LET") && Bj.cell().key() == 2377900603251621891 && Close(Bj->X[0], -8.354853e-01)) {
+            tapas::debug::DebugStream e("p2p");
+            e.out() << Bj.cell().key() << " ";
+            e.out() << Bi.cell().key() << " ";
+            e.out() << "Bj: " << Bj->X << " ";
+            e.out() << "Bi: " << Bi->X << " ";
+            e.out() << "attr_j(1): ";
+            for (int i = 0; i < 4; i++) {
+              e.out() << std::setprecision(10) << std::fixed << Bj.attr()[i] << " ";
+            }
+            //e.out() << "dX: " << dX << " "; // ok
+            //e.out() << "invR: " << invR << " "; //ok
+            //e.out() << "pot: " << pot << " "; // ok
+            e.out() << std::endl;
+          }
+        }
       }
     }
   }

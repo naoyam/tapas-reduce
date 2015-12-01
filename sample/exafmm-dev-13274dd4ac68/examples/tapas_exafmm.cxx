@@ -108,13 +108,13 @@ static inline void FMM_L2P(Tapas::Cell &c) {
   }
 }
 
-
 // Perform ExaFMM's Dual Tree Traversal (M2L & P2P)
 struct FMM_DTT {
   template<class Cell>
   inline void operator()(Cell &Ci, Cell &Cj, int mutual, int nspawn, real_t theta) {
     // TODO:
     //if (Ci.nb() == 0 || Cj.nb() == 0) return;
+    
     vec3 dX;
     asn(dX, Ci.center() - Cj.center());
     real_t R2 = norm(dX);
@@ -129,15 +129,22 @@ struct FMM_DTT {
     }
     Ri = (Ri / 2 * 1.00001) / theta;
     Rj = (Rj / 2 * 1.00001) / theta;
-
+    
     if (R2 > (Ri + Rj) * (Ri + Rj)) {                   // If distance is far enough
-      //if (R2 > (Ci.attr().R + Cj.attr().R) * (Ci.attr().R + Cj.attr().R)) {                   // If distance is far enough
       numM2L++;
       M2L(Ci, Cj, Xperiodic, mutual);                   //  M2L kernel
     } else if (Ci.IsLeaf() && Cj.IsLeaf()) {            // Else if both cells are bodies
 #ifdef TAPAS_USE_VECTORMAP
       tapas::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic);
-#else 
+#else
+      {
+#if 0
+        if (!getenv("TAPAS_IN_LET")) {
+          tapas::debug::DebugStream e("p2p");
+          e.out() << Ci.key() << " " << Cj.key() << std::endl;
+        }
+#endif
+      }
       tapas::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic);
 #endif /*TAPAS_USE_VECTORMAP*/
 
@@ -172,7 +179,6 @@ struct FMM_DTT {
       tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
 #endif
     } else if (Ri >= Rj) {                                // Else if Ci is larger than Cj
-    
       //for (C_iter ci=Ci0+Ci->ICHILD; ci!=Ci0+Ci->ICHILD+Ci->NCHILD; ci++) {// Loop over Ci's children
       //  traverse(ci, Cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
       //}                                                         //  End loop over Ci's children
@@ -269,9 +275,11 @@ void dumpBodies(Tapas::Cell &root) {
       auto iter = cell.bodies();
       for (int bi=0; bi < cell.nb(); bi++, iter++) {
         ofs << iter->X << " ";
-        ofs << iter->SRC << " ";
+        ofs << iter->SRC << " " << "vec4= ";
         for (int j = 0; j < 4; j++) {
-          ofs << std::setw(20) << std::right << iter.attr()[j] << " ";
+          ofs << std::right
+              << std::setiosflags(std::ios::showpos)
+              << iter.attr()[j] << " ";
         }
         ofs << std::endl;
       }
@@ -335,6 +343,7 @@ int main(int argc, char ** argv) {
   Dataset data;
   Traversal traversal(args.nspawn, args.images);
 
+  // TODO
   //args.mutual = false;
   
   if (args.useRmax) {
@@ -427,7 +436,7 @@ int main(int argc, char ** argv) {
     dumpBodies(*root);
     dumpL(*root);
 
-#if 0 /* temporary: Implementing parallel tapas */
+#if 1 /* temporary: Implementing parallel tapas */
     
     logger::startTimer("Downward pass");
     tapas::Map(FMM_L2P, *root);
