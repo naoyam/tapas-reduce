@@ -2,6 +2,8 @@
 #define TAPAS_DEBUG_UTIL_H_
 
 #include <string>
+#include <typeinfo>
+#include <cxxabi.h>
 
 #include "tapas/common.h"
 #include "tapas/basic_types.h"
@@ -90,6 +92,7 @@ class DebugStream {
   
   ~DebugStream() noexcept {
     assert(fs_ != nullptr);
+    fs_->flush();
     delete fs_;
     fs_ = nullptr;
   }
@@ -99,6 +102,27 @@ class DebugStream {
     return *fs_;
   }
 };
+
+template<class T>
+std::string GetClassName() {
+  std::string clsname = "";
+  
+  const std::type_info &ti = typeid(T);
+  int stat;
+  char *name = abi::__cxa_demangle(ti.name(), 0, 0, &stat);
+
+  if (name != nullptr && stat == 0) {
+    clsname = name;
+  } else {
+    clsname = "<Can't get class name>";
+  }
+
+  if (name != nullptr) {
+    free(name);
+  }
+
+  return clsname;
+}
 
 
 } // debug
