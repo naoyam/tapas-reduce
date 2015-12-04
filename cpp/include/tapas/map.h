@@ -240,10 +240,21 @@ void PostOrderMap(Funct f, T &x, Args...args) {
 }
 
 template<class Funct, class T, class...Args>
-void UpwardMap(Funct f, T &x, Args...args) {
+inline void UpwardMap(Funct f, T &x, Args...args) {
   PostOrderMap(f, x, args...);
   //std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
   //T::PostOrderMap(x, lambda);
+}
+
+template<class Funct, class T, class...Args>
+void PreOrderMap(Funct f, T &x, Args...args) {
+  std::function<void(T&)> lambda = [=] (T& x) { f(x, args...); };
+  T::PreOrderMap(x, lambda);
+}
+
+template<class Funct, class T, class...Args>
+inline void DownwardMap(Funct f, T &x, Args...args) {
+  PreOrderMap(f, x, args...);
 }
 
 template <class Funct, class T, class... Args>

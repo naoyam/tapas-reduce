@@ -144,7 +144,7 @@ class Cell: public tapas::BasicCell<TSP> {
   }
 
   static void PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
-  static void UpwardMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
+  static void PreOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
   
     KeyType key() const { return key_; }
 
@@ -437,8 +437,12 @@ void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
 }
 
 template <class TSP>
-void Cell<TSP>::UpwardMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
-  PostOrderMap(c, f);
+void Cell<TSP>::PreOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
+  f(c);
+  for (int i = 0; i < c.nsubcells(); i++) {
+    auto &chld = c.subcell(i);
+    PreOrderMap(chld, f);
+  }
 }
 
 template <class TSP>

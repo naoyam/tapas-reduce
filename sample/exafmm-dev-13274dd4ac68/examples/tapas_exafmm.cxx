@@ -63,14 +63,6 @@ static Region &asn(Region &x, const Bounds &y) {
 
 // UpDownPass::upwardPass
 static inline void FMM_P2M(Tapas::Cell &c, real_t theta) {
-#if 0
-  // to be removed.
-  // In new Tapas, Upward functions do not need to recursively call Map.
-  if (!c.IsLeaf()) {
-    tapas::Map(FMM_P2M, c.subcells(), theta);
-  }
-#endif
-  
   c.attr().R = 0;
   c.attr().M = 0;
   c.attr().L = 0;
@@ -90,21 +82,21 @@ static inline void FMM_P2M(Tapas::Cell &c, real_t theta) {
     M2M(c);
   }
 
+#if 0 // to be removed 
   for (int i = 0; i < 3; ++i) {
     c.attr().R = std::max(c.width(i), c.attr().R);
   }
 
   c.attr().R = c.attr().R / 2 * 1.00001; // see bounds2box func
   c.attr().R /= theta;
+#endif
 }
 
 static inline void FMM_L2P(Tapas::Cell &c) {
-  if (c.nb() == 0) return;
+  //if (c.nb() == 0) return;
   if (!c.IsRoot()) L2L(c);
-  if (c.IsLeaf()) {
+  if (c.IsLeaf() && c.nb() > 0) {
     tapas::Map(L2P, c.bodies());
-  } else {
-    tapas::Map(FMM_L2P, c.subcells());
   }
 }
 
@@ -451,7 +443,7 @@ int main(int argc, char ** argv) {
 #if !defined(USE_MPI) /* temporary: Implementing parallel tapas */
 
     logger::startTimer("Downward pass");
-    tapas::Map(FMM_L2P, *root);
+    tapas::DownwardMap(FMM_L2P, *root);
     logger::stopTimer("Downward pass");
     
     TAPAS_LOG_DEBUG() << "L2P done\n";
