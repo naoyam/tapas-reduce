@@ -62,14 +62,14 @@ static Region &asn(Region &x, const Bounds &y) {
 }
 
 // UpDownPass::upwardPass
-static inline void FMM_P2M(Tapas::Cell &c, real_t theta) {
+static inline void FMM_Upward(Tapas::Cell &c, real_t theta) {
   c.attr().R = 0;
   c.attr().M = 0;
   c.attr().L = 0;
   
 #ifdef TAPAS_DEBUG
   {
-    tapas::debug::DebugStream e("FMM_P2M");
+    tapas::debug::DebugStream e("FMM_Upward");
     e.out() << Tapas::SFC::Simplify(c.key()) << " (1) " << c.IsLeaf() << " ";
     e.out() << "c.attr().R = " << std::fixed << std::setprecision(6) << c.attr().R << " ";
     e.out() << std::endl;
@@ -92,7 +92,7 @@ static inline void FMM_P2M(Tapas::Cell &c, real_t theta) {
 #endif
 }
 
-static inline void FMM_L2P(Tapas::Cell &c) {
+static inline void FMM_Downward(Tapas::Cell &c) {
   //if (c.nb() == 0) return;
   if (!c.IsRoot()) L2L(c);
   if (c.IsLeaf() && c.nb() > 0) {
@@ -402,7 +402,7 @@ int main(int argc, char ** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
     logger::startTimer("Upward pass");
-    tapas::UpwardMap(FMM_P2M, *root, args.theta);
+    tapas::UpwardMap(FMM_Upward, *root, args.theta);
     logger::stopTimer("Upward pass");
     
 #ifdef TAPAS_DEBUG
@@ -443,7 +443,7 @@ int main(int argc, char ** argv) {
 #if !defined(USE_MPI) /* temporary: Implementing parallel tapas */
 
     logger::startTimer("Downward pass");
-    tapas::DownwardMap(FMM_L2P, *root);
+    tapas::DownwardMap(FMM_Downward, *root);
     logger::stopTimer("Downward pass");
     
     TAPAS_LOG_DEBUG() << "L2P done\n";
