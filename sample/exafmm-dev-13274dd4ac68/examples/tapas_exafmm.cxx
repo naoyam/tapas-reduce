@@ -275,8 +275,8 @@ void dumpBodies(Tapas::Cell &root) {
       //ofs << std::setw(20) << std::right << Tapas::SFC::Simplify(cell.key()) << " ";
       auto iter = cell.bodies();
       for (int bi=0; bi < cell.nb(); bi++, iter++) {
-        ofs << iter->X << " ";
-        ofs << iter->SRC << " " << "vec4= ";
+        ofs << std::showpos << iter->X << " ";
+        ofs << std::showpos << iter->SRC << " " << "vec4= ";
         for (int j = 0; j < 4; j++) {
           ofs << std::right
               << std::setiosflags(std::ios::showpos)
@@ -437,10 +437,7 @@ int main(int argc, char ** argv) {
 
 #ifdef TAPAS_DEBUG
     dumpL(*root);
-    dumpBodies(*root);
 #endif
-
-#if !defined(USE_MPI) /* temporary: Implementing parallel tapas */
 
     logger::startTimer("Downward pass");
     tapas::DownwardMap(FMM_Downward, *root);
@@ -448,6 +445,10 @@ int main(int argc, char ** argv) {
     
     TAPAS_LOG_DEBUG() << "L2P done\n";
 
+#ifdef TAPAS_DEBUG
+    dumpBodies(*root);
+#endif
+    
     CopyBackResult(bodies, root);
     //CopyBackResult(bodies, root->body_attrs(), args.numBodies);
 
@@ -518,8 +519,6 @@ int main(int argc, char ** argv) {
     bodies = bodies3;
     data.initTarget(bodies);
 
-#endif /* if !defined(USE_MPI) Implementing parallel tapas */
-    
   } /* end for */
 
 #ifdef USE_MPI

@@ -669,6 +669,8 @@ struct LET {
       return cell_;
     }
 
+    bool GetOptMutual() const { return data_.opt_mutual_; }
+
    protected:
     void Touched() const { marked_touched_ = true; }
     void Split()   { marked_split_ = true; }
@@ -687,7 +689,7 @@ struct LET {
         }
       }
     }
-    
+
    private:
     KeyType key_;
     const Data &data_;

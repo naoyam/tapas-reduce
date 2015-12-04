@@ -311,7 +311,7 @@ class Cell: public tapas::BasicCell<TSP> {
   static void Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2);
 
   static void PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
-  static void UpwardMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
+  static void PreOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
 
   template<class Funct>
   static void Map(Funct f, BodyIterator &b1, BodyIterator &b2) {
@@ -867,8 +867,23 @@ void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
 }
 
 template<class TSP>
-void Cell<TSP>::UpwardMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
-  Cell<TSP>::PostOrderMap(c, f);
+void Cell<TSP>::PreOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
+  f(c);
+  
+  if (c.IsLeaf()) return;
+  
+  auto &data = c.data();
+  
+  for (auto && ch_key : SFC::GetChildren(c.key())) {
+#ifdef TAPAS_DEBUG
+    if (data.ht_gtree_.count(ch_key) > 0 && data.ht_.count(ch_key) > 0) {
+      TAPAS_ASSERT(data.ht_gtree_[ch_key] == data.ht_[ch_key]);
+    }
+#endif
+    
+    if      (data.ht_gtree_.count(ch_key) > 0) PreOrderMap(*data.ht_gtree_.at(ch_key), f);
+    else if (data.ht_.count(ch_key)       > 0) PreOrderMap(*data.ht_.at(ch_key), f);
+  }
 }
 
 template <class TSP>

@@ -240,7 +240,7 @@ class SubCellIterator {
     return false;
   }
   bool AllowMutualInteraction(const SubCellIterator &x) const {
-    return c_ == x.c_;
+    return c_.GetOptMutual() && c_ == x.c_;
   }
 }; // class SubCellIterator
 
