@@ -196,14 +196,15 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
   asn(dX, Ci.center() - Cj.center());
   dX -= Xperiodic;
 
-  tapas::debug::DebugStream e("M2L");
-  
   real_t rho, alpha, beta;
   cart2sph(rho, alpha, beta, dX);
   evalLocal(rho, alpha, beta, Ynmi);
   if (mutual) evalLocal(rho, alpha+M_PI, beta, Ynmj);
 
   auto attr_i = Ci.attr();
+  auto attr_j = Cj.attr();
+
+  std::vector<complex_t> LI, LJ;
 
   for (int j=0; j<P; j++) {
 #if MASS
@@ -244,15 +245,15 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
 
       // TODO: attr_j can be put out of the outer `for' loop
       attr_i.L[jks] += Li;
-      //std::cerr << "Li: " << Li << std::endl;
+      LI.push_back(Li); // debug
       if (mutual) {
-        auto attr_j = Cj.attr();
         attr_j.L[jks] += Lj;
-        Cj.attr() = attr_j;
+        LJ.push_back(Lj);
       }
     }
   }
   Ci.attr() = attr_i;
+  if (mutual) Cj.attr() = attr_j;
 }
 
 void L2P(Tapas::BodyIterator &B) {

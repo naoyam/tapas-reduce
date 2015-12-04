@@ -18,6 +18,7 @@
 #include <iostream>
 #include <iomanip>
 #include <functional>
+#include <memory>
 
 // for debugging
 #include <fstream>
@@ -67,8 +68,34 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
                     typename TSP::SFC::KeyType y,
                     typename TSP::SFC::KeyVector &s);
 
-template <class TSP>    
-class Partitioner;
+template <class TSP> class Partitioner;
+template <class TSP> class Cell;
+
+/**
+ * Data shared between all cells
+ */
+template<class TSP>
+class SharedData {
+ public:
+  using CellType = Cell<TSP>;
+  using SFC = typename TSP::SFC;
+  using KeyType = typename SFC::KeyType;
+  using HashTable = std::unordered_map<KeyType, CellType*>;
+  
+  using BodyType = typename TSP::BT::type;
+  using BodyATtrType = typename TSP::BT_ATTR;
+
+  HashTable ht_;
+  bool opt_mutual_;
+
+  SharedData() :
+      ht_(),
+      opt_mutual_(false)
+  { }
+
+  SharedData(const SharedData<TSP>& rhs) = delete; // no copy
+  SharedData(SharedData<TSP>&& rhs) = delete; // no move
+};
 
 template <class TSP> // TapasStaticParams
 class Cell: public tapas::BasicCell<TSP> { 
@@ -90,18 +117,18 @@ class Cell: public tapas::BasicCell<TSP> {
   using SubCellIterator = iter::SubCellIterator<Cell>;
   
  protected:
+  std::shared_ptr<SharedData<TSP>> data_;
   KeyType key_;
-  HashTable *ht_;
   index_t nb_; //!< number of local bodies of the process.
  public:
-    Cell(const Region<TSP> &region,
-         index_t bid, index_t nb, KeyType key,
-         HashTable *ht,
-         typename TSP::BT::type *bodies,
-         typename TSP::BT_ATTR *body_attrs) :
-            tapas::BasicCell<TSP>(region, bid, nb), key_(key),
-            ht_(ht), nb_(nb), bodies_(bodies), body_attrs_(body_attrs),
-            is_leaf_(true) {}
+  Cell(std::shared_ptr<SharedData<TSP>> data,
+       const Region<TSP> &region,
+       index_t bid, index_t nb, KeyType key,
+       typename TSP::BT::type *bodies,
+       typename TSP::BT_ATTR *body_attrs) :
+      tapas::BasicCell<TSP>(region, bid, nb), data_(data), key_(key),
+      nb_(nb), bodies_(bodies), body_attrs_(body_attrs),
+      is_leaf_(true) {}
 
   // 1-parameter Map function()
   template <class Funct>
@@ -121,7 +148,8 @@ class Cell: public tapas::BasicCell<TSP> {
   
     KeyType key() const { return key_; }
 
-    bool operator==(const Cell &c) const;
+  bool operator==(const Cell &c) const;
+  bool operator<(const Cell &c) const;
     template <class T>
     bool operator==(const T &) const { return false; }
     bool IsRoot() const;
@@ -196,14 +224,26 @@ class Cell: public tapas::BasicCell<TSP> {
 
   void Report() const {
   }
+
+  bool GetOptMutual() const {
+    return data_->opt_mutual_;
+  }
+
+  bool SetOptMutual(bool b) {
+    bool prev = data_->opt_mutual_;
+    data_->opt_mutual_ = b;
+    return prev;
+  }
   
  protected:
-    HashTable *ht() { return ht_; }
-    Cell *Lookup(KeyType k) const;
-    typename TSP::BT::type *bodies_;
-    typename TSP::BT_ATTR *body_attrs_;
-    bool is_leaf_;
-
+  HashTable &ht() { return data_->ht_; }
+  const HashTable &ht() const { return data_->ht_; }
+  
+  Cell *Lookup(KeyType k) const;
+  typename TSP::BT::type *bodies_;
+  typename TSP::BT_ATTR *body_attrs_;
+  bool is_leaf_;
+  
   const std::vector<BodyType>& LocalBodies() const;
   const std::vector<BodyAttrType>& LocalBodyAttrs() const;
 }; // class Cell
@@ -407,6 +447,11 @@ bool Cell<TSP>::operator==(const Cell &c) const {
 }
 
 template <class TSP>
+bool Cell<TSP>::operator<(const Cell &c) const {
+  return key_ < c.key_;
+}
+
+template <class TSP>
 bool Cell<TSP>::IsRoot() const {
   return TSP::SFC::GetDepth(key_) == 0;
 }
@@ -432,8 +477,8 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) const {
 
 template <class TSP>
 Cell<TSP> *Cell<TSP>::Lookup(typename TSP::SFC::KeyType k) const {
-  auto i = ht_->find(k);
-  if (i != ht_->end()) {
+  auto i = data_->ht_.find(k);
+  if (i != data_->ht_.end()) {
     return i->second;
   } else {
     return nullptr;
@@ -571,10 +616,11 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     auto get_key = [](const HelperNode<TSP>& hn) { return hn.key; };
     auto kp = GetBodyRange<SFC, HelperNode<TSP>>(root_key, hn, get_key);
     assert(kp.first == (KeyType)0 && kp.second == (KeyType)nb);
-    
-    auto *ht = new typename CellType::HashTable();
-    auto *root = new CellType(r, 0, nb, root_key, ht, b, attrs);
-    ht->insert(std::make_pair(root_key, root));
+
+    auto data = std::make_shared<SharedData<TSP>>();
+    auto &ht = data->ht_;
+    auto *root = new CellType(data, r, 0, nb, root_key, b, attrs);
+    ht.insert(std::make_pair(root_key, root));
     Refine(root, hn, b, 0, 0);
 
     // Dump all (local) cells to a file
@@ -582,7 +628,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
     {
       tapas::debug::DebugStream e("cells");
     
-      for (auto&& iter : (*ht)) {
+      for (auto&& iter : ht) {
         KeyType k = iter.first;
         Cell<TSP> *c = iter.second;
         e.out() << SFC::Simplify(k) << " "
@@ -640,9 +686,9 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
                           << child_bn << "\n";
         auto child_r = c->region().PartitionBSP(i);
         auto *child_cell = new Cell<TSP>(
-            child_r, cur_offset, child_bn, child_key, c->ht(),
+            c->data_, child_r, cur_offset, child_bn, child_key,
             c->bodies_, c->body_attrs_);
-        c->ht()->insert(std::make_pair(child_key, child_cell));
+        c->ht().insert(std::make_pair(child_key, child_cell));
         TAPAS_LOG_DEBUG() << "Particles: \n";
 #ifdef TAPAS_DEBUG    
         //tapas::debug::PrintBodies<Dim, typename TSP::FP, typename TSP::BT>(b+cur_offset, child_bn, std::cerr);

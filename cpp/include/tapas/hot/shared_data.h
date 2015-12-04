@@ -13,7 +13,7 @@ template<class TSP> class DummyCell;
  * Never accessed by users directly. Only held by Cells using shared_ptr.
  */
 template<class TSP, class SFC_>
-struct HotData {
+struct SharedData {
   using SFC = SFC_;
   using KeyType = typename SFC::KeyType;
   using CellType = Cell<TSP>;
@@ -60,6 +60,8 @@ struct HotData {
   
   std::vector<KeyType> proc_first_keys_; //!< first SFC key of each process
 
+  bool opt_mutual_;
+
   // log and time measurements (mainly of the local process)
   double sampling_rate; // sampling rate of tree construction
   index_t nb_total;  // total number of bodies.
@@ -79,14 +81,15 @@ struct HotData {
   double time_let_req;      // ExchangeLET/Request
   double time_let_response; // ExchangeLET/Response
   double time_let_register; // ExchangeLET/register
-  
-  HotData() :
+
+  SharedData() :
       mpi_rank_(0),
       mpi_size_(1),
-      max_depth_(0)
+      max_depth_(0),
+      opt_mutual_(false)
   { }
-  HotData(const HotData<TSP, SFC>& rhs) = delete; // no copy
-  HotData(HotData<TSP, SFC>&& rhs) = delete; // no move
+  SharedData(const SharedData<TSP, SFC>& rhs) = delete; // no copy
+  SharedData(SharedData<TSP, SFC>&& rhs) = delete; // no move
 };
 
 

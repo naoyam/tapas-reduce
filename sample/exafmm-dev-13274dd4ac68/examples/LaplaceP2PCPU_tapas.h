@@ -38,7 +38,7 @@ inline bool Close(double a, double b) { // for debug
 
 struct P2P {
   template<class BodyIterator>
-  void operator()(BodyIterator &Bi, BodyIterator &Bj, vec3 Xperiodic) {
+  void operator()(BodyIterator &Bi, BodyIterator &Bj, vec3 Xperiodic, int mutual) {
     kreal_t pot = 0; 
     kreal_t ax = 0;
     kreal_t ay = 0;
@@ -55,7 +55,6 @@ struct P2P {
       ax += dX[0];
       ay += dX[1];
       az += dX[2];
-      
 
       attr[0] += pot;
       attr[1] -= dX[0];
@@ -63,31 +62,13 @@ struct P2P {
       attr[3] -= dX[2];
       Bi.attr() = attr; // Element-wise assignment to BodyAttribute is not allowed in Tapas
 
-      if (Bi != Bj) {
+      if (mutual && Bi != Bj) {
         attr = Bj.attr();
         attr[0] += invR;
         attr[1] += dX[0];
         attr[2] += dX[1];
         attr[3] += dX[2];
         Bj.attr() = attr;
-        
-        {
-          if (!getenv("TAPAS_IN_LET") && Bj.cell().key() == 2377900603251621891 && Close(Bj->X[0], -8.354853e-01)) {
-            tapas::debug::DebugStream e("p2p");
-            e.out() << Bj.cell().key() << " ";
-            e.out() << Bi.cell().key() << " ";
-            e.out() << "Bj: " << Bj->X << " ";
-            e.out() << "Bi: " << Bi->X << " ";
-            e.out() << "attr_j(1): ";
-            for (int i = 0; i < 4; i++) {
-              e.out() << std::setprecision(10) << std::fixed << Bj.attr()[i] << " ";
-            }
-            //e.out() << "dX: " << dX << " "; // ok
-            //e.out() << "invR: " << invR << " "; //ok
-            //e.out() << "pot: " << pot << " "; // ok
-            e.out() << std::endl;
-          }
-        }
       }
     }
   }

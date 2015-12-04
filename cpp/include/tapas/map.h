@@ -48,25 +48,6 @@ struct CallbackWrapper {
   }
 };
 
-#if 0
-template<class Funct, class CellType1, class CellType2, class ...Args>
-struct CallbackWrapper {
-  Funct f_;
-  std::tuple<Args...> args_;
-
-  CallbackWrapper(Funct f, Args... args) : f_(f), args_(args...) {}
-
-  void operator()(CellType1 &c1, CellType2 &c2) {
-    dispatch(c1, c2, typename GenSeq<sizeof...(Args)>::type());
-  }
-  
-  template<int...SS>
-  void dispatch(CellType1 &c1, CellType2 &c2, Seq<SS...>) {
-    f_(c1, c2, std::get<SS>(args_)...);
-  }
-};
-#endif
-
 /**
  * @brief A threshold to stop recursive tiling parallelization
  * Map for product uses checkerbord parallelism described in Taura et al.[1]
@@ -90,8 +71,8 @@ struct ThreadSpawnThreshold {
  * if we can apply mutual interaction between the two containers.
  */
 template<class C1, class C2>
-struct AllowMutual {
-  static bool value(C1, C2) {
+struct MutuallyDone {
+  static bool value(const C1&, const C2&) {
     // Generally, two elements of different types are not mutual interactive.
     return false;
   }
@@ -101,54 +82,31 @@ struct AllowMutual {
  * @brief Specialization of AllowMutual for elements of a same container type
  */
 template<class C1>
-struct AllowMutual<C1, C1> {
-  static bool value(C1 c1, C1 c2) {
-    return c1.AllowMutualInteraction(c2);
+struct MutuallyDone<C1, C1> {
+  static bool value(const C1 &c1, const C1 &c2) {
+    return (c1.IsLocal() && c2.IsLocal()) && (c1 < c2);
   }
 };
 
 template<class T, class U, class V, class Iter1, class Iter2>
 struct IfCell {
-  static void debug(const char *label, T&, U&, V&, int, int, Iter1, Iter2) { }
+  static void debug(U&, V&) { }
 };
 
 template<class T, class Iter1, class Iter2>
 struct IfCell<T,T,T,Iter1,Iter2> {
-  static void debug(const char *label, T &c1, T &c2, int i, int j, Iter1 iter1, Iter2 iter2) {
-    tapas::debug::DebugStream e("product_map");
-    const char *LET = (getenv("TAPAS_IN_LET") ? "LET " : "");
-    using SFC = typename T::SFC;
-    bool am = AllowMutual<Iter1, Iter2>::value(iter1, iter2);
-
-    bool interact = (am && i <= j) || !am;
+  static void debug(T &c1, T &c2) {
+    if (getenv("TAPAS_IN_LET")) return;
+    using CellType = T;
+    using KeyType = typename CellType::SFC::KeyType;
+    KeyType k1 = 2;
+    KeyType k2 = 2594073385365405698;
     
-    e.out() << LET << label << " "
-            << SFC::Decode(c1.key()) << " " << SFC::Simplify(c1.key()) << " "
-#ifdef USE_MPI
-            << (c1.IsLocal() ? "Local" : "Remote") << " "
-#endif
-            << SFC::Decode(c2.key()) << " " << SFC::Simplify(c2.key()) << " "
-#ifdef USE_MPI
-            << (c2.IsLocal() ? "Local" : "Remote") << " "
-#endif
-            << "i=" << i << " j=" << j << " interact?=" << interact
-            << std::endl;
-
-#ifdef USE_MPI
-    e.out() << LET << label << " "
-            << "iter1.IsLocal() = " << iter1.IsLocal() << ", "
-            << "(*(iter1+i)).IsLocal = " << (*(iter1+i)).IsLocal() << " "
-            << "c1.IsLocal() = " << c1.IsLocal() << ", "
-            << std::endl;
-    if (iter1.IsLocal() != c1.IsLocal()) {
-      e.out() << LET << label << " " << "T=" << tapas::debug::GetClassName<T>() << std::endl;
-      e.out() << LET << label << " " << "Iter1=" << tapas::debug::GetClassName<Iter1>() << std::endl;
-      e.out() << LET << label << " " << "iter1.key     = " << SFC::Decode(iter1.key()) << " " << iter1.IsLocal() << std::endl;
-      e.out() << LET << label << " " << "(iter1+" << i << ").key = " << SFC::Decode((iter1+i).key()) << " " << (iter1+i).IsLocal() << std::endl;
-      e.out() << LET << label << " " << "c1.key        = " << SFC::Decode(c1.key())    << " " << c1.IsLocal()    << std::endl;
-      e.out() << LET << label << std::endl;
+    if ((c1.key() == k1 && c2.key() == k2) ||
+        (c1.key() == k2 && c2.key() == k1)) {
+      tapas::debug::DebugStream e("product_map");
+      e.out() << "c1=" << c1.key() << "  c2=" << c2.key() << std::endl;
     }
-#endif
   }
 };
 
@@ -176,18 +134,15 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
 
     for(int i = beg1; i < end1; i++) {
       for(int j = beg2; j < end2; j++) {
-        T1_Iter left = iter1 + i;
-        T2_Iter right = iter2 + j;
+        T1_Iter lhs = iter1 + i;
+        T2_Iter rhs = iter2 + j;
         // if i and j are mutually interactive, f(i,j) is evaluated only once.
 
-        //IfCell<CellType, typename T1_Iter::value_type, typename T2_Iter::value_type, T1_Iter, T2_Iter>::debug("[A]", *(iter1+i), *(iter2+j), i, j, iter1, iter2);
-  
-        //if (iter1.IsLocal()) {
-        if (left.IsLocal()) {
-          bool am = AllowMutual<T1_Iter, T2_Iter>::value(left, right);
-          if ((am && i <= j) || !am) {
-            //IfCell<CellType, typename T1_Iter::value_type, typename T2_Iter::value_type, T1_Iter, T2_Iter>::debug("[B]", *(iter1+i), *(iter2+j), i, j, iter1, iter2);
-            CellType::template Map<Callback>(callback, *left, *right);
+        bool am = lhs.AllowMutualInteraction(rhs);
+        
+        if ((am && i <= j) || !am) {
+          if (lhs.IsLocal()) {
+            CellType::template Map<Callback>(callback, *lhs, *rhs);
           }
         }
       }
@@ -224,11 +179,6 @@ void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
                 prod.t2_, 0, prod.t2_.size(),
                 f, args...);
   }
-  
-  // for (index_t i = 0; i < prod.size(); ++i) {
-  //   f(prod.first(), prod.second(), args...);
-  //   prod++;
-  // }
 }
   
 #ifdef TAPAS_USE_VECTORMAP
@@ -254,10 +204,6 @@ void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
                 prod.t2_, 0, prod.t2_.size(),
                 f, args...);
   }
-  // for (index_t i = 0; i < prod.size(); ++i) {
-  //   f(prod.first(), prod.second(), args...);
-  //   prod++;
-  // }
 }
 
 template <class Funct, class CellType, class... Args>

@@ -8,7 +8,6 @@
 #include <iomanip>
 
 #include "tapas/hot.h"
-#include "tapas/hot/data.h"
 
 namespace tapas {
 namespace hot {

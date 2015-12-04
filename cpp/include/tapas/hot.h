@@ -40,7 +40,7 @@
 #include "tapas/threading/default.h"
 #include "tapas/mpi_util.h"
 
-#include "tapas/hot/data.h"
+#include "tapas/hot/shared_data.h"
 #include "tapas/hot/buildtree.h"
 #include "tapas/hot/global_tree.h"
 #include "tapas/hot/let.h"
@@ -223,7 +223,7 @@ class Cell: public tapas::BasicCell<TSP> {
   
   using FP = typename TSP::FP;
   
-  using Data = HotData<TSP, SFC>;
+  using Data = SharedData<TSP, SFC>;
 
   template<class T>
   using VecPtr = std::shared_ptr<std::vector<T>>;
@@ -295,9 +295,10 @@ class Cell: public tapas::BasicCell<TSP> {
  public:
   KeyType key() const { return key_; }
   
+  template <class T> bool operator==(const T &) const { return false; }
   bool operator==(const Cell &c) const;
-  template <class T>
-  bool operator==(const T &) const { return false; }
+  bool operator<(const Cell &c) const;
+
   bool IsRoot() const;
   bool IsLocalSubtree() const;
 
@@ -332,7 +333,7 @@ class Cell: public tapas::BasicCell<TSP> {
    * @brief Returns if the cell is local.
    */
   bool IsLocal() const;
-
+  
   /**
    * @brief Returns the number of subcells. This is 0 or 2^DIM in HOT algorithm.
    */
@@ -421,6 +422,13 @@ class Cell: public tapas::BasicCell<TSP> {
   }
 
   const Region<TSP> &region() const { return data_->region_; }
+
+  bool GetOptMutual() const { return data_->opt_mutual_; }
+  bool SetOptMutual(bool b) {
+    bool prev = data_->opt_mutual_;
+    data_->opt_mutual_ = b;
+    return prev;
+  }
 
  protected:
   // utility/accessor functions
@@ -689,15 +697,9 @@ void Cell<TSP>::Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2) {
     
     LET<TSP>::Exchange(f, c1);
     
-    {tapas::debug::DebugStream("product_map").out() << "-------------exchange done---------------" << std::endl;}
     unsetenv("TAPAS_IN_LET");
-    
-    tapas::debug::DebugStream("M2L").out() << "-------------exchange done---------------" << std::endl;
-    tapas::debug::DebugStream("DTT").out() << "-------------exchange done---------------" << std::endl;
   }
 
-  unsetenv("TAPAS_IN_LET");
-    
   f(c1, c2);
 }
 
@@ -862,6 +864,11 @@ void Cell<TSP>::UpwardMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
 template <class TSP>
 bool Cell<TSP>::operator==(const Cell &c) const {
   return key_ == c.key_;
+}
+
+template <class TSP>
+bool Cell<TSP>::operator<(const Cell<TSP> &c) const {
+  return key_ < c.key_;
 }
 
 template <class TSP>

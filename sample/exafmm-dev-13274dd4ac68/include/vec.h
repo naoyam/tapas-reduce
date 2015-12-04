@@ -157,6 +157,7 @@ public:
     for (int i=0; i<N; i++) s << std::scientific << v[i] << ' ';
     return s;
   }
+	size_t size() const { return N; }
   friend T sum(const vec & v) {                                 // Sum vector
     T temp = 0;
     for (int i=0; i<N; i++) temp += v[i];
@@ -204,7 +205,7 @@ public:
     }
   }
 };
-#else
+#else /* CUDACC */
 #include "unroll.h"
 template<int N, typename T>
 class vec {

@@ -26,7 +26,7 @@ namespace hot {
 # define TAPAS_SAMPLING_RATE (1e-2)
 #endif
 
-template<class TSP, class SFC> struct HotData;
+template<class TSP, class SFC> struct SharedData;
 template<class TSP> class Cell;
 
 
@@ -49,7 +49,7 @@ class SamplingOctree {
   using KeySet = std::unordered_set<KeyType>;
   using BodyType = typename TSP::BT::type;
   using BodyAttrType = typename TSP::BT_ATTR;
-  using Data = HotData<TSP, SFC>;
+  using Data = SharedData<TSP, SFC>;
   template<class T> using Region = tapas::Region<T>;
 
  private:

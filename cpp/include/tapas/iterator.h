@@ -68,15 +68,22 @@ class BodyIterator {
   bool operator==(const BodyIterator &x) const {
     return c_ == x.c_ && idx_ == x.idx_;
   }
+  
+  bool operator<(const BodyIterator &x) const {
+    if (!(c_ == x.c_)) {
+      return c_ < x.c_;
+    } else {
+      return idx_ < x.idx_;
+    }
+  }
+  
   bool operator!=(const BodyIterator &x) const {
     return !operator==(x);
   }
   template <class T>
   bool operator==(const T &) const { return false; }
   bool AllowMutualInteraction(const BodyIterator &x) const {
-    // If two bodies belong to a same cell, they are guaranteed to be in the same process.
-    // TODO: Can this condition be relaxed? (if c_.IsLocal() && x.c_.IsLocal())
-    return c_ == x.c_;
+    return c_.GetOptMutual() && c_ == x.c_;
   }
 };
 
@@ -139,8 +146,13 @@ class CellIterator {
   int size() const {
     return 1;
   }
+
+  template<class T>
+  bool AllowMutualInteraction(const T&) const {
+    return false;
+  }
   bool AllowMutualInteraction(const CellIterator &x) const {
-    return c_.IsLocal() && x.c_.IsLocal();
+    return c_.GetOptMutual() && c_ == x.c_;
   }
 }; // class CellIterator
 
@@ -222,6 +234,11 @@ class SubCellIterator {
   }
   template <class T>
   bool operator==(const T &) const { return false; }
+  
+  template<class T>
+  bool AllowMutualInteraction(const T&) const {
+    return false;
+  }
   bool AllowMutualInteraction(const SubCellIterator &x) const {
     return c_ == x.c_;
   }
@@ -294,11 +311,7 @@ class ProductIterator<ITER, void> {
   }
   index_t size() const {
     if (t1_.AllowMutualInteraction(t2_)) {
-#if 0  // No self interaction
-      return (t1_.size() - 1) * t1_.size() / 2;
-#else
       return (t1_.size() + 1) * t1_.size() / 2;      
-#endif
     } else {
       return t1_.size() * t2_.size();
     }
@@ -323,15 +336,14 @@ class ProductIterator<ITER, void> {
   }
   
   void operator++(int) {
+    // Note:
+    // This routine is not used since product iterators are parallelized for task-based runtime
+    // by product_map() in map.h
     if (idx2_ + 1 == t2_.size()) {
       idx1_++;
       t1_++;
       if (t1_.AllowMutualInteraction(t2_)) {
-#if 0 // No self interaction        
-        idx2_ = idx1_ + 1;
-#else
         idx2_ = idx1_;
-#endif        
       } else {
         idx2_ = 0;
       }

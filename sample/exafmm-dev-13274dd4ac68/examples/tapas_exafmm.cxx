@@ -114,7 +114,7 @@ struct FMM_DTT {
   inline void operator()(Cell &Ci, Cell &Cj, int mutual, int nspawn, real_t theta) {
     // TODO:
     //if (Ci.nb() == 0 || Cj.nb() == 0) return;
-    
+
     vec3 dX;
     asn(dX, Ci.center() - Cj.center());
     real_t R2 = norm(dX);
@@ -135,17 +135,9 @@ struct FMM_DTT {
       M2L(Ci, Cj, Xperiodic, mutual);                   //  M2L kernel
     } else if (Ci.IsLeaf() && Cj.IsLeaf()) {            // Else if both cells are bodies
 #ifdef TAPAS_USE_VECTORMAP
-      tapas::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic);
+      tapas::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic, mutual);
 #else
-      {
-#if 0
-        if (!getenv("TAPAS_IN_LET")) {
-          tapas::debug::DebugStream e("p2p");
-          e.out() << Ci.key() << " " << Cj.key() << std::endl;
-        }
-#endif
-      }
-      tapas::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic);
+      tapas::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic, mutual);
 #endif /*TAPAS_USE_VECTORMAP*/
 
       numP2P++;
@@ -251,7 +243,22 @@ void dumpL(Tapas::Cell &root) {
     ofs << std::setw(20) << std::right << cell.key() << " ";
     ofs << std::setw(3) << cell.depth() << " ";
     ofs << (cell.IsLeaf() ? "L" : "_") << " ";
-    ofs << cell.attr().L << std::endl;
+
+    for (size_t i = 0; i < cell.attr().L.size(); i++) {
+      auto v = cell.attr().L[i];
+      double real = v.real();
+      double imag = v.imag();
+
+      if (-1e-8 < real && real < 0) real = +0.0;
+      if (-1e-8 < imag && imag < 0) imag = +0.0;
+      
+      ofs << "("
+          << std::fixed << std::setprecision(5) << std::showpos << real << ","
+          << std::fixed << std::setprecision(5) << std::showpos << imag
+          << ") ";
+    }
+    //ofs << cell.attr().L << std::endl;
+    ofs << std::endl;
     mtx.unlock();
   };
   tapas::UpwardMap(dump, root);
@@ -283,7 +290,7 @@ void dumpBodies(Tapas::Cell &root) {
               << std::setiosflags(std::ios::showpos)
               << iter.attr()[j] << " ";
         }
-        ofs << std::endl;
+        ofs << " " << cell.key() << std::endl;
       }
       mtx.unlock();
     }
@@ -395,6 +402,8 @@ int main(int argc, char ** argv) {
     TAPAS_LOG_DEBUG() << "Bounding box: " << tr << std::endl;
 
     Tapas::Cell *root = Tapas::Partition(bodies.data(), bodies.size(), tr, args.ncrit);
+
+    root->SetOptMutual(args.mutual);
     
 #ifdef USE_MPI
     int rank = 0;
@@ -404,7 +413,9 @@ int main(int argc, char ** argv) {
     tapas::UpwardMap(FMM_P2M, *root, args.theta);
     logger::stopTimer("Upward pass");
     
+#ifdef TAPAS_DEBUG
     dumpM(*root);
+#endif
 
 #ifdef USE_MPI
     std::cerr << "rank " << rank << " finished upward." << std::endl;
@@ -431,9 +442,11 @@ int main(int argc, char ** argv) {
     
     TAPAS_LOG_DEBUG() << "Dual Tree Traversal done\n";
     jbodies = bodies;
-    
-    dumpBodies(*root);
+
+#ifdef TAPAS_DEBUG
     dumpL(*root);
+    dumpBodies(*root);
+#endif
 
 #if !defined(USE_MPI) /* temporary: Implementing parallel tapas */
 

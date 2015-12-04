@@ -13,7 +13,7 @@
 #include "tapas/debug_util.h"
 #include "tapas/mpi_util.h"
 
-#include "tapas/hot/data.h"
+#include "tapas/hot/shared_data.h"
 
 namespace tapas {
 namespace hot {
@@ -26,7 +26,7 @@ class GlobalTree {
 
   using CellType = Cell<TSP>;
   using SFC = typename CellType::SFC;
-  using Data = HotData<TSP, SFC>;
+  using Data = SharedData<TSP, SFC>;
   using KeyType = typename CellType::KeyType;
   using HashTable = typename CellType::CellHashTable;
   using KeySet = typename CellType::KeySet;

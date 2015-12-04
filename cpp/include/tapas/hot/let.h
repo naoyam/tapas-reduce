@@ -383,6 +383,14 @@ struct LET {
       return *c_ == *(x.c_) && idx_ == x.idx_;
     }
 
+    bool operator<(const ProxyBodyIterator &x) const {
+      if (*c_ == *x.c_) {
+        return idx_ < x.idx_;
+      } else {
+        return *c_ < *x.c_;
+      }
+    }
+
     template<class T>
     bool operator==(const T&) const {
       return false;
@@ -498,6 +506,10 @@ struct LET {
      */
     bool operator==(const ProxyCell &rhs) const {
       return key_ == rhs.key_;
+    }
+
+    bool operator<(const ProxyCell &rhs) const {
+      return key_ < rhs.key_;
     }
 
     /**
