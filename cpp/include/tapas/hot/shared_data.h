@@ -37,7 +37,7 @@ struct SharedData {
   
   int mpi_rank_;
   int mpi_size_;
-  //MPI_Comm mpi_comm_;
+  MPI_Comm mpi_comm_;
   int max_depth_; //!< Actual maximum depth of the tree
   
   std::vector<KeyType> leaf_keys_; //!< SFC keys of (all) leaves
@@ -85,6 +85,7 @@ struct SharedData {
   SharedData() :
       mpi_rank_(0),
       mpi_size_(1),
+      mpi_comm_(MPI_COMM_WORLD),
       max_depth_(0),
       opt_mutual_(false)
   { }

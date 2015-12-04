@@ -430,6 +430,16 @@ class Cell: public tapas::BasicCell<TSP> {
     return prev;
   }
 
+  MPI_Comm GetOptMPIComm() const {
+    return data_->mpi_comm_;
+  }
+  
+  MPI_Comm SetOptMPIComm(MPI_Comm) {
+    MPI_Comm prev = data_->mpi_comm_;
+    data_->mpi_comm_;
+    return prev;
+  }
+
  protected:
   // utility/accessor functions
   inline Cell *Lookup(KeyType k) const;
