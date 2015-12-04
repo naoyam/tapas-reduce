@@ -241,7 +241,7 @@ void dumpL(Tapas::Cell &root) {
   std::function<void(Tapas::Cell&)> dump = [&](Tapas::Cell& cell) {
     mtx.lock();
     ofs << std::setw(20) << std::right << cell.key() << " ";
-    ofs << std::setw(3) << cell.depth() << " ";
+    ofs << std::setw(3) << std::noshowpos << cell.depth() << " ";
     ofs << (cell.IsLeaf() ? "L" : "_") << " ";
 
     for (size_t i = 0; i < cell.attr().L.size(); i++) {
