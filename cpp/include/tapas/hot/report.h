@@ -33,6 +33,17 @@ void Report(const Data &data, std::ostream &os = std::cout) {
   MPI_Comm_rank(comm, &rank);
   MPI_Comm_size(comm, &size);
 
+  std::string report_prefix;
+  std::string report_suffix;
+
+  if (getenv("TAPAS_REPORT_PREFIX")) {
+    report_prefix = getenv("TAPAS_REPORT_PREFIX");
+  }
+
+  if (getenv("TAPAS_REPORT_SUFFIX")) {
+    report_suffix = getenv("TAPAS_REPORT_PREFIX");
+  }
+
   HostName hostname;
   gethostname(hostname.value, HostName::kLen);
 
@@ -42,16 +53,17 @@ void Report(const Data &data, std::ostream &os = std::cout) {
     tapas::mpi::Gather(hostname, buf, 0, comm);
 
     if (rank == 0) {
-      os << "---- begin hostnames" << std::endl;
-      os << "rank hostname" << std::endl;
+      std::string fname = report_prefix + "hostnames" + report_suffix + ".csv";
+      std::ofstream ofs(fname.c_str(), std::ios::out | std::ios::trunc);
+      
+      ofs << "rank hostname" << std::endl;
       for (size_t i = 0; i < size; i++) {
-        os << i << "\t" << buf[i].value << std::endl;
+        ofs << i << "\t" << buf[i].value << std::endl;
       }
-      os << "--- end hostnames" << std::endl;
-      os << std::endl;
+      ofs.close();
     }
   }
-
+  
   // sampling rate
   if (rank == 0) {
     os << std::setprecision(5);
@@ -65,26 +77,26 @@ void Report(const Data &data, std::ostream &os = std::cout) {
   tapas::mpi::Gather(data.nb_after,  nb_after,  0, comm);
   tapas::mpi::Gather(data.nleaves,   nleaves,   0, comm);
   tapas::mpi::Gather(data.ncells,    ncells,    0, comm);
-
+  
   if (rank == 0) {
-    os << std::endl;
-    os << "---- begin load balancing" << std::endl;
-    os << std::setw(5) << std::right << "rank"
-       << std::setw(W) << std::right << "nb_before"
-       << std::setw(W) << std::right << "nb_after"
-       << std::setw(W) << std::right << "nleaves"
-       << std::setw(W) << std::right << "ncells"
-       << std::endl;
+    std::string fname = report_prefix + "load_balancing" + report_suffix + ".csv";
+    std::ofstream ofs(fname.c_str(), std::ios::out | std::ios::trunc);
+    
+    ofs << std::setw(5) << std::right << "rank"
+        << std::setw(W) << std::right << "nb_before"
+        << std::setw(W) << std::right << "nb_after"
+        << std::setw(W) << std::right << "nleaves"
+        << std::setw(W) << std::right << "ncells"
+        << std::endl;
     for (int i = 0; i < size; i++) {
-      os << std::setw(5) << std::right << i
-         << std::setw(W) << std::right << nb_before[i]
-         << std::setw(W) << std::right << nb_after[i]
-         << std::setw(W) << std::right << nleaves[i]
-         << std::setw(W) << std::right << ncells[i]
-         << std::endl;
+      ofs << std::setw(5) << std::right << i
+          << std::setw(W) << std::right << nb_before[i]
+          << std::setw(W) << std::right << nb_after[i]
+          << std::setw(W) << std::right << nleaves[i]
+          << std::setw(W) << std::right << ncells[i]
+          << std::endl;
     }
-    os << "---- end load balancing" << std::endl;
-    os << std::endl;
+    ofs.close();
   }
 
   V<double> tree_all, tree_sample, tree_exchange, tree_growlocal, tree_growglobal;
@@ -95,27 +107,26 @@ void Report(const Data &data, std::ostream &os = std::cout) {
   tapas::mpi::Gather(data.time_tree_growglobal, tree_growglobal, 0, comm);
 
   if (rank == 0) {
-    os << std::endl;
-    os << std::setprecision(5);
-    os << "---- begin tree construction" << std::endl;
-    os << std::setw(5) << std::scientific << std::right << "rank"
-       << std::setw(WS) << std::scientific << std::right << "all"
-       << std::setw(WS) << std::scientific << std::right << "sample"
-       << std::setw(WS) << std::scientific << std::right << "exchange"
-       << std::setw(WS) << std::scientific << std::right << "grow-local"
-       << std::setw(WS) << std::scientific << std::right << "grow-global"
-       << std::endl;
+    std::string fname = report_prefix + "tree_construction" + report_suffix + ".csv";
+    std::ofstream ofs(fname.c_str(), std::ios::out | std::ios::trunc);
+    ofs << std::setprecision(5);
+    ofs << std::setw(5) << std::scientific << std::right << "rank"
+        << std::setw(WS) << std::scientific << std::right << "all"
+        << std::setw(WS) << std::scientific << std::right << "sample"
+        << std::setw(WS) << std::scientific << std::right << "exchange"
+        << std::setw(WS) << std::scientific << std::right << "grow-local"
+        << std::setw(WS) << std::scientific << std::right << "grow-global"
+        << std::endl;
     for (int i = 0; i < size; i++) {
-      os << std::setw(5) << std::scientific << std::right << i
-         << std::setw(WS) << std::scientific << std::right << tree_all[i]
-         << std::setw(WS) << std::scientific << std::right << tree_sample[i]
-         << std::setw(WS) << std::scientific << std::right << tree_exchange[i]
-         << std::setw(WS) << std::scientific << std::right << tree_growlocal[i]
-         << std::setw(WS) << std::scientific << std::right << tree_growglobal[i]
-         << std::endl;
+      ofs << std::setw(5) << std::scientific << std::right << i
+          << std::setw(WS) << std::scientific << std::right << tree_all[i]
+          << std::setw(WS) << std::scientific << std::right << tree_sample[i]
+          << std::setw(WS) << std::scientific << std::right << tree_exchange[i]
+          << std::setw(WS) << std::scientific << std::right << tree_growlocal[i]
+          << std::setw(WS) << std::scientific << std::right << tree_growglobal[i]
+          << std::endl;
     }
-    os << "----- end tree construction" << std::endl;
-    os << std::endl;
+    ofs.close();
   }
 
   V<double> let_all, let_trv, let_req, let_res, let_reg;
@@ -126,28 +137,25 @@ void Report(const Data &data, std::ostream &os = std::cout) {
   tapas::mpi::Gather(data.time_let_register, let_reg, 0, comm);
   
   if (rank == 0) {
-    os << std::endl;
-    os << "---- begin LET" << std::endl;
-    os << std::setw(5) << std::scientific << std::right << "rank"
-       << std::setw(WS) << std::scientific << std::right << "all"
-       << std::setw(WS) << std::scientific << std::right << "Traversal"
-       << std::setw(WS) << std::scientific << std::right << "Request"
-       << std::setw(WS) << std::scientific << std::right << "Response"
-       << std::setw(WS) << std::scientific << std::right << "Register"
-       << std::endl;
+    std::string fname = report_prefix + "let_construction" + report_suffix + ".csv";
+    std::ofstream ofs(fname.c_str(), std::ios::out | std::ios::trunc);
+    ofs << std::setw(5) << std::scientific << std::right << "rank"
+        << std::setw(WS) << std::scientific << std::right << "all"
+        << std::setw(WS) << std::scientific << std::right << "Traversal"
+        << std::setw(WS) << std::scientific << std::right << "Request"
+        << std::setw(WS) << std::scientific << std::right << "Response"
+        << std::setw(WS) << std::scientific << std::right << "Register"
+        << std::endl;
     for (int i = 0; i < size; i++) {
-      os << std::setw(5) << std::scientific << std::right << i
-         << std::setw(WS) << std::scientific << std::right << let_all[i]
-         << std::setw(WS) << std::scientific << std::right << let_trv[i]
-         << std::setw(WS) << std::scientific << std::right << let_req[i]
-         << std::setw(WS) << std::scientific << std::right << let_res[i]
-         << std::setw(WS) << std::scientific << std::right << let_reg[i]
-         << std::endl;
+      ofs << std::setw(5) << std::scientific << std::right << i
+          << std::setw(WS) << std::scientific << std::right << let_all[i]
+          << std::setw(WS) << std::scientific << std::right << let_trv[i]
+          << std::setw(WS) << std::scientific << std::right << let_req[i]
+          << std::setw(WS) << std::scientific << std::right << let_res[i]
+          << std::setw(WS) << std::scientific << std::right << let_reg[i]
+          << std::endl;
     }
-    os << "----- end LET" << std::endl;
-    os << std::endl;
   }
-
 }
 
 }
