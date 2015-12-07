@@ -24,7 +24,6 @@
 #endif
 #include "dataset.h"
 #include "logger.h"
-#include "traversal.h"
 #include "up_down_pass.h"
 #include "verify.h"
 
@@ -177,6 +176,66 @@ struct FMM_DTT {
     }
   }
 };
+
+void CheckResult(Bodies &bodies, int numSamples, real_t cycle, int images) {
+  numSamples = std::min(numSamples, (int)bodies.size());
+
+  Bodies targets(numSamples);
+  Bodies samples(numSamples);
+
+  int stride = bodies.size() / numSamples;
+
+  for (int i=0, j=0; i < numSamples; i++,j+=stride) {
+    samples[i] = bodies[j];
+    targets[i] = bodies[j];
+  }
+
+  Dataset().initTarget(samples);
+
+  int prange = 0;
+  for (int i=0; i<images; i++) {
+    prange += int(std::pow(3.,i));
+  }
+  
+  Cells cells;
+  cells.resize(2);
+  C_iter Ci = cells.begin(), Cj = cells.begin() + 1;
+  Ci->BODY  = samples.begin();
+  Ci->NBODY = samples.size();
+  Cj->BODY  = bodies.begin();
+  Cj->NBODY = bodies.size();
+
+  vec3 Xperiodic = 0;
+  for (int ix=-prange; ix<=prange; ix++) {
+    for (int iy=-prange; iy<=prange; iy++) {
+      for (int iz=-prange; iz<=prange; iz++) {
+        Xperiodic[0] = ix * cycle;
+        Xperiodic[1] = iy * cycle;
+        Xperiodic[2] = iz * cycle;
+        kernel::P2P(Ci, Cj, Xperiodic, false);
+      }
+    }
+  }
+
+  // Traversal::normalize()
+  for (auto b = samples.begin(); b != samples.end(); b++) {
+    b->TRG /= b->SRC;
+  }
+  
+  Verify verify;
+  double potDif = verify.getDifScalar(samples, targets);
+  double potNrm = verify.getNrmScalar(samples);
+  double accDif = verify.getDifVector(samples, targets);
+  double accNrm = verify.getNrmVector(samples);
+
+  logger::printTitle("FMM vs. direct");
+  // std::cout << "potDif = " << potDif << std::endl;
+  // std::cout << "potNrm = " << potDif << std::endl;
+  // std::cout << "accDif = " << potDif << std::endl;
+  // std::cout << "accNrm = " << potDif << std::endl;
+  verify.print("Rel. L2 Error (pot)",std::sqrt(potDif/potNrm));
+  verify.print("Rel. L2 Error (acc)",std::sqrt(accDif/accNrm));
+}
 
 /**
  * \brief Copy particle informations from Tapas to user's program to check result
@@ -342,7 +401,6 @@ int main(int argc, char ** argv) {
   BuildTree buildTree(args.ncrit, args.nspawn);
   Cells cells, jcells;
   Dataset data;
-  Traversal traversal(args.nspawn, args.images);
 
   if (args.useRmax) {
     std::cerr << "Rmax not supported." << std::endl;
@@ -462,30 +520,12 @@ int main(int argc, char ** argv) {
 #endif
 
     const int numTargets = 100;
-    bodies3 = bodies;
-    data.sampleBodies(bodies, numTargets);
-    bodies2 = bodies;
-    data.initTarget(bodies);
 
     logger::startTimer("Total Direct");
-    traversal.direct(bodies, jbodies, cycle);
-    traversal.normalize(bodies);
+    CheckResult(bodies, numTargets, cycle, args.images);
     logger::stopTimer("Total Direct");
-    double potDif = verify.getDifScalar(bodies, bodies2);
-    double potNrm = verify.getNrmScalar(bodies);
-    double accDif = verify.getDifVector(bodies, bodies2);
-    double accNrm = verify.getNrmVector(bodies);
-
-    std::cout << "potDif = " << potDif << std::endl;
-    std::cout << "potNrm = " << potDif << std::endl;
-    std::cout << "accDif = " << potDif << std::endl;
-    std::cout << "accNrm = " << potDif << std::endl;
     
-    logger::printTitle("FMM vs. direct");
-    verify.print("Rel. L2 Error (pot)",std::sqrt(potDif/potNrm));
-    verify.print("Rel. L2 Error (acc)",std::sqrt(accDif/accNrm));
     buildTree.printTreeData(cells);
-    traversal.printTraversalData();
     logger::printPAPI();
     logger::stopDAG();
     bodies = bodies3;

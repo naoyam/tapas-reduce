@@ -271,7 +271,7 @@ public:
 				Ci(_Ci), Cj(_Cj), prange(_prange), cycle(_cycle) {}       // Initialize variables
     void operator() () {                                        // Overload operator
       if (Ci->NBODY < 25) {                                     // If number of target bodies is less than threshold
-				vec3 Xperiodic = 0;                                     //   Periodic coordinate offset
+				vec3 Xperiodic = 0;
 				for (int ix=-prange; ix<=prange; ix++) {                //   Loop over x periodic direction
 					for (int iy=-prange; iy<=prange; iy++) {              //    Loop over y periodic direction
 						for (int iz=-prange; iz<=prange; iz++) {            //     Loop over z periodic direction
