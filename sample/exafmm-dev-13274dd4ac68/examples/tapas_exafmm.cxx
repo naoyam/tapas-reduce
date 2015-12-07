@@ -178,6 +178,16 @@ struct FMM_DTT {
 };
 
 void CheckResult(Bodies &bodies, int numSamples, real_t cycle, int images) {
+
+  int mpi_rank = 0;
+  int mpi_size = 1;
+
+#ifdef USE_MPI
+  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+#endif
+  
   numSamples = std::min(numSamples, (int)bodies.size());
 
   Bodies targets(numSamples);
@@ -185,36 +195,57 @@ void CheckResult(Bodies &bodies, int numSamples, real_t cycle, int images) {
 
   int stride = bodies.size() / numSamples;
 
-  for (int i=0, j=0; i < numSamples; i++,j+=stride) {
-    samples[i] = bodies[j];
-    targets[i] = bodies[j];
+  if (mpi_rank == 0) {
+    for (int i=0, j=0; i < numSamples; i++,j+=stride) {
+      samples[i] = bodies[j];
+      targets[i] = bodies[j];
+    }
+    Dataset().initTarget(samples);
   }
-
-  Dataset().initTarget(samples);
-
+  
   int prange = 0;
   for (int i=0; i<images; i++) {
     prange += int(std::pow(3.,i));
   }
-  
-  Cells cells;
-  cells.resize(2);
-  C_iter Ci = cells.begin(), Cj = cells.begin() + 1;
-  Ci->BODY  = samples.begin();
-  Ci->NBODY = samples.size();
-  Cj->BODY  = bodies.begin();
-  Cj->NBODY = bodies.size();
 
-  vec3 Xperiodic = 0;
-  for (int ix=-prange; ix<=prange; ix++) {
-    for (int iy=-prange; iy<=prange; iy++) {
-      for (int iz=-prange; iz<=prange; iz++) {
-        Xperiodic[0] = ix * cycle;
-        Xperiodic[1] = iy * cycle;
-        Xperiodic[2] = iz * cycle;
-        kernel::P2P(Ci, Cj, Xperiodic, false);
+  for (int p = 0; p < mpi_size; p++) {
+    if (p == mpi_rank) {
+      std::cerr << "Computing on rank " << p << " against " << bodies.size() << " bodies." << std::endl;
+      Cells cells;
+      cells.resize(2);
+      C_iter Ci = cells.begin(), Cj = cells.begin() + 1;
+      Ci->BODY  = samples.begin();
+      Ci->NBODY = samples.size();
+      Cj->BODY  = bodies.begin();
+      Cj->NBODY = bodies.size();
+
+      vec3 Xperiodic = 0;
+      for (int ix=-prange; ix<=prange; ix++) {
+        for (int iy=-prange; iy<=prange; iy++) {
+          for (int iz=-prange; iz<=prange; iz++) {
+            Xperiodic[0] = ix * cycle;
+            Xperiodic[1] = iy * cycle;
+            Xperiodic[2] = iz * cycle;
+            kernel::P2P(Ci, Cj, Xperiodic, false);
+          }
+        }
       }
     }
+
+#ifdef USE_MPI
+    // Send sampled bodies to rank p to rank (p+1) % mpi_size
+    int src = p;
+    int dst = (p + 1) % mpi_size;
+
+    if (src != dst) {
+      if (src == mpi_rank) {
+        MPI_Send(samples.data(), sizeof(samples[0]) * samples.size(), MPI_BYTE, dst, 0, MPI_COMM_WORLD);
+      } else if (dst == mpi_rank) {
+        MPI_Status stat;
+        MPI_Recv(samples.data(), sizeof(samples[0]) * samples.size(), MPI_BYTE, src, 0, MPI_COMM_WORLD, &stat);
+      }
+    }
+#endif
   }
 
   // Traversal::normalize()
