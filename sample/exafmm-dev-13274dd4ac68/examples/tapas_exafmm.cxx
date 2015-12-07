@@ -61,7 +61,8 @@ static Region &asn(Region &x, const Bounds &y) {
 }
 
 // UpDownPass::upwardPass
-static inline void FMM_Upward(Tapas::Cell &c, real_t theta) {
+static inline void FMM_Upward(Tapas::Cell &c, real_t /* theta */) {
+  // theta is not used now; to be deleted
   c.attr().R = 0;
   c.attr().M = 0;
   c.attr().L = 0;

@@ -703,7 +703,8 @@ template<class TSP>
 template<class Funct>
 void Cell<TSP>::Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2) {
   if (c1.key() == 0 && c2.key() == 0) {
-    putenv("TAPAS_IN_LET=1");
+    char t[] = "TAPAS_IN_LET=1";
+    putenv(t); // to avoid warning "convertion from const char* to char*"
     
     LET<TSP>::Exchange(f, c1);
     
