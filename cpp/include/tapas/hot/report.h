@@ -54,7 +54,8 @@ void Report(const Data &data, std::ostream &os = std::cout) {
 
   // sampling rate
   if (rank == 0) {
-    os << "Sampling Rate " << data.sampling_rate << std::endl;
+    os << std::setprecision(5);
+    os << "Sampling Rate " << std::scientific << data.sampling_rate << std::endl;
     os << "NB Total " << data.nb_total << std::endl;
   }
 
@@ -95,13 +96,14 @@ void Report(const Data &data, std::ostream &os = std::cout) {
 
   if (rank == 0) {
     os << std::endl;
+    os << std::setprecision(5);
     os << "---- begin tree construction" << std::endl;
     os << std::setw(5) << std::scientific << std::right << "rank"
        << std::setw(WS) << std::scientific << std::right << "all"
        << std::setw(WS) << std::scientific << std::right << "sample"
        << std::setw(WS) << std::scientific << std::right << "exchange"
-       << std::setw(WS) << std::scientific << std::right << "growlocal"
-       << std::setw(WS) << std::scientific << std::right << "growglobal"
+       << std::setw(WS) << std::scientific << std::right << "grow-local"
+       << std::setw(WS) << std::scientific << std::right << "grow-global"
        << std::endl;
     for (int i = 0; i < size; i++) {
       os << std::setw(5) << std::scientific << std::right << i

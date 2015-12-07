@@ -467,26 +467,6 @@ int main(int argc, char ** argv) {
     bodies2 = bodies;
     data.initTarget(bodies);
 
-#if 0 
-    std::cerr << "bodies (before direct)= \n";
-    for (auto &b : bodies) {
-      std::cerr << b.TRG[0] << " " << b.X[0] << " " << b.X[1] << " " << b.X[2] << "\n";
-    }
-    std::cerr << "\n";
-    
-    std::cerr << "bodies2 = \n";
-    for (auto &b : bodies2) {
-      std::cerr << b.TRG[0] << " " << b.X[0] << " " << b.X[1] << " " << b.X[2] << "\n";
-    }
-    std::cerr << "\n";
-
-    std::cerr << "jbodies = \n";
-    for (auto &b : jbodies) {
-      std::cerr << b.TRG[0] << " " << b.X[0] << " " << b.X[1] << " " << b.X[2] << "\n";
-    }
-    std::cerr << "\n";
-#endif
-    
     logger::startTimer("Total Direct");
     traversal.direct(bodies, jbodies, cycle);
     traversal.normalize(bodies);
@@ -496,14 +476,6 @@ int main(int argc, char ** argv) {
     double accDif = verify.getDifVector(bodies, bodies2);
     double accNrm = verify.getNrmVector(bodies);
 
-#if 0
-    std::cerr << "bodies (after direct)= ";
-    for (auto &b : bodies) {
-      std::cerr << b.TRG[0] << " " << b.X[0] << " " << b.X[1] << " " << b.X[2] << "\n";
-    }
-    std::cerr << "\n";
-#endif
-    
     std::cout << "potDif = " << potDif << std::endl;
     std::cout << "potNrm = " << potDif << std::endl;
     std::cout << "accDif = " << potDif << std::endl;
@@ -519,6 +491,7 @@ int main(int argc, char ** argv) {
     bodies = bodies3;
     data.initTarget(bodies);
 
+    root->Report();
   } /* end for */
 
 #ifdef USE_MPI
