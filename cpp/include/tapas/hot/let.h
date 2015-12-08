@@ -318,10 +318,6 @@ struct LET {
       return *this;
     }
 #endif /* if 0 */
-
-    INLINE operator BodyAttrType& () {
-      return dynamic_cast<BodyAttrType&>(*this);
-    }
   }; // class ProxyBodyAttr
 
   class ProxyAttr : public CellAttrType {
