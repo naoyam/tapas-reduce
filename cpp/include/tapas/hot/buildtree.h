@@ -61,9 +61,21 @@ class SamplingOctree {
   int ncrit_;
             
  public:
-  SamplingOctree(const BodyType *b, index_t nb, const Region<TSP>& reg, std::shared_ptr<Data> data, int ncrit)
-      : bodies_(b, b+nb), body_keys_(), proc_first_keys_(), region_(reg), data_(data), ncrit_(ncrit)
+  SamplingOctree(const BodyType *b, index_t nb, std::shared_ptr<Data> data, int ncrit)
+      : bodies_(b, b+nb), body_keys_(), proc_first_keys_(), region_(), data_(data), ncrit_(ncrit)
   {
+    Vec<kDim, FP> local_max, local_min;
+    
+    for (index_t i = 0; i < nb; i++) {
+      Vec<kDim, FP> pos = ParticlePosOffset<kDim, FP, kPosOffset>::vec(reinterpret_cast<const void*>(b+i));
+      for (int d = 0; d < kDim; d++) {
+        local_max = (i == 0) ? pos[d] : std::max(pos[d], local_max[d]);
+        local_min = (i == 0) ? pos[d] : std::min(pos[d], local_min[d]);
+      }
+    }
+    
+    region_.min() = local_min;
+    region_.max() = local_max;
   }
     
   void ExchangeRegion() {

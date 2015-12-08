@@ -428,9 +428,6 @@ int main(int argc, char ** argv) {
 #endif /*TAPAS_USE_VECTORMAP*/
 
   Bodies bodies, bodies2, bodies3, jbodies;
-  BoundBox boundBox(args.nspawn);
-  Bounds bounds;
-  BuildTree buildTree(args.ncrit, args.nspawn);
   Cells cells, jcells;
   Dataset data;
 
@@ -478,12 +475,8 @@ int main(int argc, char ** argv) {
     logger::startTimer("Total FMM");
     logger::startPAPI();
     logger::startDAG();
-    bounds = boundBox.getBounds(bodies);
     
-    asn(tr, bounds);
-    TAPAS_LOG_DEBUG() << "Bounding box: " << tr << std::endl;
-
-    Tapas::Cell *root = Tapas::Partition(bodies.data(), bodies.size(), tr, args.ncrit);
+    Tapas::Cell *root = Tapas::Partition(bodies.data(), bodies.size(), args.ncrit);
 
     root->SetOptMutual(args.mutual);
     
@@ -557,7 +550,7 @@ int main(int argc, char ** argv) {
     CheckResult(bodies, numTargets, cycle, args.images);
     logger::stopTimer("Total Direct");
     
-    buildTree.printTreeData(cells);
+    //buildTree.printTreeData(cells);
     logger::printPAPI();
     logger::stopDAG();
     bodies = bodies3;

@@ -1161,10 +1161,8 @@ class Partitioner {
   public:
     Partitioner(unsigned max_nb): max_nb_(max_nb) {}
 
-    Cell<TSP> *Partition(typename TSP::BT::type *b, index_t nb,
-                         const Region<TSP> &r);
-    Cell<TSP> *Partition(std::vector<typename TSP::BT::type> &b,
-                         const Region<TSP> &r);
+  Cell<TSP> *Partition(typename TSP::BT::type *b, index_t nb);
+  Cell<TSP> *Partition(std::vector<typename TSP::BT::type> &b);
 
  public:
   //---------------------
@@ -1320,8 +1318,8 @@ class Partitioner {
  */
 template <class TSP>
 Cell<TSP>*
-Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b, const Region<TSP> &r) {
-    return Partitioner<TSP>::Partition(b.data(), b.size(), r);
+Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b) {
+  return Partitioner<TSP>::Partition(b.data(), b.size());
 }
 
 template <class TSP>
@@ -1366,9 +1364,7 @@ Vec<Cell<TSP>::Dim, typename TSP::FP> Cell<TSP>::CalcCenter(KeyType key, const R
  */
 template <class TSP> // TSP : Tapas Static Params
 Cell<TSP>*
-Partitioner<TSP>::Partition(typename TSP::BT::type *b,
-                            index_t num_bodies,
-                            const Region<TSP> &reg) {
+Partitioner<TSP>::Partition(typename TSP::BT::type *b, index_t num_bodies) {
   using SFC = typename TSP::SFC;
   using CellType = Cell<TSP>;
   using Data = typename CellType::Data;
@@ -1379,7 +1375,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b,
   MPI_Comm_size(MPI_COMM_WORLD, &data->mpi_size_);
 
   // Build local trees
-  SamplingOctree<TSP, SFC> stree(b, num_bodies, reg, data, max_nb_);
+  SamplingOctree<TSP, SFC> stree(b, num_bodies, data, max_nb_);
   stree.Build();
     
 #ifdef TAPAS_USE_VECTORMAP
@@ -1501,11 +1497,9 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, MortonHOT, Threading
    * @brief Partition and build an octree of the target space.
    * @param b Array of body of BT::type.
    */
-  static Cell *Partition(typename BT::type *b,
-                         index_t nb, const Region &r,
-                         int max_nb) {
+  static Cell *Partition(typename BT::type *b, index_t nb, int max_nb) {
     hot::Partitioner<TSP> part(max_nb);
-    return part.Partition(b, nb, r);
+    return part.Partition(b, nb);
   }
 };
 #endif
@@ -1548,11 +1542,9 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, HOT<DIM, tapas::sfc::Morton>, Threa
    * @brief Partition and build an octree of the target space.
    * @param b Array of body of BT::type.
    */
-  static Cell *Partition(typename BT::type *b,
-                         index_t nb, const Region &r,
-                         int max_nb) {
+  static Cell *Partition(typename BT::type *b, index_t nb, int max_nb) {
     hot::Partitioner<TSP> part(max_nb);
-    return part.Partition(b, nb, r);
+    return part.Partition(b, nb);
   }
 };
 

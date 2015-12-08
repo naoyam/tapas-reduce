@@ -559,10 +559,8 @@ class Partitioner {
   using KeyType = typename TSP::SFC::KeyType;
   Partitioner(unsigned max_nb): max_nb_(max_nb) {}
       
-  Cell<TSP> *Partition(typename TSP::BT::type *b, index_t nb,
-                       const Region<TSP> &r);
-  Cell<TSP> *Partition(std::vector<typename TSP::BT::type> &b,
-                       const Region<TSP> &r);
+  Cell<TSP> *Partition(typename TSP::BT::type *b, index_t nb);
+  Cell<TSP> *Partition(std::vector<typename TSP::BT::type> &b);
  private:
   void Refine(Cell<TSP> *c, const std::vector<HelperNode<TSP>> &hn,
               const typename TSP::BT::type *b, int cur_depth,
@@ -574,8 +572,8 @@ class Partitioner {
  */
 template <class TSP>
 Cell<TSP>*
-Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b, const Region<TSP> &r) {
-    return Partitioner<TSP>::Partition(b.data(), b.size(), r);
+Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b) {
+    return Partitioner<TSP>::Partition(b.data(), b.size());
 }
 
 
@@ -590,15 +588,33 @@ Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b, const Region
  */
 template <class TSP> // TSP : Tapas Static Params
 Cell<TSP>*
-Partitioner<TSP>::Partition(typename TSP::BT::type *b,
-                            index_t nb,
-                            const Region<TSP> &r) {
+Partitioner<TSP>::Partition(typename TSP::BT::type *b, index_t nb) {
     using SFC = typename TSP::SFC;
-    //typedef typename TSP::FP FP;
+    using FP = typename TSP::FP;
     typedef typename TSP::BT BT;
     typedef typename TSP::BT_ATTR BodyAttrType;
     typedef typename BT::type BodyType;
     typedef Cell<TSP> CellType;
+    const constexpr int kDim = TSP::Dim;
+    const constexpr int kPosOffset = TSP::BT::pos_offset;
+
+    Region<TSP> r;
+    // calculate region
+    {
+      Vec<kDim, FP> local_max, local_min;
+    
+      for (index_t i = 0; i < nb; i++) {
+        Vec<kDim, FP> pos = ParticlePosOffset<kDim, FP, kPosOffset>::vec(reinterpret_cast<const void*>(b+i));
+        for (int d = 0; d < kDim; d++) {
+          local_max = (i == 0) ? pos[d] : std::max(pos[d], local_max[d]);
+          local_min = (i == 0) ? pos[d] : std::min(pos[d], local_min[d]);
+        }
+      }
+    
+      r.min() = local_min;
+      r.max() = local_max;
+    }
+    
     
     BodyType *b_work = new BodyType[nb];
     std::vector<HelperNode<TSP>> hn = CreateInitialNodes<TSP>(b, nb, r);
@@ -785,11 +801,9 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
    * @brief Partition and build an octree of the target space.
    * @param b Array of body of BT::type.
    */
-  static Cell *Partition(typename BT::type *b,
-                         index_t nb, const Region &r,
-                         int max_nb) {
+  static Cell *Partition(typename BT::type *b, index_t nb, int max_nb) {
     single_node_hot::Partitioner<TSP> part(max_nb);
-    return part.Partition(b, nb, r);
+    return part.Partition(b, nb);
   }
 };
 
@@ -832,11 +846,9 @@ class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
    * @brief Partition and build an octree of the target space.
    * @param b Array of body of BT::type.
    */
-  static Cell *Partition(typename BT::type *b,
-                         index_t nb, const Region &r,
-                         int max_nb) {
-  single_node_hot::Partitioner<TSP> part(max_nb);
-    return part.Partition(b, nb, r);
+  static Cell *Partition(typename BT::type *b, index_t nb, int max_nb) {
+    single_node_hot::Partitioner<TSP> part(max_nb);
+    return part.Partition(b, nb);
   }
 };
 
