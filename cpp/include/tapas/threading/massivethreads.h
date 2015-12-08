@@ -6,7 +6,7 @@
 /** 
  * @file tapas/thread/massivethread.h
  */
-#include <myth.h>
+#include <myth/myth.h>
 
 namespace tapas {
 namespace threading {

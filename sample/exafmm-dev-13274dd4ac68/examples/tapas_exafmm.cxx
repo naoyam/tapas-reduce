@@ -8,20 +8,15 @@
 
 // NOTE:
 // This macro (TO_MTHREAD_NATIVE or TO_SERIAL) is needed by tpswitch.h, which included in the original ExaFMM.
-// Although this is not necessary in Tapas, ExaFMM's BoundBox class is still used just for computing bounding boxes.
+// Although this is not necessary in Tapas, ExaFMM's logger class is still using it.
 #if MTHREADS
-# define TO_MTHREAD_NATIVE
+# define TO_MTHREAD_NATIVE 1
+# define TO_SERIAL 0
 #else /* MTHREADS */
-# define TO_SERIAL
+# define TO_SERIAL 1
 #endif
 
 #include "args.h"
-#include "bound_box.h"
-#ifdef CILK
-#include "build_tree3.h"
-#else
-#include "build_tree.h"
-#endif
 #include "dataset.h"
 #include "logger.h"
 #include "up_down_pass.h"

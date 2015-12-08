@@ -29,6 +29,9 @@ else ifneq (,$(findstring g++, $(CXX)))
 	CXX += -std=c++11 -ggdb3 -Wall -Wextra -O2 -funroll-loops -Wno-sign-compare -fdiagnostics-color=auto
 	MPICXX += -std=c++11 -ggdb3 -Wall -Wextra -O2 -funroll-loops -Wno-sign-compare -fdiagnostics-color=auto
 else ifneq (,$(findstring icpc, $(CXX)))
+# for ICC, we don't use -static option (as well as -fast which implicitly includes it) because it causes a linking error.
+	CXX += -std=c++11 -Wall -Wextra -funroll-loops -Wno-sign-compare -xHOST -O3 -ipo -no-prec-div -fp-model fast=2
+	MPICXX += -std=c++11 -Wall -Wextra -funroll-loops -Wno-sign-compare -xHOST -O3 -ipo -no-prec-div -fp-model fast=2
 endif
 
 ### choose C++ compiler
@@ -62,9 +65,11 @@ LFLAGS += -DASSERT # Turns on asserttions (otherwise define an empty macro funct
 LFLAGS += -DCOUNT # Count number calls to P2P and M2L (slows down execution)
 
 ### Thread model flags
+ifneq (,$(MTHREAD))
+	LFLAGS	+= -DMTHREAD -lmyth-native -I$(MYTH_DIR)/include -L$(MYTH_DIR)/lib # MassiveThreads is available from http://github.com/massivethreads/massivethreads
+endif	
 #LFLAGS	+= -DCILK -lcilkrts # Cilk is included in the Intel C/C++ Compiler
 #LFLAGS	+= -DTBB -ltbb # TBB is available from http://threadingbuildingblocks.org/download.php
-#LFLAGS	+= -DMTHREAD -lmyth-native -L$(HOME)/local/lib # MassiveThreads is available from http://code.google.com/p/massivethreads/
 #LFLAGS	+= -lmyth-native -L$(HOME)/local/lib # MassiveThreads is available from http://code.google.com/p/massivethreads/
 #LFLAGS	+= -DQTHREAD -lqthread # Qthread is available from https://code.google.com/p/qthreads/
 #LFLAGS	+= -DOPENMP # OpenMP is included in most modern compilers

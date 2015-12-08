@@ -31,10 +31,11 @@ using HOT = tapas::SingleNodeHOT<3, tapas::sfc::Morton>;
 
 
 // Select threading component: serial or MassiveThreads
-#ifdef MTHREADS
+#if defined(MTHREAD) || defined(MTHREADS)
 #include "tapas/threading/massivethreads.h"
 using Threading = tapas::threading::MassiveThreads;
-#else /* MTHREADS */
+#else /* no MTHREADS */
+#error "no mthreads"
 using Threading = tapas::threading::Default;
 #endif /* MTHREADS */
 

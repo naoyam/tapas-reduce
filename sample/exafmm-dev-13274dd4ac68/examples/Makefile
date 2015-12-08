@@ -35,7 +35,7 @@ serial_tapas: tapas_exafmm.cxx $(OBJECTS)
 	$(CXX) $(DEBUG) $(LOG) $^ $(LFLAGS) -o $@
 
 parallel_tapas: tapas_exafmm.cxx $(OBJECTS)
-	$(MPICXX) $(DEBUG) $(LOG) -DUSE_MPI $^ $(LFLAGS) -o $@
+	$(MPICXX) $(DEBUG) $(LOG) -DUSE_MPI $^ $(LFLAGS) -o $@ 
 
 # Test for parallel FMM
 parallel: parallel.o $(OBJECTS)
