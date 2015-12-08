@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <tuple>
 #include <functional>
+#include <type_traits>
 
 #include "tapas/debug_util.h"
 #include "tapas/cell.h"
@@ -257,13 +258,13 @@ inline void DownwardMap(Funct f, T &x, Args...args) {
   PreOrderMap(f, x, args...);
 }
 
-template <class Funct, class T, class... Args>
-void Map(Funct f, T &x, Args...args) {
-  TAPAS_LOG_DEBUG() << "map non-iterator (l-value version)" << std::endl;
+// template <class Funct, class T, class... Args>
+// void Map(Funct f, T &x, Args...args) {
+//   TAPAS_LOG_DEBUG() << "map non-iterator (l-value version)" << std::endl;
 
-  std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
-  T::Map(lambda, x);
-}
+//   std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
+//   T::Map(lambda, x);
+// }
 
 #ifdef TAPAS_USE_VECTORMAP
 /*EMPTY*/
@@ -272,8 +273,11 @@ template <class Funct, class T, class... Args>
 void Map(Funct f, T &&x, Args...args) {
   TAPAS_LOG_DEBUG() << "map non-iterator (r-value version)"  << std::endl;
 
+  using T2 = typename std::remove_reference<T>::type;
+  
   std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
-  T::Map(lambda, std::forward<T>(x));
+  
+  T2::Map(lambda, std::forward<T>(x));
 }
 #endif /*TAPAS_USE_VECTORMAP*/
 

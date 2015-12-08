@@ -87,12 +87,15 @@ exclusive_scan(InputIterator first, InputIterator last,
 
 
 
-} // namespace tuil
+} // namespace util
 } // namespace tapas
 
 
 namespace tapas {
 namespace mpi {
+
+template <class T> void *void_cast(T* p) { return reinterpret_cast<void*>(p); }
+template <class T> void *void_cast(const T* p) { return const_cast<void*>(reinterpret_cast<const void*>(p)); }
 
 using tapas::util::exclusive_scan;
 
@@ -387,8 +390,8 @@ void Gather(const T& val, std::vector<T> &recvbuf, int root, MPI_Comm comm) {
     recvbuf.clear();
   }
   
-  int ret = ::MPI_Gather(reinterpret_cast<const void*>(&val), count, type,
-                         reinterpret_cast<void*>(&recvbuf[0]), count, type, root, comm);
+  int ret = ::MPI_Gather(void_cast(&val), count, type,
+                         void_cast(&recvbuf[0]), count, type, root, comm);
   
   TAPAS_ASSERT(ret == MPI_SUCCESS); (void)ret;
 }
@@ -411,8 +414,8 @@ void Gather(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, int root, MP
     recvbuf.clear();
   }
   
-  int ret = ::MPI_Gather(reinterpret_cast<const void*>(&sendbuf[0]), count, type,
-                         reinterpret_cast<void*>(&recvbuf[0]), count, type, root, comm);
+  int ret = ::MPI_Gather(void_cast(&sendbuf[0]), count, type,
+                         void_cast(&recvbuf[0]), count, type, root, comm);
   
   TAPAS_ASSERT(ret == MPI_SUCCESS); (void)ret;
 }
