@@ -20,6 +20,7 @@ static struct option long_options[] = {
   {"verbose",      1, 0, 'v'},
   {"distribution", 1, 0, 'd'},
   {"repeat",       1, 0, 'r'},
+	{"check",        1, 0, 'k'},
   {"help",         0, 0, 'h'},
   {0, 0, 0, 0}
 };
@@ -37,10 +38,11 @@ public:
   int mutual;
   int graft;
   int verbose;
+	int check;
   const char * distribution;
   int repeat;
-    int mpi_size; //!< MPI size
-    int mpi_rank; //!< MPI rank
+	int mpi_size; //!< MPI size
+	int mpi_rank; //!< MPI rank
 
 private:
   void usage(char * name) {
@@ -53,28 +55,29 @@ private:
             " --threads (-T)                : Number of threads (%d)\n"
             " --images (-i)                 : Number of periodic image levels (%d)\n"
             " --theta (-t)                  : Multipole acceptance criterion (%f)\n"
-	    " --useRmax (-x) [0/1]          : Use maximum distance for MAC (%d)\n"
-	    " --useRopt (-o) [0/1]          : Use error optimized theta for MAC (%d)\n"
+						" --useRmax (-x) [0/1]          : Use maximum distance for MAC (%d)\n"
+						" --useRopt (-o) [0/1]          : Use error optimized theta for MAC (%d)\n"
             " --mutual (-m) [0/1]           : Use mutual interaction (%d)\n"
-	    " --graft (-g) [0/1]            : Graft remote trees to global tree (%d)\n"
-	    " --verbose (-v) [0/1]          : Print information to screen (%d)\n"
+						" --graft (-g) [0/1]            : Graft remote trees to global tree (%d)\n"
+						" --verbose (-v) [0/1]          : Print information to screen (%d)\n"
             " --distribution (-d) [l/c/s/p] : lattice, cube, sphere, plummer (%s)\n"
             " --repeat (-r)                 : Number of iteration loops (%d)\n"
+						" --check (-k)                  : Check the result and returns 0 if OK\n"
             " --help (-h)                   : Show this help document\n",
             name,
             numBodies,
             ncrit,
             nspawn,
-	    threads,
+						threads,
             images,
             theta,
-	    useRmax,
-	    useRopt,
+						useRmax,
+						useRopt,
             mutual,
-	    graft,
-	    verbose,
+						graft,
+						verbose,
             distribution,
-	    repeat);
+						repeat);
   }
 
   const char * parse(const char * arg) {
@@ -100,54 +103,57 @@ public:
                                         verbose(1), distribution("cube"), repeat(1), mpi_size(1), mpi_rank(0) {
     while (1) {
       int option_index;
-      int c = getopt_long(argc, argv, "n:c:s:T:i:t:x:o:m:g:v:d:r:h", long_options, &option_index);
+      int c = getopt_long(argc, argv, "n:c:s:T:i:t:x:o:m:g:v:d:r:k:h", long_options, &option_index);
       if (c == -1) break;
       switch (c) {
-      case 'n':
-        numBodies = atoi(optarg);
-        break;
-      case 'c':
-        ncrit = atoi(optarg);
-        break;
-      case 's':
-        nspawn = atoi(optarg);
-        break;
-      case 'T':
-        threads = atoi(optarg);
-        break;
-      case 'i':
-        images = atoi(optarg);
-        break;
-      case 't':
-        theta = atof(optarg);
-        break;
-      case 'x':
-        useRmax = atof(optarg);
-        break;
-      case 'o':
-        useRopt = atof(optarg);
-        break;
-      case 'm':
-        mutual = atoi(optarg);
-        break;
-      case 'g':
-	graft = atoi(optarg);
-	break;
-      case 'v':
-	verbose= atoi(optarg);
-	break;
-      case 'd':
-        distribution = parse(optarg);
-        break;
-      case 'r':
-        repeat = atoi(optarg);
-        break;
-      case 'h':
-        usage(argv[0]);
-        exit(0);
-      default:
-        usage(argv[0]);
-        exit(0);
+				case 'n':
+					numBodies = atoi(optarg);
+					break;
+				case 'c':
+					ncrit = atoi(optarg);
+					break;
+				case 's':
+					nspawn = atoi(optarg);
+					break;
+				case 'T':
+					threads = atoi(optarg);
+					break;
+				case 'i':
+					images = atoi(optarg);
+					break;
+				case 't':
+					theta = atof(optarg);
+					break;
+				case 'x':
+					useRmax = atof(optarg);
+					break;
+				case 'o':
+					useRopt = atof(optarg);
+					break;
+				case 'm':
+					mutual = atoi(optarg);
+					break;
+				case 'g':
+					graft = atoi(optarg);
+					break;
+				case 'v':
+					verbose= atoi(optarg);
+					break;
+				case 'd':
+					distribution = parse(optarg);
+					break;
+				case 'r':
+					repeat = atoi(optarg);
+					break;
+				case 'h':
+					usage(argv[0]);
+					exit(0);
+				case 'k':
+					check = 1;
+					break;
+				default:
+					usage(argv[0]);
+					exit(0);
       }
     }
   }
