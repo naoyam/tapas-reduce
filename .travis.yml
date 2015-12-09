@@ -13,4 +13,5 @@ before_install:
 branches:
   only:
     - master
+    - fix-travis-ci
 script: bash ./test.sh
