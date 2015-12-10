@@ -1,17 +1,56 @@
+sudo: false
 language: cpp
-before_install:
-  - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
-  - wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key | sudo apt-key add -
-  - sudo add-apt-repository --yes 'deb http://llvm.org/apt/precise/ llvm-toolchain-precise-3.5 main'
-  - sudo add-apt-repository --yes 'deb http://llvm.org/apt/precise/ llvm-toolchain-precise main'
-  - sudo apt-get update -qq
-  - sudo apt-get install -qq mpich2 libmpich2-3 libmpich2-dev
-  - sudo apt-get install -qq g++-4.9 g++-5
-  - sudo apt-get install -qq libstdc++-4.9-dev libstdc++-5-dev
-  - sudo apt-get install -qq clang-3.5
-  - sudo sh ./setup-travis.sh
+
+before_script:
+  - bash scripts/install_mpich.sh
+cache:
+  directories:
+    - $HOME/mpich
+  
+matrix:
+  include:
+    - os: linux
+      compiler: gcc
+      addons:
+        apt:
+          sources: ['ubuntu-toolchain-r-test']
+          packages:
+            - gcc-4.9
+            - g++-4.9
+      env: COMPILER=g++-4.9
+      
+    - os: linux
+      compiler: gcc
+      addons:
+        apt:
+          sources: ['ubuntu-toolchain-r-test']
+          packages:
+            - gcc-5
+            - g++-5
+      env: COMPILER=g++-5
+
+    - os: linux
+      compiler: clang
+      addons:
+        apt:
+          sources: ['ubuntu-toolchain-r-test', 'llvm-toolchain-precise-3.5']
+          packages:
+            - clang-3.5
+      env: COMPILER=clang++-3.5
+
+    - os: linux
+      compiler: clang
+      addons:
+        apt:
+          sources: ['ubuntu-toolchain-r-test', 'llvm-toolchain-precise-3.6']
+          packages:
+            - clang-3.6
+      env: COMPILER=clang++-3.6
+      
 branches:
   only:
     - master
-    - fix-travis-ci
-script: bash ./test.sh
+script:
+  - export PATH=$HOME/mpich/bin:$PATH
+  - export LD_LIBRARY_PATH=$HOME/mpich/lib:$LD_LIBRARY_PATH
+  - env SCALE=s bash ./test.sh

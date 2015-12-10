@@ -1087,7 +1087,8 @@ struct LET {
     tapas::mpi::Alltoallv(leaf_keys_sendbuf, leaf_sendcnt, req_leaf_keys, leaf_recvcnt, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv(leaf_nb_sendbuf,   leaf_sendcnt, res_nb,        leaf_recvcnt, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv(body_sendbuf,      body_sendcnt, res_bodies,    body_recvcnt, MPI_COMM_WORLD);
-    
+
+#ifdef TAPAS_DEBUG
     tapas::debug::BarrierExec([&](int, int) {
         std::cout << "ht.size() = " << ht.size() << std::endl;
         std::cout << "req_attr_keys.size() = " << req_attr_keys.size() << std::endl;
@@ -1095,6 +1096,7 @@ struct LET {
         std::cout << "local_bodies.size() = " << data.local_bodies_.size() << std::endl;
         std::cout << "res_bodies.size() = " << res_bodies.size() << std::endl;
       });
+#endif
     
     // TODO: send body attributes
     // Now we assume body_attrs from remote process is all "0" data.

@@ -201,7 +201,7 @@ typedef tapas::Vec<DIM, real_t> Vec3;
 
 f4vec calc(f4vec &source) {
   Tapas::Region r(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 1.0, 1.0));
-  Tapas::Cell *root = Tapas::Partition(source.data(), source.size(), r, 1);
+  Tapas::Cell *root = Tapas::Partition(source.data(), source.size(), 1);
 
   tapas::UpwardMap(approximate, *root); // or, simply: approximate(*root);
   
@@ -368,12 +368,6 @@ int main(int argc, char **argv) {
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 #endif
 
-  if (mpi_rank == 0) {
-    std::cout << "=======================================================" << std::endl;
-    std::cout << "               Tapas Barnes-Hut sample app             " << std::endl;
-    std::cout << "=======================================================" << std::endl;
-  }
-    
   // print time and environment
   parseOption(&argc, &argv);
 

@@ -20,7 +20,7 @@ DEVICE	= CPU
 #DEVICE	= GPU (not integrated)
 
 CXX ?= clang++
-MPICXX ?= mpicxx -cxx=$(CXX)
+MPICXX ?= mpicxx -cxx=$(CXX) # mpich's mpicxx
 
 ifneq (,$(findstring clang++,$(CXX)))
 	CXX += -std=c++11 -ggdb3 -Wall -Wextra -O2 -funroll-loops -fcolor-diagnostics -Wno-sign-compare
@@ -53,7 +53,7 @@ LFLAGS += -I../include -I../../../cpp/include -I$(HOME)/local/include
 #CXX	+= -I$$(echo $$CPATH | sed 's/:/ -I/g') # BG compilers need this
 #LFLAGS	+= -L$$(echo $$LIBRARY_PATH | sed 's/:/ -L/g') # BG compilers need this
 LFLAGS += -D$(BASIS) # Specify basis of multipole/local expansion
-LFLAGS += -DEXPANSION=4 # Specify expansion order
+LFLAGS += -DEXPANSION=6 # Specify expansion order
 # SIMD causes compilation errors on umekoji
 #LFLAGS	+= -DUSE_SIMD # Use SSE/AVX/MIC intrinsics
 #LFLAGS	+= -DUSE_WEIGHT # Use weights for partitioning

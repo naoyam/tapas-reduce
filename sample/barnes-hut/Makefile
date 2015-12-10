@@ -19,8 +19,8 @@ endif
 
 CC ?= clang
 CXX ?= clang++
-MPICXX = mpicxx -cxx=$(CXX) -DUSE_MPI
-CXXFLAGS := -std=c++11 -Wall -Wextra -Wno-unused-local-typedef -fno-elide-constructors
+MPICXX ?= mpicxx -cxx=$(CXX) -DUSE_MPI
+CXXFLAGS := -std=c++11 -Wall -Wextra -fno-elide-constructors
 
 #PROF := -pg
 

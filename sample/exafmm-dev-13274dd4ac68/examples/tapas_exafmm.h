@@ -35,7 +35,6 @@ using HOT = tapas::SingleNodeHOT<3, tapas::sfc::Morton>;
 #include "tapas/threading/massivethreads.h"
 using Threading = tapas::threading::MassiveThreads;
 #else /* no MTHREADS */
-#error "no mthreads"
 using Threading = tapas::threading::Default;
 #endif /* MTHREADS */
 
