@@ -12,7 +12,7 @@ struct P2P {
 #ifdef __CUDACC__
   __host__ __device__ __forceinline__
 #endif
-  void operator() (Body* Bi, Body* Bj, kvec4 &biattr, vec3 Xperiodic) {
+  void operator() (Body* Bi, Body* Bj, kvec4 &biattr, vec3 Xperiodic, int /*mutual*/) {
     vec3 dX = Bi->X - Bj->X - Xperiodic;
     real_t R2 = norm(dX) + EPS2;
     if (R2 != 0) {
@@ -28,13 +28,6 @@ struct P2P {
 };
 
 #else /* TAPAS_USE_VECTORMAP */
-
-inline bool Close(double a, double b) { // for debug
-  double a1 = a * 0.999;
-  double a2 = a * 1.001;
-  if (a1 < a2) return a1 <= b && b <= a2;
-  else         return a2 <= b && b <= a1;
-}
 
 struct P2P {
   template<class BodyIterator>

@@ -41,7 +41,7 @@ void Report(const Data &data, std::ostream &os = std::cout) {
   }
 
   if (getenv("TAPAS_REPORT_SUFFIX")) {
-    report_suffix = getenv("TAPAS_REPORT_PREFIX");
+    report_suffix = getenv("TAPAS_REPORT_SUFFIX");
   }
 
   HostName hostname;

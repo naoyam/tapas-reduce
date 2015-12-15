@@ -13,7 +13,12 @@
 #include <list>
 #include <vector>
 #include <unordered_set>
+#ifdef __CUDACC__
 #include <unordered_map>
+//#include <tr1/unordered_map>
+#else
+#include <unordered_map>
+#endif
 #include <utility>
 #include <iostream>
 #include <iomanip>
@@ -80,7 +85,12 @@ class SharedData {
   using CellType = Cell<TSP>;
   using SFC = typename TSP::SFC;
   using KeyType = typename SFC::KeyType;
+#ifdef __CUDACC__
   using HashTable = std::unordered_map<KeyType, CellType*>;
+  //using HashTable = std::tr1::unordered_map<KeyType, CellType*>;
+#else
+  using HashTable = std::unordered_map<KeyType, CellType*>;
+#endif
   
   using BodyType = typename TSP::BT::type;
   using BodyATtrType = typename TSP::BT_ATTR;
@@ -110,9 +120,9 @@ class Cell: public tapas::BasicCell<TSP> {
   using SFC = typename TSP::SFC;
   using KeyType = typename SFC::KeyType;
   //typedef typename TSP::BT_ATTR body_attr_type;
-  
-  typedef std::unordered_map<KeyType, Cell*> HashTable;
-  typedef Cell<TSP> CellType;
+
+  using HashTable = typename SharedData<TSP>::HashTable;
+  using CellType = Cell<TSP>;
   using BodyIterator = iter::BodyIterator<Cell>;
   using SubCellIterator = iter::SubCellIterator<Cell>;
   

@@ -142,6 +142,20 @@ static double atomicAdd(double* address, double val) {
   return __longlong_as_double(old);
 }
 
+__device__
+static double atomicAdd(float* address, float val) {
+  int* address1 = (int*)address;
+  int chk;
+  int old;
+  chk = *address1;
+  do {
+    old = chk;
+    chk = atomicCAS(address1, old,
+                    __float_as_int(val + __int_as_float(old)));
+  } while (old != chk);
+  return __int_as_float(old);
+}
+
 template <class Funct, class BV, class BA,
           template <class T> class CELLDATA, class... Args>
 __global__
@@ -238,7 +252,7 @@ struct Vectormap_CUDA_Simple {
 
     explicit um_allocator() throw() : std::allocator<T>() {}
 
-    explicit um_allocator(const um_allocator &a) throw()
+    /*explicit*/ um_allocator(const um_allocator<T> &a) throw()
       : std::allocator<T>(a) {}
 
     template <class U> explicit
@@ -734,7 +748,6 @@ struct Vectormap_CUDA_Packed
       assert(ce == cudaSuccess);
     }
   }
-
 };
 
 }

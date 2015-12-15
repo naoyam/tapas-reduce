@@ -217,10 +217,12 @@ void Alltoall(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, int count,
  *
  * Caution: send_buf and dest will be sorted in-place.
  */
-template<typename T>
-void Alltoallv2(std::vector<T>& send_buf, std::vector<int>& dest,
-                std::vector<T>& recv_buf, std::vector<int>& src,
+template<typename T, typename VectorType>
+void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
+                VectorType& recv_buf, std::vector<int>& src,
                 MPI_Comm comm) {
+  static_assert(std::is_same<T, typename VectorType::value_type>::value,
+                "VectorType must be a container of T");
   int mpi_size;
 
   MPI_Comm_size(comm, &mpi_size);
@@ -310,6 +312,13 @@ void Alltoallv2(std::vector<T>& send_buf, std::vector<int>& dest,
   // TODO: bug? May be src2 is the correct answer?
   src = src2;
 #endif
+}
+
+template<typename T>
+inline void Alltoallv2(std::vector<T>& send_buf, std::vector<int>& dest,
+                       std::vector<T>& recv_buf, std::vector<int>& src,
+                       MPI_Comm comm) {
+  Alltoallv2<T, std::vector<T>>(send_buf, dest, recv_buf, src, comm);
 }
 
 template<class T>

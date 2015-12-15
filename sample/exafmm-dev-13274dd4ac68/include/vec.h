@@ -421,6 +421,8 @@ public:
     for (int i=0; i<N; i++) s << v[i] << ' ';
     return s;
   }
+	__host__ __device__ __forceinline__
+	size_t size() const { return N; }
   __host__ __device__ __forceinline__
   friend T sum(const vec & v) {                                 // Sum vector
     return Unroll<Ops::Add<T>,T,N>::reduce(v);

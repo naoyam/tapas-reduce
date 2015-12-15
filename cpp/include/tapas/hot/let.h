@@ -445,6 +445,7 @@ struct LET {
     ProxyBodyIterator &operator+=(int n) {
       idx_ += n;
       TAPAS_ASSERT(idx_ < c_->RealCell()->nb());
+      return *this;
     }
 
     // Returns a const pointer to (real) BodyType for read-only use.
@@ -464,7 +465,7 @@ struct LET {
     inline static void Map(Funct, ProxyBodyIterator &) {
       //f(p);
     }
-  };
+  }; // class ProxyBodyIterator
 
   /**
    * ProxyCell
@@ -1101,9 +1102,11 @@ struct LET {
     // TODO: send body attributes
     // Now we assume body_attrs from remote process is all "0" data.
 
-    data.let_bodies_ = res_bodies;
+    data.let_bodies_.assign(std::begin(res_bodies), std::end(res_bodies));
     data.let_body_attrs_.resize(res_bodies.size());
     bzero(&data.let_body_attrs_[0], data.let_body_attrs_.size() * sizeof(data.let_body_attrs_[0]));
+
+    TAPAS_ASSERT(data.let_bodies_.size() == res_bodies.size());
 
     double end = MPI_Wtime();
     data.time_let_response = end - beg;

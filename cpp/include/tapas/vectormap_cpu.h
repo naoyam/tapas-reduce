@@ -29,7 +29,9 @@ struct Vectormap_CPU {
   static void vectormap_release() {}
 
   static void vectormap_start() {}
-  static void vectormap_finish() {}
+
+  template<class Funct, class Cell, class ...Args>
+  static void vectormap_finish(Funct, Cell, Args...) {}
 
 #if 0
   template <class Funct, class Cell, class...Args>

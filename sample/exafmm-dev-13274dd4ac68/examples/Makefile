@@ -25,6 +25,11 @@ tree: tree.o $(OBJECTS)
 serial: serial.o $(OBJECTS)
 	$(CXX) $? $(LFLAGS) -o $@
 
+# Test for parallel FMM
+parallel: parallel.cxx $(OBJECTS)
+	$(MPICXX) $? $(LFLAGS) -o $@
+#	mpirun -np 9 ./a.out --ncrit 256 --distribution plummer
+
 # Test for serial FMM with TAPAS
 #serial_tapas: serial_tapas.o $(OBJECTS)
 #	$(CXX) $? $(LFLAGS) -o $@
@@ -36,11 +41,6 @@ serial_tapas: tapas_exafmm.cxx $(OBJECTS)
 
 parallel_tapas: tapas_exafmm.cxx $(OBJECTS)
 	$(MPICXX) $(DEBUG) $(LOG) -DUSE_MPI $^ $(LFLAGS) -o $@ 
-
-# Test for parallel FMM
-parallel: parallel.o $(OBJECTS)
-	$(CXX) $? $(LFLAGS)
-#	mpirun -np 9 ./a.out --ncrit 256 --distribution plummer
 
 # Checking O(N) complexity
 complexity: serial.o $(OBJECTS)

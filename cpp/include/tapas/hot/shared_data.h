@@ -21,10 +21,13 @@ struct SharedData {
   using KeySet = std::unordered_set<KeyType>;
   using BodyType = typename TSP::BT::type;
   using BodyAttrType = typename TSP::BT_ATTR;
-
+  
 #ifdef TAPAS_USE_VECTORMAP
   template <typename T>
   using vector_allocator = typename TSP::Vectormap:: template um_allocator<T>;
+  template<class T> using Allocator = vector_allocator<T>;
+#else
+  template<class T> using Allocator = std::allocator<T>;
 #endif /*TAPAS_USE_VECTORMAP*/
 
   CellHashTable ht_;
@@ -48,7 +51,7 @@ struct SharedData {
   std::vector<BodyType, vector_allocator<BodyType>> local_bodies_; //!< Bodies that belong to the local process
   std::vector<BodyType, vector_allocator<BodyType>> let_bodies_; //!< Bodies sent from remote processes
   std::vector<BodyAttrType, vector_allocator<BodyAttrType>> local_body_attrs_; //!< Local body attributes
-  std::vector<BodyAttrType, vector_allocator<BodyAttrType>> let__body_attrs_; //!< Local body attributes
+  std::vector<BodyAttrType, vector_allocator<BodyAttrType>> let_body_attrs_; //!< Local body attributes
 #else /*TAPAS_USE_VECTORMAP*/
   std::vector<BodyType> local_bodies_; //!< Bodies that belong to the local process
   std::vector<BodyType> let_bodies_; //!< Bodies that belong to the local process

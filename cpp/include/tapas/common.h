@@ -182,8 +182,8 @@ struct TapasStaticParams {
  * @param vals Values to be sorted.
  *
  */
-template<class T1, class T2>
-void SortByKeys(std::vector<T1> &keys, std::vector<T2> &vals) {
+template<class C1, class C2>
+void SortByKeys(C1 &keys, C2 &vals) {
   assert(keys.size() == vals.size());
   
   auto len = keys.size();
@@ -197,8 +197,8 @@ void SortByKeys(std::vector<T1> &keys, std::vector<T2> &vals) {
   std::sort(std::begin(perm), std::end(perm),
             [&keys](size_t a, size_t b) { return keys[a] < keys[b]; });
 
-  std::vector<T1> keys2(len); // sorted keys
-  std::vector<T2> vals2(len); // sorted vals
+  C1 keys2(len); // sorted keys
+  C2 vals2(len); // sorted vals
   for (size_t i = 0; i < len; i++) {
     size_t idx = perm[i];
     vals2[i] = vals[idx];

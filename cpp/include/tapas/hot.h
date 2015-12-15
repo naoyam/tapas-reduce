@@ -1027,8 +1027,12 @@ Cell<TSP> &Cell<TSP>::parent() const {
 
 template <class TSP>
 void Cell<TSP>::CheckBodyIndex(index_t idx) const {
-  (void)idx;
-  TAPAS_ASSERT(this->nb() >= 0);
+  //TAPAS_ASSERT(this->nb() >= 0);
+
+  // debug
+  if (!(idx < this->nb())) {
+    std::cerr << "idx = " << idx << ", " << "this->nb() = " << this->nb() << std::endl;
+  }
   TAPAS_ASSERT((size_t)idx < this->nb());
   TAPAS_ASSERT(this->IsLeaf() && "body or body attribute access is not allowed for non-leaf cells.");
 

@@ -26,10 +26,6 @@
 #include "LaplaceSphericalCPU_tapas.h"
 #include "LaplaceP2PCPU_tapas.h"
 
-#ifdef TAPAS_USE_VECTORMAP
-#  include "LaplaceP2PCPU_tapas.cxx"
-#endif /*TAPAS_USE_VECTORMAP*/
-
 int numM2L = 0;
 int numP2P = 0;
 
@@ -398,12 +394,10 @@ void dumpLeaves(Tapas::Cell &root) {
         ofs << "    body[" << i << "]=(" << cell.body(i).X << ") " << std::endl;
       }
       mtx.unlock();
-    } else {
-      tapas::Map(f, cell.subcells());
     }
   };
 
-  tapas::Map(f, root);
+  tapas::UpwardMap(f, root);
   
   ofs.close();
 }
@@ -503,9 +497,10 @@ int main(int argc, char ** argv) {
     
 #ifdef TAPAS_USE_VECTORMAP
     vec3 Xperiodic = 0; // dummy; periodic not ported
+    int mutual = 0;     // dummy; mutual interaction is not ported to CUDA
     Tapas::Cell::TSPClass::Vectormap::vectormap_finish(P2P(),
                                                        *root,
-                                                       Xperiodic);
+                                                       Xperiodic, mutual);
 #endif /*TAPAS_USE_VECTORMAP*/
     
     logger::stopTimer("Traverse");

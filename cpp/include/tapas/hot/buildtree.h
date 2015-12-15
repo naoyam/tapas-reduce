@@ -50,10 +50,13 @@ class SamplingOctree {
   using BodyType = typename TSP::BT::type;
   using BodyAttrType = typename TSP::BT_ATTR;
   using Data = SharedData<TSP, SFC>;
+  template<class T> using Allocator = typename Data::template Allocator<T>;
   template<class T> using Region = tapas::Region<T>;
 
+  template<class T> using Vector = std::vector<T, Allocator<T>>;
+
  private:
-  std::vector<BodyType> bodies_;
+  Vector<BodyType> bodies_;
   std::vector<KeyType> body_keys_;
   std::vector<KeyType> proc_first_keys_; // first key of each process's region
   Region<TSP> region_;
@@ -379,10 +382,10 @@ class SamplingOctree {
       }
     }
   }
-  
-  static std::vector<BodyType> ExchangeBodies(std::vector<BodyType>& bodies,
-                                              const std::vector<KeyType> proc_first_keys,
-                                              const Region<TSP> &reg, MPI_Comm comm) {
+
+  static Vector<BodyType> ExchangeBodies(Vector<BodyType> bodies,
+                                         const std::vector<KeyType> proc_first_keys,
+                                         const Region<TSP> &reg, MPI_Comm comm) {
     std::vector<KeyType> body_keys = BodiesToKeys(bodies, reg);
     std::vector<int> dest(body_keys.size()); // destiantion of each body
 
@@ -397,10 +400,10 @@ class SamplingOctree {
     tapas::SortByKeys(dest, bodies);
 
     // exchange bodies using Alltoallv
-    std::vector<BodyType> recv_bodies;
+    Vector<BodyType> recv_bodies;
     std::vector<int> src;
 
-    tapas::mpi::Alltoallv2(bodies, dest, recv_bodies, src, comm);
+    tapas::mpi::Alltoallv2<Body, Vector<BodyType>>(bodies, dest, recv_bodies, src, comm);
 
     return recv_bodies;
   }
@@ -413,7 +416,8 @@ class SamplingOctree {
     return 0;
   }
 
-  static std::vector<KeyType> BodiesToKeys(const std::vector<BodyType> &bodies, const Region<TSP> &region) {
+  template<class VecT>
+  static std::vector<KeyType> BodiesToKeys(const VecT &bodies, const Region<TSP> &region) {
     return BodiesToKeys(bodies.begin(), bodies.end(), region);
   }
   
