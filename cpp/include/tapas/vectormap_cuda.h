@@ -547,6 +547,9 @@ struct Vectormap_CUDA_Packed
     const Cell &c0 = prod.first().cell();
     const Cell &c1 = prod.second().cell();
     assert(c0.IsLeaf() && c1.IsLeaf());
+
+    if (c0.nb() == 0 || c1.nb() == 0) return;
+    
     /* (Cast to drop const, below). */
     Cell_Data<BV> d0;
     Cell_Data<BV> d1;
