@@ -2,6 +2,17 @@
 set -u
 set -e
 
+unset TMPFILE
+
+atexit() {
+    [[ -n "${TMPFILE-}" ]] && rm -f "$TMPFILE"
+}
+
+trap atexit EXIT
+trap 'trap - EXIT; atexit; exit -1' INT PIPE TERM
+
+TMPFILE=$(mktemp "/tmp/${0##*/}.tmp.XXXXXXX")
+echo TMPFILE=${TMPFILE}
 
 function echoRed() {
     echo -en "\e[0;31m"
@@ -144,10 +155,10 @@ make VERBOSE=1 MODE=release -C $SRC_DIR clean all
 for np in ${NP[@]}; do
     for nb in ${NB[@]}; do
         echoCyan mpiexec -n $np $SRC_DIR/bh_mpi -w $nb
-        mpiexec -n $np $SRC_DIR/bh_mpi -w $nb | tee log.txt
+        mpiexec -n $np $SRC_DIR/bh_mpi -w $nb | tee $TMPFILE
 
-        PERR=$(grep "P ERR" log.txt | grep -oE "[0-9.e+-]+")
-        FERR=$(grep "F ERR" log.txt | grep -oE "[0-9.e+-]+")
+        PERR=$(grep "P ERR" $TMPFILE | grep -oE "[0-9.e+-]+")
+        FERR=$(grep "F ERR" $TMPFILE | grep -oE "[0-9.e+-]+")
 
         if [[ $(python -c "print $PERR > $MAX_ERR") == "True" ]]; then
             echoRed "*** Error check failed. P ERR $PERR > $MAX_ERR"
@@ -170,7 +181,7 @@ echo --------------------------------------------------------------------
 echo ExaFMM
 echo --------------------------------------------------------------------
 
-MAX_ERR=1e-2
+MAX_ERR=5e-3
 
 if echo $SCALE | grep -Ei "^t(iny)?" >/dev/null ; then
     NP=(1)
@@ -198,7 +209,6 @@ else
 fi
     
 SRC_DIR=$SRC_ROOT/sample/exafmm-dev-13274dd4ac68/examples
-BIN=$SRC_DIR/bh_mpi
 
 make VERBOSE=1 MODE=release -C $SRC_DIR clean tapas
 
@@ -206,11 +216,14 @@ for dist in ${DIST[@]}; do
     for nb in ${NB[@]}; do
         for ncrit in ${NCRIT[@]}; do
             for mutual in 0 1; do
-                echoCyan $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
-                $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual | tee log.txt
+                rm -f $TMPFILE; sleep 1s
                 
-                PERR=$(grep "Rel. L2 Error" log.txt | grep pot | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
-                AERR=$(grep "Rel. L2 Error" log.txt | grep acc | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
+                echoCyan $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
+                $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
+                cat $TMPFILE
+                
+                PERR=$(grep "Rel. L2 Error" $TMPFILE | grep pot | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
+                AERR=$(grep "Rel. L2 Error" $TMPFILE | grep acc | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
 
                 if [[ $(python -c "print $PERR > $MAX_ERR") == "True" ]]; then
                     echoRed "*** Error check failed. L2 Error (pot) $PERR > $MAX_ERR"
@@ -229,11 +242,13 @@ for dist in ${DIST[@]}; do
                 echo
 
                 for np in ${NP[@]}; do
-                    echoCyan mpiexec -n 2 $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
-                    mpiexec -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual | tee log.txt
+                    rm -f $TMPFILE; sleep 1s
+                    echoCyan mpiexec -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
+                    mpiexec -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
+                    cat $TMPFILE
                     
-                    PERR=$(grep "Rel. L2 Error" log.txt | grep pot | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
-                    AERR=$(grep "Rel. L2 Error" log.txt | grep acc | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
+                    PERR=$(grep "Rel. L2 Error" $TMPFILE | grep pot | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
+                    AERR=$(grep "Rel. L2 Error" $TMPFILE | grep acc | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
 
                     if [[ $(python -c "print $PERR > $MAX_ERR") == "True" ]]; then
                         echoRed "*** Error check failed. L2 Error (pot) $PERR > $MAX_ERR"
@@ -260,6 +275,5 @@ done
 
 if [[ $STATUS -eq 0 ]]; then
     echo OK.
-else
-    exit $STATUS
 fi
+exit $STATUS
