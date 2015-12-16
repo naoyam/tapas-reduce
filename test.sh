@@ -21,7 +21,7 @@ function echoCyan() {
     echo -en "\e[0;39m"
 }
 
-function get-script-dir() {
+function get_script_dir() {
     pushd `dirname $0` >/dev/null
     DIR=`pwd`
     popd >/dev/null
@@ -33,7 +33,11 @@ echo --------------------------------------------------------------------
 # setup
 #------------------------------------------------------------------------
 TMP_DIR=/tmp/tapas-build
-SRC_ROOT=`get-script-dir`
+SRC_ROOT=`get_script_dir`
+
+if [[ -z "${SCALE-}" ]]; then
+    SCALE=s
+fi
 
 STATUS=0
 MAX_ERR="5e-2"
@@ -80,8 +84,8 @@ if mpicxx --showme:version 2>/dev/null | grep "Open MPI"; then
     echo Looks like Open MPI.
 else
     # mpich family (mpich and mvapich)
-    MPICC="env MPICH_CXX=${CXX} MPICH_CC=${CXX} mpicc"
-    MPICXX="env MPICH_CXX=${CXX} MPICH_CC=${CXX} mpicxx"
+    MPICC="env MPICH_CXX=${CXX} MPICH_CC=${CC} mpicc"
+    MPICXX="env MPICH_CXX=${CXX} MPICH_CC=${CC} mpicxx"
     echo Looks like Mpich.
 fi
 
@@ -139,8 +143,8 @@ make VERBOSE=1 MODE=release -C $SRC_DIR clean all
 
 for np in ${NP[@]}; do
     for nb in ${NB[@]}; do
-        echoCyan mpirun -n $np $SRC_DIR/bh_mpi -w $nb
-        mpirun -n $np $SRC_DIR/bh_mpi -w $nb | tee log.txt
+        echoCyan mpiexec -n $np $SRC_DIR/bh_mpi -w $nb
+        mpiexec -n $np $SRC_DIR/bh_mpi -w $nb | tee log.txt
 
         PERR=$(grep "P ERR" log.txt | grep -oE "[0-9.e+-]+")
         FERR=$(grep "F ERR" log.txt | grep -oE "[0-9.e+-]+")
@@ -166,7 +170,7 @@ echo --------------------------------------------------------------------
 echo ExaFMM
 echo --------------------------------------------------------------------
 
-MAX_ERR=6e-2
+MAX_ERR=1e-2
 
 if echo $SCALE | grep -Ei "^t(iny)?" >/dev/null ; then
     NP=(1)
@@ -200,7 +204,7 @@ make VERBOSE=1 MODE=release -C $SRC_DIR clean tapas
 
 for dist in ${DIST[@]}; do
     for nb in ${NB[@]}; do
-        for ncrit in NCRIT ${NCRIT[@]}; do
+        for ncrit in ${NCRIT[@]}; do
             for mutual in 0 1; do
                 echoCyan $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
                 $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual | tee log.txt
@@ -220,6 +224,30 @@ for dist in ${DIST[@]}; do
                 else
                     echoGreen acc error OK
                 fi
+
+                echo
+                echo
+
+                for np in ${NP[@]}; do
+                    echoCyan mpiexec -n 2 $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
+                    mpiexec -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual | tee log.txt
+                    
+                    PERR=$(grep "Rel. L2 Error" log.txt | grep pot | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
+                    AERR=$(grep "Rel. L2 Error" log.txt | grep acc | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
+
+                    if [[ $(python -c "print $PERR > $MAX_ERR") == "True" ]]; then
+                        echoRed "*** Error check failed. L2 Error (pot) $PERR > $MAX_ERR"
+                        STATUS=$(expr $STATUS + 1)
+                    else
+                        echoGreen pot error OK
+                    fi
+                    if [[ $(python -c "print $AERR > $MAX_ERR") == "True" ]]; then
+                        echoRed "*** Error check failed. L2 Error (acc) $AERR > $MAX_ERR"
+                        STATUS=$(expr $STATUS + 1)
+                    else
+                        echoGreen acc error OK
+                    fi
+                done
 
                 echo
                 echo
