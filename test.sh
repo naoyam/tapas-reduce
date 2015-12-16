@@ -178,7 +178,7 @@ if echo $SCALE | grep -Ei "^t(iny)?" >/dev/null ; then
     DIST=(c)
     NCRIT=(16)
 elif echo $SCALE | grep -Ei "^s(mall)?" >/dev/null ; then
-    NP=(1 4)
+    NP=(1 2)
     NB=(1000)
     DIST=(c)
     NCRIT=(16)
