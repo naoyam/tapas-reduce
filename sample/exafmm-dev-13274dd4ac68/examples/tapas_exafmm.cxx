@@ -26,8 +26,10 @@
 #include "LaplaceSphericalCPU_tapas.h"
 #include "LaplaceP2PCPU_tapas.h"
 
-int numM2L = 0;
-int numP2P = 0;
+namespace {
+uint64_t numM2L = 0;
+uint64_t numP2P = 0;
+}
 
 template <int DIM, class FP> inline
 tapas::Vec<DIM, FP> &asn(tapas::Vec<DIM, FP> &dst, const vec<DIM, FP> &src) {
@@ -45,11 +47,13 @@ vec<DIM, FP> &asn(vec<DIM, FP> &dst, const tapas::Vec<DIM, FP> &src) {
   return dst;
 }
 
+#if 0
 static Region &asn(Region &x, const Bounds &y) {
   asn(x.min(), y.Xmin);
   asn(x.max(), y.Xmax);
   return x;
 }
+#endif
 
 // UpDownPass::upwardPass
 static inline void FMM_Upward(Tapas::Cell &c, real_t /* theta */) {
@@ -95,6 +99,11 @@ static inline void FMM_Downward(Tapas::Cell &c) {
 struct FMM_DTT {
   template<class Cell>
   inline void operator()(Cell &Ci, Cell &Cj, int mutual, int nspawn, real_t theta) {
+    
+    if (Ci.key() == 0 && Cj.key() == 0) { // ad-hoc 
+      numP2P = 0;
+      numM2L = 0;
+    }
     // TODO:
     //if (Ci.nb() == 0 || Cj.nb() == 0) return;
 
@@ -543,6 +552,10 @@ int main(int argc, char ** argv) {
     //buildTree.printTreeData(cells);
     logger::printPAPI();
     logger::stopDAG();
+
+    std::cout << "P2P calls" << " : " << numP2P << std::endl;
+    std::cout << "M2L calls" << " : " << numM2L << std::endl;
+    
     bodies = bodies3;
     data.initTarget(bodies);
 
