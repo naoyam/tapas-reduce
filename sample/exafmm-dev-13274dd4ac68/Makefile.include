@@ -34,6 +34,11 @@ else ifneq (,$(findstring icpc, $(CXX)))
 	MPICXX += -std=c++11 -Wall -Wextra -funroll-loops -Wno-sign-compare -xHOST -O3 -ipo -no-prec-div -fp-model fast=2 -fopenmp -lrt
 endif
 
+# Profiling flags (gprof)
+ifneq (,$(ENABLE_PROFILING))
+	CXX += -pg
+endif
+
 ### choose C++ compiler
 #CXX	= mpicxx -ggdb3 -Wall -Wextra -O3 -msse4a -ffast-math -funroll-loops -fopenmp -std=c++11 # GCC
 #CXX	= CC -Wall -xHOST -O3 -funroll-loops -finline-functions -ansi-alias -openmp # Intel
