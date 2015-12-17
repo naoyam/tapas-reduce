@@ -195,12 +195,12 @@ elif echo $SCALE | grep -Ei "^s(mall)?" >/dev/null ; then
     NCRIT=(16)
 elif echo $SCALE | grep -Ei "^m(edium)?" >/dev/null ; then
     NP=(1 2 3 4 5 6)
-    NB=(1000 2000)
+    NB=(10000 20000)
     DIST=(l s p c)
     NCRIT=(16 64)
 elif echo $SCALE | grep -Ei "^l(arge)?" >/dev/null ; then
     NP=(1 2 4 8 16 32)
-    NB=(1000 2000 4000 8000 16000)
+    NB=(10000 20000 40000 80000 160000)
     DIST=(l s p c)
     NCRIT=(16 64)
 else
@@ -254,13 +254,13 @@ for dist in ${DIST[@]}; do
                         echoRed "*** Error check failed. L2 Error (pot) $PERR > $MAX_ERR"
                         STATUS=$(expr $STATUS + 1)
                     else
-                        echoGreen pot error OK
+                        echoGreen pot check OK
                     fi
                     if [[ $(python -c "print $AERR > $MAX_ERR") == "True" ]]; then
                         echoRed "*** Error check failed. L2 Error (acc) $AERR > $MAX_ERR"
                         STATUS=$(expr $STATUS + 1)
                     else
-                        echoGreen acc error OK
+                        echoGreen acc check OK
                     fi
                 done
 
