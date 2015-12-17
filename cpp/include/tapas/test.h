@@ -17,9 +17,9 @@
   }                                             \
 
 #define ASSERT_EQ(should, actual) do {              \
-    auto s = should;                                \
-    auto a = actual;                                \
-    if (s == a) {                                   \
+    auto __s = should;                              \
+    auto __a = actual;                              \
+    if (__s == __a) {                               \
       test_app::succ_cnt++;                         \
     } else {                                        \
       std::stringstream ss;                         \
@@ -28,9 +28,9 @@
          << __PRETTY_FUNCTION__                     \
          << std::endl;                              \
       ss << "\tshould = '" << #should << "' (= "    \
-         << tapas::test::ToString(s) << "), "       \
+         << tapas::test::ToString(__s) << "), "     \
          << "\tactual = '" << #actual << "' (= "    \
-         << tapas::test::ToString(a) << ").";       \
+         << tapas::test::ToString(__a) << ").";     \
       ss << std::endl;                              \
       test_app::fail_log.push_back(ss.str());       \
       test_app::fail_cnt++;                         \
@@ -38,8 +38,8 @@
   } while(0)
 
 #define ASSERT_TRUE(exp) do {                         \
-    auto e = exp;                                     \
-    if (e) {                                          \
+    auto __e = exp;                                   \
+    if (__e) {                                        \
       test_app::succ_cnt++;                           \
     } else {                                          \
       std::stringstream ss;                           \
