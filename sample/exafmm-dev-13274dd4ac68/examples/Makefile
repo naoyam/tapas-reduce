@@ -1,3 +1,8 @@
+# Usage:
+# $ env CC=icc CXX=icpc make VAR=VAL tapas
+#
+# NOTE: "make CC=icc CXX=icpc ..." does not work.
+
 include ../Makefile.include
 
 #LFLAGS	+= -DMASS # Use all positive sources
@@ -29,10 +34,6 @@ serial: serial.o $(OBJECTS)
 parallel: parallel.cxx $(OBJECTS)
 	$(MPICXX) $? $(LFLAGS) -o $@
 #	mpirun -np 9 ./a.out --ncrit 256 --distribution plummer
-
-# Test for serial FMM with TAPAS
-#serial_tapas: serial_tapas.o $(OBJECTS)
-#	$(CXX) $? $(LFLAGS) -o $@
 
 tapas: serial_tapas parallel_tapas
 
