@@ -267,6 +267,7 @@ void CheckResult(Bodies &bodies, int numSamples, real_t cycle, int images) {
   // std::cout << "accNrm = " << potDif << std::endl;
   verify.print("Rel. L2 Error (pot)",std::sqrt(potDif/potNrm));
   verify.print("Rel. L2 Error (acc)",std::sqrt(accDif/accNrm));
+  std::cout.flush();
 }
 
 /**
@@ -553,8 +554,10 @@ int main(int argc, char ** argv) {
     logger::printPAPI();
     logger::stopDAG();
 
-    std::cout << "P2P calls" << " : " << numP2P << std::endl;
-    std::cout << "M2L calls" << " : " << numM2L << std::endl;
+    if (args.mpi_rank == 0) {
+      std::cout << "P2P calls" << " : " << numP2P << std::endl;
+      std::cout << "M2L calls" << " : " << numM2L << std::endl;
+    }
     
     bodies = bodies3;
     data.initTarget(bodies);
