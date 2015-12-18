@@ -40,28 +40,19 @@ struct CallbackWrapper {
 
   template<class CellType1, class CellType2>
   void operator()(CellType1 &c1, CellType2 &c2) {
+#ifdef TAPAS_COMPILER_INTEL
+# pragma forceinline
+#endif
     dispatch(c1, c2, typename GenSeq<sizeof...(Args)>::type());
   }
   
   template<class CellType1, class CellType2, int...SS>
-  void dispatch(CellType1 &c1, CellType2 &c2, Seq<SS...>) {
+  INLINE void dispatch(CellType1 &c1, CellType2 &c2, Seq<SS...>) {
+#ifdef TAPAS_COMPILER_INTEL
+# pragma forceinline
+#endif
     f_(c1, c2, std::get<SS>(args_)...);
   }
-};
-
-/**
- * @brief A threshold to stop recursive tiling parallelization
- * Map for product uses checkerbord parallelism described in Taura et al.[1]
- * to avoid write conflicts and explicit mutual exclusions.
- * Split the product space until row or columns >= THRESHOLD.
- *
- * \todo Tune the value for each type (i.e. Body and Cells) or introduce auto-tuning
- *
- * [1] Taura et al. "A Task Parallelism Meets Fast Multipole Methods"
- */
-template<class T>
-struct ThreadSpawnThreshold {
-    static const int Value = 1;
 };
 
 /**
@@ -124,15 +115,16 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
 
   using Callback = CallbackWrapper<Funct, Args...>;
   Callback callback(f, args...);
+
+  const constexpr int kT1 = T1_Iter::kThreadSpawnThreshold;
+  const constexpr int kT2 = T2_Iter::kThreadSpawnThreshold;
   
-  if (end1 - beg1 <= ThreadSpawnThreshold<T1_Iter>::Value ||
-      end2 - beg2 <= ThreadSpawnThreshold<T2_Iter>::Value) {
+  if (end1 - beg1 <= kT1 || end2 - beg2 <= kT2) {
     // The two ranges (beg1,end1) and (beg2,end2) are fine enough to apply f in a serial manner.
 
     // Create a function object to be given to the Container's Map function.
     //typedef std::function<void(C1&, C2&)> Callback;
-    //Callback g = [&args...](C1 &c1, C2 &c2) { f()(c1, c2, args...); };
-
+    //Callback gn = [&args...](C1 &c1, C2 &c2) { f()(c1, c2, args...); };
     for(int i = beg1; i < end1; i++) {
       for(int j = beg2; j < end2; j++) {
         T1_Iter lhs = iter1 + i;
@@ -143,6 +135,9 @@ static void product_map(T1_Iter iter1, int beg1, int end1,
         
         if ((am && i <= j) || !am) {
           if (lhs.IsLocal()) {
+#ifdef TAPAS_COMPILER_INTEL
+# pragma forceinline
+#endif
             CellType::template Map<Callback>(callback, *lhs, *rhs);
           }
         }

@@ -15,7 +15,13 @@ class BodyIterator {
  public:
   typedef Cell CellType;
   typedef BodyIterator value_type;
-  typedef typename CellType::BodyAttrType attr_type;  
+  typedef typename CellType::BodyAttrType attr_type;
+
+#ifdef TAPAS_BODY_THREAD_SPAWN_THRESHOLD
+  static const constexpr int kThreadSpawnThreshold = TAPAS_BODY_THREAD_SPAWN_THRESHOLD;
+#else
+  static const constexpr int kThreadSpawnThreshold = 12800;
+#endif
   
   int index() const { return idx_; } // for debugging
   BodyIterator(CellType &c)
@@ -42,7 +48,7 @@ class BodyIterator {
   bool IsLocal() const {
     return c_.IsLocal();
   }
-  const typename CellType::BodyType *operator->() const {
+  inline const typename CellType::BodyType *operator->() const {
     return &(c_.body(idx_));
   }
   void rewind(int idx) {
@@ -59,10 +65,10 @@ class BodyIterator {
   const CellType &cell() const {
     return c_;
   }
-  const typename CellType::BodyType &operator++() {
+  inline const typename CellType::BodyType &operator++() {
     return c_.body(++idx_);
   }
-  const typename CellType::BodyType &operator++(int) {
+  inline const typename CellType::BodyType &operator++(int) {
     return c_.body(idx_++);
   }
   bool operator==(const BodyIterator &x) const {
@@ -91,11 +97,14 @@ template <class CELL>
 class CellIterator {
   CELL &c_;
  public:
+  int index() const { return 0; } // dummy. to be deleted soon
   CellIterator(CELL &c): c_(c) {}
   typedef CELL value_type;
   typedef CELL CellType;
   typedef typename CELL::attr_type attr_type;
   using KeyType = typename CellType::KeyType;
+
+  static const constexpr int kThreadSpawnThreshold = 2;
   
   CELL &operator*() {
     return c_;
@@ -166,6 +175,12 @@ class SubCellIterator {
   using attr_type = typename CellType::attr_type;
   using KeyType = typename CellType::KeyType;
   using SFC = typename CellType::SFC;
+
+#ifdef TAPAS_SUBCELL_THREAD_SPAWN_THRESHOLD
+  static const constexpr int kThreadSpawnThreshold = TAPAS_SUBCELL_THREAD_SPAWN_THRESHOLD;
+#else
+  static const constexpr int kThreadSpawnThreshold = 4;
+#endif
   
   SubCellIterator(CellType &c): c_(c), idx_(0) {}
   SubCellIterator(const SubCellIterator& rhs) : c_(rhs.c_),idx_(rhs.idx_) {}
@@ -182,7 +197,11 @@ class SubCellIterator {
       return 1 << CellType::Dim;
     }
   }
-  
+
+  inline int index() const {
+    return idx_;
+  }
+
   value_type &operator*() {
     return c_.subcell(idx_);
   }

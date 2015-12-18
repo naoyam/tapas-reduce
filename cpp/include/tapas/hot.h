@@ -314,12 +314,15 @@ class Cell: public tapas::BasicCell<TSP> {
   static void PreOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
 
   template<class Funct>
-  static void Map(Funct f, BodyIterator &b1, BodyIterator &b2) {
+  INLINE static void Map(Funct f, BodyIterator &b1, BodyIterator &b2) {
+#ifdef TAPAS_COMPILER_INTEL
+# pragma forceinline
+#endif
     f(b1, b2);
   }
 
   template<class Funct>
-  static void Map(Funct f, BodyIterator &b1) {
+  INLINE static void Map(Funct f, BodyIterator &b1) {
     f(b1);
   }
 
@@ -1026,12 +1029,13 @@ Cell<TSP> &Cell<TSP>::parent() const {
 }
 
 template <class TSP>
-void Cell<TSP>::CheckBodyIndex(index_t idx) const {
+inline void Cell<TSP>::CheckBodyIndex(index_t idx) const {
   //TAPAS_ASSERT(this->nb() >= 0);
 
   // debug
   if (!(idx < this->nb())) {
     std::cerr << "idx = " << idx << ", " << "this->nb() = " << this->nb() << std::endl;
+    abort();
   }
   TAPAS_ASSERT((size_t)idx < this->nb());
   TAPAS_ASSERT(this->IsLeaf() && "body or body attribute access is not allowed for non-leaf cells.");
@@ -1044,7 +1048,7 @@ void Cell<TSP>::CheckBodyIndex(index_t idx) const {
 }
 
 template <class TSP>
-const typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
+inline const typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
   CheckBodyIndex(idx);
   
   if (is_local_) {
@@ -1055,7 +1059,7 @@ const typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
 }
 
 template <class TSP>
-typename TSP::BT::type &Cell<TSP>::body(index_t idx) {
+inline typename TSP::BT::type &Cell<TSP>::body(index_t idx) {
   return const_cast<typename TSP::BT::type &>(const_cast<const Cell<TSP>*>(this)->body(idx));
 }
 

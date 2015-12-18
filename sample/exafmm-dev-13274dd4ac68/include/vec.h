@@ -95,7 +95,7 @@ public:
   vec operator+(const T v) const {                              // Scalar arithmetic (add)
     return vec(*this) += v;
   }
-  vec operator-(const T v) const {                              // Scalar arithmetic (subtract)
+  inline vec operator-(const T v) const {                              // Scalar arithmetic (subtract)
     return vec(*this) -= v;
   }
   vec operator*(const T v) const {                              // Scalar arithmetic (multiply)
@@ -119,7 +119,7 @@ public:
   vec operator+(const vec & v) const {                          // Vector arithmetic (add)
     return vec(*this) += v;
   }
-  vec operator-(const vec & v) const {                          // Vector arithmetic (subtract)
+  inline vec operator-(const vec & v) const {                          // Vector arithmetic (subtract)
     return vec(*this) -= v;
   }
   vec operator*(const vec & v) const {                          // Vector arithmetic (multiply)
@@ -140,7 +140,7 @@ public:
   vec operator|(const vec & v) const {                          // Vector arithmetic (bitwise or)
     return vec(*this) |= v;
   }
-  vec operator-() const {                                       // Vector arithmetic (negation)
+  inline vec operator-() const {                                       // Vector arithmetic (negation)
     vec temp;
     for (int i=0; i<N; i++) temp[i] = -data[i];
     return temp;

@@ -361,12 +361,16 @@ struct LET {
     index_t idx_;
 
    public:
+    static const constexpr int kThreadSpawnThreshold = 100;
+    
     ProxyBodyIterator(ProxyCell *c) : c_(c), idx_(0) { }
   
     ProxyBodyIterator &operator*() {
       return *this;
     }
 
+    inline int index() const { return idx_; }
+    
     ProxyCell &cell() const {
       return *c_;
     }
