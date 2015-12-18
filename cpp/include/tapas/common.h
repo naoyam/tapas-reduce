@@ -3,18 +3,28 @@
 
 #if defined(__clang__)
 /* Clang/LLVM. ---------------------------------------------- */
+# define TAPAS_COMPILER_CLANG
+
+# define INLINE __attribute__((always_inline))
 
 #elif defined(__ICC) || defined(__INTEL_COMPILER)
 /* Intel ICC/ICPC. ------------------------------------------ */
+# define TAPAS_COMPILER_INTEL
+
+# define INLINE __forceinline
 
 #elif defined(__GNUC__) || defined(__GNUG__)
 /* GNU GCC/G++. --------------------------------------------- */
+# define TAPAS_COPMILER_GCC
 #  define GCC_VERSION (__GNUC__ * 10000             \
                       + __GNUC_MINOR__ * 100        \
                       + __GNUC_PATCHLEVEL__)
 #  if GCC_VERSION < 40801
 #    error "Tapas requires gcc/g++ >= 4.8.1"
 #  endif
+
+#define INLINE __attribute__((always_inline))
+
 #endif
 
 #if __cplusplus >= 201402L   // C++14
@@ -44,8 +54,6 @@
 # define TAPAS_DEBUG // default
 #endif // TAPAS_DEBUG
 
-//#define INLINE 
-#define INLINE __attribute__((always_inline))
 
 // for debug
 #include <iomanip>
