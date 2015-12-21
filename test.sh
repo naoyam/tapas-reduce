@@ -120,7 +120,7 @@ make MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=release -C $SRC_DIR clea
 for t in $SRC_DIR/test_*; do
     if [[ -x $t ]]; then
         echoCyan $t 
-        $t 
+        $t
     fi
 done
 
@@ -212,6 +212,25 @@ SRC_DIR=$SRC_ROOT/sample/exafmm-dev-13274dd4ac68/examples
 
 make VERBOSE=1 MODE=release -C $SRC_DIR clean tapas
 
+function accuracyCheck() {
+    local fname=$1
+    PERR=$(grep "Rel. L2 Error" $fname | grep pot | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
+    AERR=$(grep "Rel. L2 Error" $fname | grep acc | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
+
+    if [[ $(python -c "print $PERR > $MAX_ERR") == "True" ]]; then
+        echoRed "*** Error check failed. L2 Error (pot) $PERR > $MAX_ERR"
+        STATUS=$(expr $STATUS + 1)
+    else
+        echoGreen pot check OK
+    fi
+    if [[ $(python -c "print $AERR > $MAX_ERR") == "True" ]]; then
+        echoRed "*** Error check failed. L2 Error (acc) $AERR > $MAX_ERR"
+        STATUS=$(expr $STATUS + 1)
+    else
+        echoGreen acc check OK
+    fi
+}
+
 for dist in ${DIST[@]}; do
     for nb in ${NB[@]}; do
         for ncrit in ${NCRIT[@]}; do
@@ -221,23 +240,9 @@ for dist in ${DIST[@]}; do
                 echoCyan $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
                 $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
                 cat $TMPFILE
+
+                accuracyCheck $TMPFILE
                 
-                PERR=$(grep "Rel. L2 Error" $TMPFILE | grep pot | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
-                AERR=$(grep "Rel. L2 Error" $TMPFILE | grep acc | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
-
-                if [[ $(python -c "print $PERR > $MAX_ERR") == "True" ]]; then
-                    echoRed "*** Error check failed. L2 Error (pot) $PERR > $MAX_ERR"
-                    STATUS=$(expr $STATUS + 1)
-                else
-                    echoGreen pot error OK
-                fi
-                if [[ $(python -c "print $AERR > $MAX_ERR") == "True" ]]; then
-                    echoRed "*** Error check failed. L2 Error (acc) $AERR > $MAX_ERR"
-                    STATUS=$(expr $STATUS + 1)
-                else
-                    echoGreen acc error OK
-                fi
-
                 echo
                 echo
 
@@ -246,22 +251,8 @@ for dist in ${DIST[@]}; do
                     echoCyan mpiexec -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
                     mpiexec -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
                     cat $TMPFILE
-                    
-                    PERR=$(grep "Rel. L2 Error" $TMPFILE | grep pot | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
-                    AERR=$(grep "Rel. L2 Error" $TMPFILE | grep acc | sed -e "s/^.*://" | grep -oE "[0-9.e+-]+")
 
-                    if [[ $(python -c "print $PERR > $MAX_ERR") == "True" ]]; then
-                        echoRed "*** Error check failed. L2 Error (pot) $PERR > $MAX_ERR"
-                        STATUS=$(expr $STATUS + 1)
-                    else
-                        echoGreen pot check OK
-                    fi
-                    if [[ $(python -c "print $AERR > $MAX_ERR") == "True" ]]; then
-                        echoRed "*** Error check failed. L2 Error (acc) $AERR > $MAX_ERR"
-                        STATUS=$(expr $STATUS + 1)
-                    else
-                        echoGreen acc check OK
-                    fi
+                    accuracyCheck $TMPFILE
                 done
 
                 echo
@@ -272,6 +263,40 @@ for dist in ${DIST[@]}; do
 done
 
 #env CC=$CC CXX=$CXX python test.py
+
+# Check the GPU version if nvcc is available
+if which nvcc >/dev/null 2>&1; then
+    NVCC_OPT="-O3 -Xcicc -Xptas --compiler-options -Wall --compiler-options -Wextra --compiler-options -Wno-unused-parameter \
+            -Xcompiler -rdynamic -lineinfo --device-debug -x cu -arch sm_35 -ccbin=g++"
+    
+    which g++
+    BIN=parallel_tapas_cuda
+    SRC_DIR=$SRC_ROOT/sample/exafmm-dev-13274dd4ac68/examples
+    compile=$($MPICXX -show -cxx=nvcc -DTAPAS_DEBUG=0 -DUSE_MPI -g $NVCC_OPT \
+                      -DASSERT -DTAPAS_USE_VECTORMAP -DFP64 -DSpherical -DEXPANSION=6 -DTAPAS_LOG_LEVEL=0 \
+                      -I$SRC_DIR/../include -I$SRC_DIR -I$SRC_DIR/../../../cpp/include \
+                      -std=c++11 $SRC_DIR/../kernels/LaplaceP2PCPU.cxx $SRC_DIR/../kernels/LaplaceSphericalCPU.cxx \
+                      $SRC_DIR/tapas_exafmm.cxx -o $BIN)
+
+    # nvcc doesn't spport -Wl,... options
+    compile=$(echo $compile | sed -e 's/-Wl,[^ ]*//g')
+    echo $compile
+    $compile
+    
+    for dist in ${DIST[@]}; do
+        for nb in ${NB[@]}; do
+            for ncrit in ${NCRIT[@]}; do
+                echoCyan mpiexec -n 1 ./$BIN --numBodies 1000
+                mpiexec -n 1 ./$BIN --numBodies 10000 > $TMPFILE
+                cat $TMPFILE
+                accuracyCheck $TMPFILE
+            done
+        done
+    done
+
+fi
+
+
 
 if [[ $STATUS -eq 0 ]]; then
     echo OK.
