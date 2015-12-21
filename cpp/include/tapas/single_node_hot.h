@@ -35,6 +35,7 @@
 #include "tapas/iterator.h"
 //#include "tapas/morton_common.h"
 #include "tapas/sfc_morton.h"
+#include "tapas/single_node_mapper.h"
 
 namespace {
 namespace iter = tapas::iterator;
@@ -87,7 +88,6 @@ class SharedData {
   using KeyType = typename SFC::KeyType;
 #ifdef __CUDACC__
   using HashTable = std::unordered_map<KeyType, CellType*>;
-  //using HashTable = std::tr1::unordered_map<KeyType, CellType*>;
 #else
   using HashTable = std::unordered_map<KeyType, CellType*>;
 #endif
@@ -119,6 +119,7 @@ class Cell: public tapas::BasicCell<TSP> {
   
   using SFC = typename TSP::SFC;
   using KeyType = typename SFC::KeyType;
+  using Mapper = single_node_hot::CPUMapper<TSP>;
   //typedef typename TSP::BT_ATTR body_attr_type;
 
   using HashTable = typename SharedData<TSP>::HashTable;
@@ -130,6 +131,7 @@ class Cell: public tapas::BasicCell<TSP> {
   std::shared_ptr<SharedData<TSP>> data_;
   KeyType key_;
   index_t nb_; //!< number of local bodies of the process.
+  Mapper mapper_;
  public:
   Cell(std::shared_ptr<SharedData<TSP>> data,
        const Region<TSP> &region,
@@ -140,18 +142,8 @@ class Cell: public tapas::BasicCell<TSP> {
       nb_(nb), bodies_(bodies), body_attrs_(body_attrs),
       is_leaf_(true) {}
 
-  // 1-parameter Map function()
-  template <class Funct>
-  static void Map(Funct f, Cell<TSP> &cell);
-  
-  // 2-parameter Map function()
-  template<class Funct>
-  static void Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2);
-
-  template<class Funct>
-  static void Map(Funct f, BodyIterator &b1, BodyIterator &b2) {
-    f(b1, b2);
-  }
+  inline CellType &cell() { return *this; }
+  inline const CellType &cell() const { return *this; }
 
   static void PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
   static void PreOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
@@ -170,11 +162,14 @@ class Cell: public tapas::BasicCell<TSP> {
     Cell &parent() const;
 
   bool IsLocal() const { return true; }
+
+  INLINE Mapper& mapper() { return mapper_; }
+  INLINE const Mapper& mapper() const { return mapper_; }
   
 #ifdef DEPRECATED
-    typename TSP::BT::type &particle(index_t idx) const {
-        return body(idx);
-    }
+  typename TSP::BT::type &particle(index_t idx) const {
+    return body(idx);
+  }
 #endif
 
   // Accessor functions to bodies & body attributes
@@ -219,9 +214,9 @@ class Cell: public tapas::BasicCell<TSP> {
   }
   
 #ifdef DEPRECATED
-    typename TSP::BT_ATTR *particle_attrs() const {
-        return body_attrs();
-    }
+  typename TSP::BT_ATTR *particle_attrs() const {
+    return body_attrs();
+  }
 #endif
   
   SubCellIterator subcells() {
@@ -425,17 +420,17 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
   std::sort(std::begin(s), std::end(s));
 }
 
-template <class TSP>
-template <class Funct>
-void Cell<TSP>::Map(Funct f, Cell<TSP> &cell) {
-  f(cell);
-}
+// template <class TSP>
+// template <class Funct>
+// void Cell<TSP>::Map(Funct f, Cell<TSP> &cell) {
+//   f(cell);
+// }
 
-template <class TSP>
-template <class Funct>
-void Cell<TSP>::Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2) {
-  f(c1, c2);
-}
+// template <class TSP>
+// template <class Funct>
+// void Cell<TSP>::Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2) {
+//   f(c1, c2);
+// }
 
 template <class TSP>
 void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {

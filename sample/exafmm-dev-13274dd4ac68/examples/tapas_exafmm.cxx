@@ -366,7 +366,7 @@ void dumpBodies(Tapas::Cell &root) {
       mtx.lock();
       //ofs << std::setw(20) << std::right << Tapas::SFC::Simplify(cell.key()) << " ";
       auto iter = cell.bodies();
-      for (int bi=0; bi < cell.nb(); bi++, iter++) {
+      for (int bi = 0; bi < (int)cell.nb(); bi++, iter++) {
         ofs << std::showpos << iter->X << " ";
         ofs << std::showpos << iter->SRC << " " << "vec4= ";
         for (int j = 0; j < 4; j++) {
@@ -400,7 +400,7 @@ void dumpLeaves(Tapas::Cell &root) {
     if (cell.IsLeaf()) {
       mtx.lock();
       ofs << std::setw(20) << cell.key() << ", depth=" << cell.depth() << ", nb=" << cell.nb() << ", r=" << cell.region() << std::endl;
-      for (int i = 0; i < cell.nb(); i++) {
+      for (int i = 0; i < (int)cell.nb(); i++) {
         ofs << "    body[" << i << "]=(" << cell.body(i).X << ") " << std::endl;
       }
       mtx.unlock();

@@ -126,6 +126,19 @@ void evalLocal(real_t rho, real_t alpha, real_t beta, complex_t * Ynm) {
 }
 
 
+// memo
+// test code (not compiles)
+// ---------------------------------------------
+#if 0
+
+void P2M(Tapas::Cell &C) {
+  VecP init = {0.0};
+  C.attr().M = tapas::Reduce(C.bodies(), init, P2M_impl);
+}
+
+// ---------------------------------------------
+#endif
+
 void P2M(Tapas::Cell &C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
   
@@ -142,7 +155,7 @@ void P2M(Tapas::Cell &C) {
       for (int m=0; m<=n; m++) {
         int nm  = n * n + n - m;
         int nms = n * (n + 1) / 2 + m;
-        C.attr().M[nms] += B.SRC * Ynm[nm];
+        C.attr().M[nms] += B.SRC * Ynm[nm]; // allow user to reduction ?
       }
     }
   }
@@ -204,8 +217,6 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
   auto attr_i = Ci.attr();
   auto attr_j = Cj.attr();
 
-  std::vector<complex_t> LI, LJ;
-
   for (int j=0; j<P; j++) {
 #if MASS
     real_t Cnm = std::real(Ci->M[0] * Cj->M[0]) * ODDEVEN(j);
@@ -245,10 +256,8 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
 
       // TODO: attr_j can be put out of the outer `for' loop
       attr_i.L[jks] += Li;
-      LI.push_back(Li); // debug
       if (mutual) {
         attr_j.L[jks] += Lj;
-        LJ.push_back(Lj);
       }
     }
   }

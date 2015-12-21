@@ -21,6 +21,7 @@ struct SharedData {
   using KeySet = std::unordered_set<KeyType>;
   using BodyType = typename TSP::BT::type;
   using BodyAttrType = typename TSP::BT_ATTR;
+  using Mapper = typename CellType::Mapper;
   
 #ifdef TAPAS_USE_VECTORMAP
   template <typename T>
@@ -37,6 +38,7 @@ struct SharedData {
   KeySet        lroots_;    // set of local roots. It must be a subset of gleaves. gleaves is "Allgatherv-ed" lroots.
   std::mutex ht_mtx_;  //!< mutex to protect ht_
   Region<TSP> region_; //!< global bouding box
+  Mapper mapper_;
   
   int mpi_rank_;
   int mpi_size_;
