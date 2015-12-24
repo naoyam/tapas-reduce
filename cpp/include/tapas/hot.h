@@ -1033,7 +1033,7 @@ inline void Cell<TSP>::CheckBodyIndex(index_t idx) const {
   //TAPAS_ASSERT(this->nb() >= 0);
 
   // debug
-  if (!(idx < this->nb())) {
+  if (!(idx < (index_t)this->nb())) {
     std::cerr << "idx = " << idx << ", " << "this->nb() = " << this->nb() << std::endl;
     abort();
   }
