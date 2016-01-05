@@ -5,6 +5,7 @@
 
 #include <tapas/iterator.h>
 #include <tapas/debug_util.h>
+#include <tapas/hot/mapper.h>
 
 using tapas::debug::BarrierExec;
 
@@ -345,6 +346,8 @@ struct LET {
     }
   };
 
+  class ProxyMapper;
+
   class ProxyCell;
 
   /**
@@ -461,14 +464,6 @@ struct LET {
       return c_->body_attr(idx_);
     }
 
-    template<class Funct>
-    inline static void Map(Funct, ProxyBodyIterator &&) {
-      //f(p);
-    }
-    template<class Funct>
-    inline static void Map(Funct, ProxyBodyIterator &) {
-      //f(p);
-    }
   }; // class ProxyBodyIterator
 
   /**
@@ -490,6 +485,8 @@ struct LET {
 
     using RealCellType = CellType;
 
+    using Mapper = ProxyMapper;
+
     // ctor
     ProxyCell(KeyType key, const Data &data)
         : key_(key), data_(data), marked_touched_(false), marked_split_(false), marked_body_(false),
@@ -502,6 +499,12 @@ struct LET {
       }
     }
 
+    inline ProxyCell &cell() { return *this; }
+    inline const ProxyCell &cell() const { return *this; }
+
+    inline Mapper &mapper() { return mapper_; }
+    inline const Mapper &mapper() const { return mapper_; }
+
     /**
      * bool ProxyCell::operator==(const ProxyCell &rhs) const
      */
@@ -513,29 +516,6 @@ struct LET {
       return key_ < rhs.key_;
     }
 
-    /**
-     * \fn void ProxyCell::Map
-     */
-    template<class Funct>
-    static void Map(Funct, ProxyCell &, ProxyCell &) {
-      // f(c1, c2)
-    }
-
-    template<class Funct>
-    inline static void Map(Funct, ProxyBodyIterator &) {
-      //f(p);
-    }
-    
-    template<class Funct>
-    inline static void Map(Funct, ProxyBodyIterator &, ProxyBodyIterator &) {
-      //f(p1, p2);
-    }
-    
-    template<class Funct>
-    inline static void Map(Funct, ProxyBodyIterator &&) {
-      //f(p);
-    }
-    
     template<class UserFunct>
     static SplitType Pred(UserFunct f, KeyType trg_key, KeyType src_key, const Data &data) {
       ProxyCell trg_cell(trg_key, data);
@@ -705,7 +685,53 @@ struct LET {
     std::vector<ProxyBody*> bodies_;
     std::vector<ProxyBodyAttr*> body_attrs_;
     attr_type attr_;
+    Mapper mapper_;
   }; // end of class ProxyCell
+
+  /**
+   * @brief A dummy class of Mapper
+   */
+  struct ProxyMapper {
+    template<class Funct, class...Args>
+    inline static void Map(Funct, ProxyBodyIterator &&, Args...) {
+      //f(p);
+    }
+    
+    template<class Funct, class...Args>
+    inline static void Map(Funct, ProxyBodyIterator &, Args...) {
+      //f(p);
+    }
+
+    /**
+     * \fn void ProxyCell::Map
+     */
+    template<class Funct, class ...Args>
+    static void Map(Funct, ProxyCell &, ProxyCell &, Args...) {
+      // f(c1, c2)
+    }
+
+    template<class Funct, class ...Args>
+    inline static void Map(Funct, ProxyBodyIterator &, ProxyBodyIterator &, Args...) {
+      //f(p1, p2);
+    }
+
+    /**
+     * @brief Map function f over product of two iterators
+     */
+    template <class Funct, class T1_Iter, class T2_Iter, class... Args>
+    inline void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
+      TAPAS_LOG_DEBUG() << "map product iterator size: "
+                        << prod.size() << std::endl;
+      
+      if (prod.size() > 0) {
+        ProductMapImpl(prod.t1_, 0, prod.t1_.size(),
+                       prod.t2_, 0, prod.t2_.size(),
+                       f, args...);
+      }
+    }
+  };
+
+
 
   // Note for UserFunct template parameter:
   // The template parameter `UserFunct` is used between all the functions in LET class

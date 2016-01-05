@@ -183,7 +183,7 @@ void vectormap_cuda_pack_kernel2(CELLDATA<BV>* v, CELLDATA<BA>* a,
 
   int ntiles = TAPAS_CEILING(rsize, tilesize);
   BV &p0 = (cell != -1) ? v[cell].data[item] : v[0].data[0];
-  BA q0 = {0.0f, 0.0f, 0.0f, 0.0f};
+  BA q0 = {0.0f, 0.0f, 0.0f, 0.0f}; // bzero?
 
   for (int t = 0; t < ntiles; t++) {
     if ((tilesize * t + threadIdx.x) < rsize && threadIdx.x < tilesize) {
@@ -196,7 +196,7 @@ void vectormap_cuda_pack_kernel2(CELLDATA<BV>* v, CELLDATA<BA>* a,
 #pragma unroll 128
       for (unsigned int j = 0; j < jlim; j++) {
         BV &p1 = scratchpad[j];
-        f(&p0, &p1, q0, args...);
+        f(&p0, &p1, q0, args...); // q0 -> biattr
       }
     }
     __syncthreads();
@@ -457,10 +457,12 @@ struct Vectormap_CUDA_Simple {
       (v0, v1, a0, n0, n1, tilesize, f, args...);
   }
 
-  /** Calls a function FN given by the user on each data pair in the
-      cells.  FN takes arguments of Cell::BodyType&, Cell::BodyType&,
-      Cell::BodyAttrType&, and extra call arguments. */
-
+  /** 
+   * \fn Vectormap_CUDA_Simple::vector_map2
+   * \brief Calls a function FN given by the user on each data pair in the
+   *        cells.  f takes arguments of Cell::BodyType&, Cell::BodyType&,
+   *        Cell::BodyAttrType&, and extra call arguments. 
+   */
   template <class Funct, class Cell, class...Args>
   static void vector_map2(Funct f, ProductIterator<BodyIterator<Cell>> prod,
                           Args... args) {
@@ -476,7 +478,6 @@ struct Vectormap_CUDA_Simple {
       vectormap_cuda_plain(f, c1, c0, args...);
     }
   }
-
 };
 
 template <class T>
@@ -491,13 +492,13 @@ struct Vectormap_CUDA_Packed
   typedef typename _BT::type BV;
   typedef _BT_ATTR BA;
 
+  using CellPair = std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>;
+
   /* STATIC MEMBER FIELDS. (It is a trick.  See:
      http://stackoverflow.com/questions/11709859/) */
 
-  static std::vector<std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>>
-    &cellpairs() {
-    static std::vector<std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>>
-      cellpairs_;
+  static std::vector<CellPair> &cellpairs() {
+    static std::vector<CellPair> cellpairs_;
     return cellpairs_;
   }
 
@@ -563,8 +564,8 @@ struct Vectormap_CUDA_Packed
     d1.data = (BV*)&(c1.body(0));
     a1.size = c1.nb();
     a1.data = (BA*)&(c1.body_attr(0));
+    
     if (c0 == c1) {
-
       pairs_mutex().lock();
       cellpairs().push_back(std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>(d0, a0, d1));
       pairs_mutex().unlock();
@@ -606,11 +607,11 @@ struct Vectormap_CUDA_Packed
     streamid++;
     int s = (streamid % tesla_dev.n_streams);
     vectormap_cuda_pack_kernel2<<<nblocks, ctasize, scratchpadsize,
-      tesla_dev.streams[s]>>>
-      (&(dvcells()[start]), &(dacells()[start]), nc, r.size, r.data,
-       tilesize, f, args...);
+        tesla_dev.streams[s]>>>
+        (&(dvcells()[start]), &(dacells()[start]), nc, r.size, r.data,
+         tilesize, f, args...);
   }
-
+  
   /* Limit of the number of threads in grids. */
 
   static const int N0 = (16 * 1024);

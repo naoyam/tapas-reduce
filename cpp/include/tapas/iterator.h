@@ -57,12 +57,10 @@ class BodyIterator {
   typename CellType::BodyAttrType &attr() const {
     return c_.body_attr(idx_);
   }
-#if 0  
-  CellType &cell() {
+  INLINE CellType &cell() {
     return c_;
   }
-#endif  
-  const CellType &cell() const {
+  INLINE const CellType &cell() const {
     return c_;
   }
   inline const typename CellType::BodyType &operator++() {
@@ -182,15 +180,15 @@ class SubCellIterator {
   static const constexpr int kThreadSpawnThreshold = 4;
 #endif
   
-  SubCellIterator(CellType &c): c_(c), idx_(0) {}
-  SubCellIterator(const SubCellIterator& rhs) : c_(rhs.c_),idx_(rhs.idx_) {}
-  SubCellIterator& operator=(const SubCellIterator& rhs) {
+  inline SubCellIterator(CellType &c): c_(c), idx_(0) {}
+  inline SubCellIterator(const SubCellIterator& rhs) : c_(rhs.c_),idx_(rhs.idx_) {}
+  inline SubCellIterator& operator=(const SubCellIterator& rhs) {
     this->c_ = rhs.c_;
     this->idx_ = rhs.idx_;
     return *this;
   }
   
-  int size() const {
+  inline int size() const {
     if (c_.IsLeaf()) {
       return 0;
     } else {
@@ -202,11 +200,19 @@ class SubCellIterator {
     return idx_;
   }
 
-  value_type &operator*() {
+  inline Cell &cell() {
+    return c_;
+  }
+
+  inline const Cell &cell() const {
+    return c_;
+  }
+
+  inline value_type &operator*() {
     return c_.subcell(idx_);
   }
 
-  bool IsLocal() const {
+  inline bool IsLocal() const {
 #ifdef USE_MPI
     KeyType k = key();
     return c_.data().ht_.count(k) > 0;
@@ -215,35 +221,35 @@ class SubCellIterator {
 #endif
   }
   
-  KeyType key() const {
+  inline KeyType key() const {
     KeyType pk = c_.key();
     KeyType ck = SFC::Child(pk, idx_);
     return ck;
   }
 
-  Cell& Parent() {
+  inline Cell& Parent() {
     return c_;
   }
   
   // prefix increment operator
-  SubCellIterator<CellType> &operator++() {
+  inline SubCellIterator<CellType> &operator++() {
     idx_ = std::min(size(), idx_ + 1);
     return *this;
   }
   
-  SubCellIterator<CellType> operator++(int) {
+  inline SubCellIterator<CellType> operator++(int) {
     SubCellIterator<CellType> dup = *this;
     ++(*this);
     return dup;
   }
-  void rewind(int idx) {
+  inline void rewind(int idx) {
     idx_ = idx;
   }
-  SubCellIterator<CellType>& operator+=(int ofst) {
+  inline SubCellIterator<CellType>& operator+=(int ofst) {
     idx_ += ofst;
     return *this;
   }
-  bool operator==(const SubCellIterator &x) const {
+  inline bool operator==(const SubCellIterator &x) const {
     return c_ == x.c_;
   }
   SubCellIterator operator+(int n) {

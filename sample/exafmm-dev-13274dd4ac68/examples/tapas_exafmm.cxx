@@ -366,7 +366,7 @@ void dumpBodies(Tapas::Cell &root) {
       mtx.lock();
       //ofs << std::setw(20) << std::right << Tapas::SFC::Simplify(cell.key()) << " ";
       auto iter = cell.bodies();
-      for (int bi=0; bi < cell.nb(); bi++, iter++) {
+      for (int bi = 0; bi < (int)cell.nb(); bi++, iter++) {
         ofs << std::showpos << iter->X << " ";
         ofs << std::showpos << iter->SRC << " " << "vec4= ";
         for (int j = 0; j < 4; j++) {

@@ -45,6 +45,7 @@
 #include "tapas/hot/global_tree.h"
 #include "tapas/hot/let.h"
 #include "tapas/hot/report.h"
+#include "tapas/hot/mapper.h"
 
 #define DEBUG_SENDRECV
 
@@ -208,7 +209,9 @@ class Cell: public tapas::BasicCell<TSP> {
   static const constexpr int Dim = TSP::Dim;
   typedef typename TSP::SFC SFC;
   typedef typename SFC::KeyType KeyType;
-  
+  using CellType = Cell<TSP>;
+  using Mapper = CPUMapper<LET<TSP>>;
+
   typedef std::unordered_map<KeyType, Cell*> CellHashTable;
   using KeySet = std::unordered_set<KeyType>;
   
@@ -220,7 +223,7 @@ class Cell: public tapas::BasicCell<TSP> {
 
   using BodyIterator = iter::BodyIterator<Cell>;
   using SubCellIterator = iter::SubCellIterator<Cell>;
-  
+
   using FP = typename TSP::FP;
   
   using Data = SharedData<TSP, SFC>;
@@ -302,29 +305,11 @@ class Cell: public tapas::BasicCell<TSP> {
   bool IsRoot() const;
   bool IsLocalSubtree() const;
 
-  // 1-parameter Map function
-  template <class Funct>
-  static void Map(Funct f, Cell<TSP> &c);
-  
-  // 2-argument Map() function
-  template<class Funct>
-  static void Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2);
-
   static void PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
   static void PreOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
 
-  template<class Funct>
-  INLINE static void Map(Funct f, BodyIterator &b1, BodyIterator &b2) {
-#ifdef TAPAS_COMPILER_INTEL
-# pragma forceinline
-#endif
-    f(b1, b2);
-  }
-
-  template<class Funct>
-  INLINE static void Map(Funct f, BodyIterator &b1) {
-    f(b1);
-  }
+  inline CellType &cell() { return *this; }
+  inline const CellType &cell() const { return *this; }
 
   /**
    * @brief Returns if the cell is a leaf cell
@@ -398,14 +383,16 @@ class Cell: public tapas::BasicCell<TSP> {
    * It is not recommended to use local_nb() for your main computation.
    * because it exposes the underlying implementation details of Tapas runtime.
    */ 
-  size_t local_nb() const {
+  inline size_t local_nb() const {
     return (size_t) data_->local_bodies_.size();
   }
 
-  size_t nb() const {
+  inline size_t nb() const {
+#ifdef TAPAS_DEBUG
     if (!this->IsLeaf()) {
       TAPAS_ASSERT(!"Cell::nb() is not allowed for non-leaf cells.");
     }
+#endif
 
     return nb_;
   }
@@ -443,6 +430,9 @@ class Cell: public tapas::BasicCell<TSP> {
     return prev;
   }
 
+  Mapper& mapper() { return data_->mapper_; }
+  const Mapper &mapper() const { return data_->mapper; }
+
  protected:
   // utility/accessor functions
   inline Cell *Lookup(KeyType k) const;
@@ -463,6 +453,8 @@ class Cell: public tapas::BasicCell<TSP> {
   
   bool is_local_; //!< if it's a local cell or LET cell.
   bool is_local_subtree_; //!< If all of its descendants are local.
+
+  Mapper mapper_;
 
   void CheckBodyIndex(index_t idx) const;
 }; // class Cell
@@ -515,41 +507,6 @@ void ReportSplitType(typename Cell<TSP>::KeyType trg_key,
   e.out() << " " << (by_pred == orig ? "OK" : "NG") << std::endl;
 }
 
-
-// Utility functions on set-related operations on std::vector
-
-/**
- * @brief Returns difference of two sets (a simple wrapper of std::set_difference)
- *
- * Returns an instance of the container type C which contains elements that are
- * in c1 but not c2. c1 and c2 must be sorted.
- */
-template<class C>
-C SetDiff(const C& c1, const C& c2) {
-  C res;
-  std::set_difference(std::begin(c1), std::end(c1),
-                      std::begin(c2), std::end(c2),
-                      std::back_inserter(res));
-  return res;
-}
-
-#if 0
-/**
- * @brief Returns union of two sets (a simple wrapper of std::set_union)
- *
- * c1 and c2 must be sorted.
- */
-template<class C>
-C SetUnion(const C& c1, const C& c2) {
-  C res;
-  std::set_union(std::begin(c1), std::end(c1),
-                 std::begin(c2), std::end(c2),
-                 std::back_inserter(res));
-  return res;
-}
-#endif
-
-
 /**
  * @brief Return a new Region object that covers all Regions across multiple MPI processes
  */
@@ -565,7 +522,7 @@ Region<TSP> ExchangeRegion(const Region<TSP> &r) {
 
   // Exchange min
   tapas::mpi::Allreduce(&r.min()[0], &new_min[0], Dim, MPI_MIN, MPI_COMM_WORLD);
-
+  
   return Region<TSP>(new_min, new_max);
 }
 
@@ -688,33 +645,6 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
     }
   }
   std::sort(std::begin(s), std::end(s));
-}
-
-/**
- * @brief 1-parameter Map function for (deprecated)
- */
-template <class TSP>
-template <class Funct>
-void Cell<TSP>::Map(Funct f, Cell<TSP> &cell) {
-  f(cell);
-}
-
-/**
- * 2-parameter Map function over cells (apply user function to products of cells)
- */
-template<class TSP>
-template<class Funct>
-void Cell<TSP>::Map(Funct f, Cell<TSP> &c1, Cell<TSP> &c2) {
-  if (c1.key() == 0 && c2.key() == 0 && c1.data().mpi_size_ > 1)  {
-    char t[] = "TAPAS_IN_LET=1";
-    putenv(t); // to avoid warning "convertion from const char* to char*"
-    
-    LET<TSP>::Exchange(f, c1);
-    
-    unsetenv("TAPAS_IN_LET");
-  }
-
-  f(c1, c2);
 }
 
 /**
@@ -934,21 +864,18 @@ int Cell<TSP>::nsubcells() const {
 
 template <class TSP>
 Cell<TSP> &Cell<TSP>::subcell(int idx) {
+#ifdef TAPAS_DEBUG
   if (IsLeaf()) {
     TAPAS_LOG_ERROR() << "Trying to access children of a leaf cell." << std::endl;
     TAPAS_DIE();
   }
+#endif
 
   KeyType child_key = SFC::Child(key_, idx);
   Cell *c = Lookup(child_key);
 
+#ifdef TAPAS_DEBUG
   if (c == nullptr) {
-#if 0
-    //\todo: fix memory leak
-    // (use pseudo leaf-only hash table)
-    //c = new Cell<TSP>(child_key, false, 0, 0, data_);
-    c = new Cell<TSP>(child_key, data_); // create a dummy cell
-#else
     std::stringstream ss;
     ss << "In MPI rank " << data_->mpi_rank_ << ": " 
        << "Cell not found for key "
@@ -967,8 +894,8 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) {
     
     TAPAS_LOG_ERROR() << ss.str(); abort();
     TAPAS_ASSERT(c != nullptr);
-#endif
   }
+#endif
   
   return *c;
 }
@@ -1004,28 +931,36 @@ inline Cell<TSP> *Cell<TSP>::Lookup(KeyType k) const {
     assert(i->second != nullptr);
     return i->second;
   }
-
   
   return nullptr;
 }
 
 template <class TSP>
 Cell<TSP> &Cell<TSP>::parent() const {
-    if (IsRoot()) {
-        TAPAS_LOG_ERROR() << "Trying to access parent of the root cell." << std::endl;
-        TAPAS_DIE();
-    }
-    KeyType parent_key = SFC::Parent(key_);
-    auto *c = Lookup(parent_key);
-    if (c == nullptr) {
-      TAPAS_LOG_ERROR() << "Parent (" << parent_key << ") of "
-                        << "cell (" << key_ << ") not found.\n"
-                        << "Parent key = " << SFC::Decode(parent_key) << "\n"
-                        << "Child key =  " << SFC::Decode(key_)
-                        << std::endl;
-      TAPAS_DIE();
-    }
-    return *c;
+  
+#ifdef TAPAS_DEBUG
+  // \todo Split TAPAS_DEBUG and TAPAS_DEV_DEBUG
+  if (IsRoot()) {
+    TAPAS_LOG_ERROR() << "Trying to access parent of the root cell." << std::endl;
+    TAPAS_DIE();
+  }
+#endif
+  
+  KeyType parent_key = SFC::Parent(key_);
+  auto *c = Lookup(parent_key);
+  
+#ifdef TAPAS_DEBUG
+  if (c == nullptr) {
+    TAPAS_LOG_ERROR() << "Parent (" << parent_key << ") of "
+                      << "cell (" << key_ << ") not found.\n"
+                      << "Parent key = " << SFC::Decode(parent_key) << "\n"
+                      << "Child key =  " << SFC::Decode(key_)
+                      << std::endl;
+    TAPAS_DIE();
+  }
+#endif
+  
+  return *c;
 }
 
 template <class TSP>
@@ -1033,10 +968,6 @@ inline void Cell<TSP>::CheckBodyIndex(index_t idx) const {
   //TAPAS_ASSERT(this->nb() >= 0);
 
   // debug
-  if (!(idx < (index_t)this->nb())) {
-    std::cerr << "idx = " << idx << ", " << "this->nb() = " << this->nb() << std::endl;
-    abort();
-  }
   TAPAS_ASSERT((size_t)idx < this->nb());
   TAPAS_ASSERT(this->IsLeaf() && "body or body attribute access is not allowed for non-leaf cells.");
 
@@ -1066,7 +997,6 @@ inline typename TSP::BT::type &Cell<TSP>::body(index_t idx) {
 template <class TSP>
 const typename TSP::BT::type &Cell<TSP>::local_body(index_t idx) const {
   TAPAS_ASSERT(this->IsLocal() && "Cell::local_body() can be called only for local cells.");
-
   TAPAS_ASSERT(idx < data_->local_bodies_.size());
 
   // TODO is it correct?
@@ -1470,47 +1400,6 @@ template <int DIM, class FP, class BT,
 #endif /*TAPAS_USE_VECTORMAP*/
           >
 class Tapas;
-
-#if 0
-/**
- * @brief Specialization of Tapas for HOT (Morton HOT) algorithm
- */
-template <int DIM, class FP, class BT,
-          class BT_ATTR, class CELL_ATTR,
-          class Threading>
-class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR, MortonHOT, Threading
-#ifdef TAPAS_USE_VECTORMAP
-#  ifdef __CUDACC__
-            , tapas::Vectormap_CUDA_Packed<DIM, FP, BT, BT_ATTR>
-#  else
-            , tapas::Vectormap_CPU<DIM, FP, BT, BT_ATTR>
-#  endif /*__CUDACC__*/
-#endif /*TAPAS_USE_VECTORMAP*/
-            > {
-  typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR, Threading
-#ifdef TAPAS_USE_VECTORMAP
-#  ifdef __CUDACC__
-                            , tapas::Vectormap_CUDA_Packed<DIM, FP, BT, BT_ATTR>
-#  else
-                            , tapas::Vectormap_CPU<DIM, FP, BT, BT_ATTR>
-#  endif /*__CUDACC__*/
-#endif /*TAPAS_USE_VECTORMAP*/
-                            > TSP; // Tapas static params
- public:
-  using Region = tapas::Region<TSP>;
-  using Cell = hot::Cell<TSP>;
-  using SFC = tapas::sfc::Morton<DIM>;
-  
-  /**
-   * @brief Partition and build an octree of the target space.
-   * @param b Array of body of BT::type.
-   */
-  static Cell *Partition(typename BT::type *b, index_t nb, int max_nb) {
-    hot::Partitioner<TSP> part(max_nb);
-    return part.Partition(b, nb);
-  }
-};
-#endif
 
 namespace threading {
 class MassiveThreads;

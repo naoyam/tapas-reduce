@@ -155,6 +155,17 @@ void PrintKeys(const T &s, std::ostream &os) {
     os << "Key set: " << sj << std::endl;
 }
 
+/**
+ * @brief Convert a type to an integer (not constexpr unfortunately)
+ */
+template<typename T>
+struct Type2Int {
+  static intptr_t value() {
+    static size_t m = 0;
+    return (intptr_t) &m;
+  }
+};
+
 /** 
  * @brief Holder of template parameter types.
  */
