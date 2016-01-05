@@ -34,7 +34,7 @@ serial: serial.o $(OBJECTS)
 
 # Test for parallel FMM
 parallel: parallel.cxx $(OBJECTS)
-	$(MPICXX) $? $(LFLAGS) -o $@
+	$(MPICXX) $^ $(LFLAGS) -o $@
 #	mpirun -np 9 ./a.out --ncrit 256 --distribution plummer
 
 tapas: serial_tapas parallel_tapas
