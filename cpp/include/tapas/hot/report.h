@@ -57,7 +57,7 @@ void Report(const Data &data, std::ostream &os = std::cout) {
       std::ofstream ofs(fname.c_str(), std::ios::out | std::ios::trunc);
       
       ofs << "rank hostname" << std::endl;
-      for (size_t i = 0; i < size; i++) {
+      for (int i = 0; i < size; i++) {
         ofs << i << "\t" << buf[i].value << std::endl;
       }
       ofs.close();

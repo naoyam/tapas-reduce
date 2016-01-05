@@ -156,7 +156,7 @@ class SamplingOctree {
     // process i's beginning key is j-th key in level L, where j is the smallest index satisfying
     //   nb_iscan[j] >= q * i
     beg_keys[0] = SFC::AppendDepth(0, L);
-    for (size_t i = 1; i < mpi_size; i++) {
+    for (int i = 1; i < mpi_size; i++) {
       int j = std::upper_bound(nb_iscan.begin(), nb_iscan.end(), q*i) - nb_iscan.begin();
       beg_keys[i] = SFC::GetNext(K, j);
     }

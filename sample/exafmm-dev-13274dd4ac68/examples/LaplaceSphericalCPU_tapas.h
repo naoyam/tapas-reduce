@@ -142,7 +142,7 @@ void P2M(Tapas::Cell &C) {
 void P2M(Tapas::Cell &C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
   
-  for (tapas::index_t i = 0; i < C.nb(); ++i) {
+  for (size_t i = 0; i < C.nb(); ++i) {
     const Body &B = C.body(i);
     vec3 dX = B.X - tovec(C.center());
     real_t rho, alpha, beta;

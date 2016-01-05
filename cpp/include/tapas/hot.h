@@ -966,6 +966,7 @@ Cell<TSP> &Cell<TSP>::parent() const {
 template <class TSP>
 inline void Cell<TSP>::CheckBodyIndex(index_t idx) const {
   //TAPAS_ASSERT(this->nb() >= 0);
+  (void)idx;
 
   // debug
   TAPAS_ASSERT((size_t)idx < this->nb());

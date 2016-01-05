@@ -37,7 +37,7 @@ class BodyIterator {
   }
   BodyIterator<CellType>& operator+=(int n) {
     idx_ += n;
-    assert(idx_ < c_.nb());
+    TAPAS_ASSERT((size_t)idx_ < c_.nb());
     return *this;
   }
   BodyIterator<CellType> operator+(int n) {

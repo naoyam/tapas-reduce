@@ -92,13 +92,13 @@ private:
         // in many cases.
         numBodies = nx * ny * nz;
 
-        long rem = numBodies % proc_size;
-        long nb_local = numBodies / proc_size + (proc_rank + 1 == proc_size ? rem : 0); // local number of bodies
-        long beg = (numBodies / proc_size) * proc_rank;
-        long end = beg + nb_local;
+        size_t rem = numBodies % proc_size;
+        size_t nb_local = numBodies / proc_size + (proc_rank + 1 == proc_size ? rem : 0); // local number of bodies
+        size_t beg = (numBodies / proc_size) * proc_rank;
+        size_t end = beg + nb_local;
         Bodies bodies(nb_local);
         size_t gi = 0, li = 0;
-        assert(proc_size == 1 || numBodies > nb_local);
+        assert(proc_size == 1 || numBodies > (int)nb_local);
 
         for (int ix = 0; ix < nx; ix++) {
           for (int iy = 0; iy < ny; iy++) {
@@ -117,7 +117,7 @@ private:
           }
         }
         assert(li == nb_local);
-        assert(gi == numBodies);
+        assert(gi == (size_t)numBodies);
         assert(nb_local == bodies.size());
         return bodies;                                              // Return bodies
     }
@@ -154,8 +154,8 @@ private:
     //! Random distribution on r = 1 sphere
     Bodies sphere(int numBodies, int proc_rank, int proc_size) {
         // Calculate number of bodies which this process generates.
-        long rem = numBodies % proc_size;
-        long nb_local = numBodies / proc_size + (proc_rank + 1 == proc_size ? rem : 0); // num bodies local
+        size_t rem = numBodies % proc_size;
+        size_t nb_local = numBodies / proc_size + (proc_rank + 1 == proc_size ? rem : 0); // num bodies local
         long beg = (numBodies / proc_size) * proc_rank;
         long end = beg + nb_local;
         Bodies bodies;
@@ -215,7 +215,7 @@ private:
             }
             i++;
         }
-        assert(bodies.size() == nb_local);
+        assert(bodies.size() == (size_t)nb_local);
 
         return bodies;
     }
@@ -237,7 +237,7 @@ public:
     long beg = (numBodies / proc_size) * proc_rank;
     long end = beg + nb_local;
 
-    assert(nb_local == bodies.size());
+    assert((size_t)nb_local == bodies.size());
     
 #if MASS
     for (auto &b : bodies) {
