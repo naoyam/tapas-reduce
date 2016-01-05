@@ -136,14 +136,14 @@ struct CPUMapper {
     tg.wait();
   }
 
-  template <class Funct, class CellType>
-  void Map(Funct f, CellType &c1) {
-    f(c1);
+  template <class Funct, class CellType, class...Args>
+  void Map(Funct f, CellType &c1, Args...args) {
+    f(c1, args...);
   }
 
   template <class Funct, class CellType, class...Args>
-  void Map(Funct f, CellType &c1, CellType &c2) {
-    f(c1, c2);
+  void Map(Funct f, CellType &c1, CellType &c2, Args...args) {
+    f(c1, c2, args...);
   }
 
   template <class Funct, class CellType, class... Args>
@@ -156,6 +156,7 @@ struct CPUMapper {
     }
   }
 
+#if 0
 #ifdef TAPAS_USE_VECTORMAP
 #else
   // General case of Map function
@@ -165,6 +166,7 @@ struct CPUMapper {
     f(x, args...);
     //x.mapper().Map(f, x, args...);
   }
+#endif
 #endif
 
 };

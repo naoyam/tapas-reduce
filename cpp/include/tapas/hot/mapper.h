@@ -48,8 +48,8 @@ static void ProductMapImpl(T1_Iter iter1, int beg1, int end1,
 #ifdef TAPAS_COMPILER_INTEL
 # pragma forceinline
 #endif
+            //f(*lhs, *rhs, args...);
             mapper.Map(callback, *lhs, *rhs);
-            //CellType::template Map<Callback>(callback, *lhs, *rhs);
           }
         }
       }
@@ -89,7 +89,7 @@ struct CPUMapper {
                      f, args...);
     }
   }
-
+  
   template <class Funct, class T1_Iter, class ...Args>
   inline void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
     TAPAS_LOG_DEBUG() << "map product iterator size: "
@@ -193,22 +193,6 @@ struct CPUMapper {
       iter++;
     }
   }
-  
-#ifdef TAPAS_USE_VECTORMAP
-#else
-  template <class Funct, class T, class... Args>
-  void Map(Funct f, T &&x, Args...args) {
-    TAPAS_LOG_DEBUG() << "map non-iterator (r-value version)"  << std::endl;
-
-    using T2 = typename std::remove_reference<T>::type;
-
-    // FIXME: replace std::function with auto
-    std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
-  
-    T2::Map(lambda, std::forward<T>(x));
-  }
-#endif
-
 };
 
 } // namespace hot
