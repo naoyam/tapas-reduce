@@ -492,7 +492,7 @@ int main(int argc, char ** argv) {
 #endif
 
 #ifdef USE_MPI
-    std::cerr << "rank " << rank << " finished upward." << std::endl;
+    //std::cerr << "rank " << rank << " finished upward." << std::endl;
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
 

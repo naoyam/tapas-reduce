@@ -3,18 +3,20 @@
 #
 # NOTE: "make CC=icc CXX=icpc ..." does not work.
 
+.ALWAYS:
+
 include ../Makefile.include
 
 #LFLAGS	+= -DMASS # Use all positive sources
 #LFLAGS	+= -DIneJ # Different target and source points
 LFLAGS	+= -DDIRECT # Compare with direct summation
-LFLAGS	+= -DWRITE_TIME # Write timings to file
 
-MODE ?= debug
+MODE ?= release
 ifeq ($(MODE),debug)
 	OPT = -O0
 	DEBUG = -DTAPAS_DEBUG=1 -g -gdwarf-2
 	LOG = -DTAPAS_LOG_LEVEL=1
+	LFLAGS += -DASSERT # Turns on asserttions (otherwise define an empty macro function)
 else
 	OPT = -O3 # -O3 is also OK, but when gprof is used, gprof command misunderstand names of functions called as 'frame_dummy'
 	DEBUG = -DTAPAS_DEBUG=0
@@ -37,11 +39,11 @@ parallel: parallel.cxx $(OBJECTS)
 
 tapas: serial_tapas parallel_tapas
 
-serial_tapas: tapas_exafmm.cxx $(OBJECTS)
-	$(CXX) $(DEBUG) $(LOG) $^ $(LFLAGS) -o $@
+serial_tapas: .ALWAYS $(OBJECTS) #tapas_exafmm.cxx $(OBJECTS)
+	$(CXX) $(DEBUG) $(LOG) tapas_exafmm.cxx $(OBJECTS) $(LFLAGS) -o $@
 
-parallel_tapas: tapas_exafmm.cxx $(OBJECTS)
-	$(MPICXX) $(DEBUG) $(LOG) -DUSE_MPI $^ $(LFLAGS) -o $@ 
+parallel_tapas: .ALWAYS $(OBJECTS) # tapas_exafmm.cxx $(OBJECTS)
+	$(MPICXX) $(DEBUG) $(LOG) -DUSE_MPI tapas_exafmm.cxx $(OBJECTS) $(LFLAGS) -o $@
 
 # Checking O(N) complexity
 complexity: serial.o $(OBJECTS)
