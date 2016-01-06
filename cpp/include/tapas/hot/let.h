@@ -713,9 +713,14 @@ struct LET {
     static void Map(Funct, ProxyCell &, ProxyCell &, Args...) {
       // f(c1, c2)
     }
+    
+    template<class Funct, class ...Args>
+    inline static void Map(Funct, ProxyBodyIterator, ProxyBodyIterator, Args...) {
+      //f(p1, p2);
+    }
 
     template<class Funct, class ...Args>
-    inline static void Map(Funct, ProxyBodyIterator &, ProxyBodyIterator &, Args...) {
+    inline static void Map(Funct, ProxyBodyIterator, ProxyBody &, Args...) {
       //f(p1, p2);
     }
 

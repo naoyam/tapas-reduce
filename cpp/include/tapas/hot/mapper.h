@@ -77,6 +77,8 @@ template<class Cell, class Body, class LET>
 struct CPUMapper {
   using ProxyCell = typename LET::ProxyCell;
   using ProxyBody = typename LET::ProxyBody;
+  using ProxyBodyIterator = typename LET::ProxyBodyIterator;
+  
   /**
    * @brief Map function f over product of two iterators
    */
