@@ -11,12 +11,12 @@ namespace hot {
 /**
  * @brief Helper subroutine called from Mapper::Map
  */ 
-template<class T1_Iter, class T2_Iter, class Funct, class...Args>
-static void ProductMapImpl(T1_Iter iter1, int beg1, int end1,
+template<class Mapper, class T1_Iter, class T2_Iter, class Funct, class...Args>
+static void ProductMapImpl(Mapper &mapper,
+                           T1_Iter iter1, int beg1, int end1,
                            T2_Iter iter2, int beg2, int end2,
                            Funct f, Args... args) {
   assert(beg1 < end1 && beg2 < end2);
-  auto &mapper = (*iter1).cell().mapper();
   
   using CellType = typename T1_Iter::CellType;
   //using C1 = typename T1_Iter::value_type; // Container type (actually Body or Cell)
@@ -60,14 +60,14 @@ static void ProductMapImpl(T1_Iter iter1, int beg1, int end1,
     // run (beg1,mid1) x (beg2,mid2) and (mid1,end1) x (mid2,end2) in parallel
     {
       typename Th::TaskGroup tg;
-      tg.createTask([&]() { ProductMapImpl(iter1, beg1, mid1, iter2, beg2, mid2, f, args...); });
-      tg.createTask([&]() { ProductMapImpl(iter1, mid1, end1, iter2, mid2, end2, f, args...); });
+      tg.createTask([&]() { ProductMapImpl(mapper, iter1, beg1, mid1, iter2, beg2, mid2, f, args...); });
+      tg.createTask([&]() { ProductMapImpl(mapper, iter1, mid1, end1, iter2, mid2, end2, f, args...); });
       tg.wait();
     }
     {
       typename Th::TaskGroup tg;
-      tg.createTask([&]() {ProductMapImpl(iter1, beg1, mid1, iter2, mid2, end2, f, args...);});
-      tg.createTask([&]() {ProductMapImpl(iter1, mid1, end1, iter2, beg2, mid2, f, args...);});
+      tg.createTask([&]() {ProductMapImpl(mapper, iter1, beg1, mid1, iter2, mid2, end2, f, args...);});
+      tg.createTask([&]() {ProductMapImpl(mapper, iter1, mid1, end1, iter2, beg2, mid2, f, args...);});
       tg.wait();
     }
   }
@@ -88,7 +88,8 @@ struct CPUMapper {
                       << prod.size() << std::endl;
     
     if (prod.size() > 0) {
-      ProductMapImpl(prod.t1_, 0, prod.t1_.size(),
+      ProductMapImpl(*this,
+                     prod.t1_, 0, prod.t1_.size(),
                      prod.t2_, 0, prod.t2_.size(),
                      f, args...);
     }
@@ -100,9 +101,10 @@ struct CPUMapper {
                       << prod.size() << std::endl;
     
     if (prod.size() > 0) {
-      ProductMapImpl(prod.t1_, 0, prod.t1_.size(),
-                  prod.t2_, 0, prod.t2_.size(),
-                  f, args...);
+      ProductMapImpl(*this,
+                     prod.t1_, 0, prod.t1_.size(),
+                     prod.t2_, 0, prod.t2_.size(),
+                     f, args...);
     }
   }
 
@@ -199,7 +201,8 @@ struct CPUMapper {
       iter++;
     }
   }
-};
+}; // class CPUMapper
+
 
 } // namespace hot
 } // namespace tapas

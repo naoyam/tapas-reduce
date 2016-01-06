@@ -733,7 +733,8 @@ struct LET {
                         << prod.size() << std::endl;
       
       if (prod.size() > 0) {
-        ProductMapImpl(prod.t1_, 0, prod.t1_.size(),
+        ProductMapImpl(*this,
+                       prod.t1_, 0, prod.t1_.size(),
                        prod.t2_, 0, prod.t2_.size(),
                        f, args...);
       }
