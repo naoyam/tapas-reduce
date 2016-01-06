@@ -39,7 +39,7 @@ template<class TSP, class SFC_>
 class SamplingOctree {
  public:
   static const constexpr int kDim = TSP::Dim;
-  static const constexpr int kPosOffset = TSP::BT::pos_offset;
+  static const constexpr int kPosOffset = TSP::kBodyCoordOffset;
   
   using FP = typename TSP::FP;
   using SFC = SFC_;
@@ -47,8 +47,8 @@ class SamplingOctree {
   using CellType = Cell<TSP>;
   using CellHashTable = typename std::unordered_map<KeyType, CellType*>;
   using KeySet = std::unordered_set<KeyType>;
-  using BodyType = typename TSP::BT::type;
-  using BodyAttrType = typename TSP::BT_ATTR;
+  using BodyType = typename TSP::Body;
+  using BodyAttrType = typename TSP::BodyAttr;
   using Data = SharedData<TSP, SFC>;
   template<class T> using Allocator = typename Data::template Allocator<T>;
   template<class T> using Region = tapas::Region<T>;

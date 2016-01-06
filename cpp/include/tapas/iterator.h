@@ -29,10 +29,12 @@ class BodyIterator {
   index_t size() const {
     return c_.nb();
   }
-  const BodyIterator &operator*() const {
-    return *this;
+  const Body &operator*() const {
+    TAPAS_ASSERT(idx_ < c_.nb());
+    return *c_.body(idx_);
   }
   BodyIterator &operator*() {
+    TAPAS_ASSERT(idx_ < c_.nb());
     return *this;
   }
   BodyIterator<CellType>& operator+=(int n) {

@@ -23,9 +23,6 @@ static void ProductMapImpl(T1_Iter iter1, int beg1, int end1,
   //using C2 = typename T2_Iter::value_type;
   using Th = typename CellType::Threading;
 
-  using Callback = CallbackWrapper<Funct, Args...>;
-  Callback callback(f, args...);
-
   const constexpr int kT1 = T1_Iter::kThreadSpawnThreshold;
   const constexpr int kT2 = T2_Iter::kThreadSpawnThreshold;
   
@@ -75,7 +72,7 @@ static void ProductMapImpl(T1_Iter iter1, int beg1, int end1,
 
 } // anon namespace 
 
-template<class TSP>
+template<class Cell, class Body, class _NONE>
 struct CPUMapper {
   /**
    * @brief Map function f over product of two iterators
@@ -108,7 +105,7 @@ struct CPUMapper {
   
   /* (Specialization of the Map() below by a general ProductIterator<T>
      with ProductIterator<BodyIterator<T>>). */
-  template <class Funct, class Cell, class...Args>
+  template <class Funct, class...Args>
   void Map(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args...args) {
     // GPU-Map is temporarily located here.
     // GPUMapper will be implemented soon 
@@ -118,57 +115,43 @@ struct CPUMapper {
   
 #endif
   
-  template <class Funct, class CellType, class... Args>
-  void Map(Funct f, tapas::iterator::SubCellIterator<CellType> iter, Args...args) {
+  template <class Funct, class... Args>
+  void Map(Funct f, tapas::iterator::SubCellIterator<Cell> iter, Args...args) {
     TAPAS_LOG_DEBUG() << "map non-product subcell iterator size: "
                       << iter.size() << std::endl;
-    typedef typename CellType::Threading Th;
-  
-    // pack args... into a lambda closure
-    // FIXME: replace lambda with auto
-    std::function<void(CellType&)> lambda = [=](CellType &cell) { f(cell, args...); };
-  
+    typedef typename Cell::Threading Th;
+
     typename Th::TaskGroup tg;
     for (int i = 0; i < iter.size(); i++) {
-      tg.createTask([&]() { CellType::Map(lambda, *iter); });
+      Cell &c = *iter;
+      tg.createTask([c, f, &args...]() { c.mapper().Map(f, c, args...); });
       iter++;
     } 
     tg.wait();
   }
 
-  template <class Funct, class CellType, class...Args>
-  void Map(Funct f, CellType &c1, Args...args) {
+  template <class Funct, class...Args>
+  void Map(Funct f, Cell &c1, Args...args) {
     f(c1, args...);
   }
 
-  template <class Funct, class CellType, class...Args>
-  void Map(Funct f, CellType &c1, CellType &c2, Args...args) {
+  template <class Funct, class...Args>
+  void Map(Funct f, Cell &c1, Cell &c2, Args...args) {
     f(c1, c2, args...);
   }
 
-  template <class Funct, class CellType, class... Args>
-  void Map(Funct f, BodyIterator<CellType> iter, Args...args) {
-    TAPAS_LOG_DEBUG() << "map non-product body iterator size: "
-                      << iter.size() << std::endl;
+  template <class Funct, class... Args>
+  void Map(Funct f, BodyIterator<Cell> iter, Args...args) {
     for (int i = 0; i < iter.size(); ++i) {
       f(*iter, args...);
       iter++;
     }
   }
-
-#if 0
-#ifdef TAPAS_USE_VECTORMAP
-#else
-  // General case of Map function
-  template <class Funct, class T, class... Args>
-  void Map(Funct f, T &&x, Args...args) {
-    TAPAS_LOG_DEBUG() << "map non-iterator (r-value version)"  << std::endl;
-    f(x, args...);
-    //x.mapper().Map(f, x, args...);
+  
+  template <class Funct, class... Args>
+  void Map(Funct f, BodyIterator<Cell> b1, BodyIterator<Cell> b2, Args...args) {
+    f(*b1, *b2, args...);
   }
-#endif
-#endif
-
 };
 
 }

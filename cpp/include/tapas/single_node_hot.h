@@ -92,8 +92,8 @@ class SharedData {
   using HashTable = std::unordered_map<KeyType, CellType*>;
 #endif
   
-  using BodyType = typename TSP::BT::type;
-  using BodyATtrType = typename TSP::BT_ATTR;
+  using BodyType = typename TSP::Body;
+  using BodyATtrType = typename TSP::BodyAttr;
 
   HashTable ht_;
   bool opt_mutual_;
@@ -112,20 +112,20 @@ class Cell: public tapas::BasicCell<TSP> {
   friend class Partitioner<TSP>;
   friend class iter::BodyIterator<Cell>;
  public:
-  typedef typename TSP::ATTR attr_type;
-  typedef typename TSP::BT::type BodyType;
-  typedef typename TSP::BT_ATTR BodyAttrType;
+  typedef typename TSP::CellAttr attr_type;
+  typedef typename TSP::Body BodyType;
+  typedef typename TSP::BodyAttr BodyAttrType;
   typedef typename TSP::Threading Threading;
   
   using SFC = typename TSP::SFC;
   using KeyType = typename SFC::KeyType;
-  using Mapper = single_node_hot::CPUMapper<TSP>;
-  //typedef typename TSP::BT_ATTR body_attr_type;
 
   using HashTable = typename SharedData<TSP>::HashTable;
   using CellType = Cell<TSP>;
-  using BodyIterator = iter::BodyIterator<Cell>;
-  using SubCellIterator = iter::SubCellIterator<Cell>;
+  using Body = typename TSP::Body;
+  using BodyIterator = iter::BodyIterator<CellType>;
+  using SubCellIterator = iter::SubCellIterator<CellType>;
+  using Mapper = typename TSP::template Mapper<CellType, Body, NONE>;
   
  protected:
   std::shared_ptr<SharedData<TSP>> data_;
@@ -136,8 +136,8 @@ class Cell: public tapas::BasicCell<TSP> {
   Cell(std::shared_ptr<SharedData<TSP>> data,
        const Region<TSP> &region,
        index_t bid, index_t nb, KeyType key,
-       typename TSP::BT::type *bodies,
-       typename TSP::BT_ATTR *body_attrs) :
+       typename TSP::Body *bodies,
+       typename TSP::BodyAttr *body_attrs) :
       tapas::BasicCell<TSP>(region, bid, nb), data_(data), key_(key),
       nb_(nb), bodies_(bodies), body_attrs_(body_attrs),
       is_leaf_(true) {}
@@ -157,7 +157,7 @@ class Cell: public tapas::BasicCell<TSP> {
     bool IsRoot() const;
     bool IsLeaf() const;
     int nsubcells() const;
-    index_t local_nb() const { return nb_; } 
+    size_t local_nb() const { return nb_; } 
     Cell &subcell(int idx) const;
     Cell &parent() const;
 
@@ -167,7 +167,7 @@ class Cell: public tapas::BasicCell<TSP> {
   INLINE const Mapper& mapper() const { return mapper_; }
   
 #ifdef DEPRECATED
-  typename TSP::BT::type &particle(index_t idx) const {
+  typename TSP::Body &particle(index_t idx) const {
     return body(idx);
   }
 #endif
@@ -214,7 +214,7 @@ class Cell: public tapas::BasicCell<TSP> {
   }
   
 #ifdef DEPRECATED
-  typename TSP::BT_ATTR *particle_attrs() const {
+  typename TSP::BodyAttr *particle_attrs() const {
     return body_attrs();
   }
 #endif
@@ -245,8 +245,8 @@ class Cell: public tapas::BasicCell<TSP> {
   const HashTable &ht() const { return data_->ht_; }
   
   Cell *Lookup(KeyType k) const;
-  typename TSP::BT::type *bodies_;
-  typename TSP::BT_ATTR *body_attrs_;
+  typename TSP::Body *bodies_;
+  typename TSP::BodyAttr *body_attrs_;
   bool is_leaf_;
   
   const std::vector<BodyType>& LocalBodies() const;
@@ -263,14 +263,14 @@ class Cell: public tapas::BasicCell<TSP> {
  * @param r Region object
  */
 template <class TSP>
-std::vector<HelperNode<TSP>> CreateInitialNodes(const typename TSP::BT::type *p,
+std::vector<HelperNode<TSP>> CreateInitialNodes(const typename TSP::Body *p,
                                                 index_t np,
                                                 const Region<TSP> &r) {
     const constexpr int Dim = TSP::Dim;
+    const constexpr size_t kCoordOfst = TSP::kBodyCoordOffset;
     using SFC = typename TSP::SFC;
     //using KeyType = typename SFC::KeyType;
     using FP = typename TSP::FP;
-    using BT = typename TSP::BT;
     
     std::vector<HelperNode<TSP>> nodes(np);
     FP num_cell = 1 << SFC::MAX_DEPTH; // maximum number of cells in one dimension
@@ -286,7 +286,7 @@ std::vector<HelperNode<TSP>> CreateInitialNodes(const typename TSP::BT::type *p,
         node.np = 1;
 
         // Particle pos offset is the offset of each coordinate value (x,y,z) in body structure
-        Vec<Dim, FP> off = ParticlePosOffset<Dim, FP, BT::pos_offset>::vec((const void*)&(p[i]));
+        Vec<Dim, FP> off = ParticlePosOffset<Dim, FP, kCoordOfst>::vec((const void*)&(p[i]));
         off -= r.min();
         off /= pitch;
 
@@ -308,7 +308,7 @@ std::vector<HelperNode<TSP>> CreateInitialNodes(const typename TSP::BT::type *p,
             TAPAS_LOG_ERROR() << "Anchor, " << node.anchor
                               << ", exceeds the maximum depth." << std::endl
                               << "Particle at "
-                              << ParticlePosOffset<Dim, FP, BT::pos_offset>::vec((const void*)&(p[i]))
+                              << ParticlePosOffset<Dim, FP, kCoordOfst>::vec((const void*)&(p[i]))
                               << std::endl;
             TAPAS_DIE();
         }
@@ -324,7 +324,7 @@ std::vector<HelperNode<TSP>> CreateInitialNodes(const typename TSP::BT::type *p,
 }
 
 template <class TSP>
-void SortBodies(const typename TSP::BT::type *b, typename TSP::BT::type *sorted,
+void SortBodies(const typename TSP::Body *b, typename TSP::Body *sorted,
                 const HelperNode<TSP> *sorted_nodes,
                 tapas::index_t nb) {
   for (index_t i = 0; i < nb; ++i) {
@@ -515,42 +515,42 @@ Cell<TSP> &Cell<TSP>::parent() const {
 }
 
 template <class TSP>
-typename TSP::BT::type &Cell<TSP>::body(index_t idx) {
+typename TSP::Body &Cell<TSP>::body(index_t idx) {
   return bodies_[this->bid_+idx];
 }
 
 template <class TSP>
-const typename TSP::BT::type &Cell<TSP>::body(index_t idx) const {
+const typename TSP::Body &Cell<TSP>::body(index_t idx) const {
   return bodies_[this->bid_+idx];
 }
 
 template <class TSP>
-typename TSP::BT::type &Cell<TSP>::local_body(index_t idx) {
+typename TSP::Body &Cell<TSP>::local_body(index_t idx) {
   return this->body(idx);
 }
 
 template <class TSP>
-const typename TSP::BT::type &Cell<TSP>::local_body(index_t idx) const {
+const typename TSP::Body &Cell<TSP>::local_body(index_t idx) const {
   return this->body(idx);
 }
 
 template <class TSP>
-typename TSP::BT_ATTR *Cell<TSP>::body_attrs() {
+typename TSP::BodyAttr *Cell<TSP>::body_attrs() {
   return body_attrs_;
 }
 
 template <class TSP>
-const typename TSP::BT_ATTR *Cell<TSP>::body_attrs() const {
+const typename TSP::BodyAttr *Cell<TSP>::body_attrs() const {
   return body_attrs_;
 }
 
 template <class TSP>
-typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) {
+typename TSP::BodyAttr &Cell<TSP>::body_attr(index_t idx) {
   return body_attrs_[this->bid_+idx];
 }
 
 template <class TSP>
-const typename TSP::BT_ATTR &Cell<TSP>::body_attr(index_t idx) const {
+const typename TSP::BodyAttr &Cell<TSP>::body_attr(index_t idx) const {
   return body_attrs_[this->bid_+idx];
 }
 
@@ -564,11 +564,11 @@ class Partitioner {
   using KeyType = typename TSP::SFC::KeyType;
   Partitioner(unsigned max_nb): max_nb_(max_nb) {}
       
-  Cell<TSP> *Partition(typename TSP::BT::type *b, index_t nb);
-  Cell<TSP> *Partition(std::vector<typename TSP::BT::type> &b);
+  Cell<TSP> *Partition(typename TSP::Body *b, index_t nb);
+  Cell<TSP> *Partition(std::vector<typename TSP::Body> &b);
  private:
   void Refine(Cell<TSP> *c, const std::vector<HelperNode<TSP>> &hn,
-              const typename TSP::BT::type *b, int cur_depth,
+              const typename TSP::Body *b, int cur_depth,
               KeyType cur_key) const;
 }; // class Partitioner
 
@@ -577,11 +577,9 @@ class Partitioner {
  */
 template <class TSP>
 Cell<TSP>*
-Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b) {
+Partitioner<TSP>::Partition(std::vector<typename TSP::Body> &b) {
     return Partitioner<TSP>::Partition(b.data(), b.size());
 }
-
-
 
 /**
  * @brief Partition the simulation space and build SFC-based octree
@@ -593,16 +591,15 @@ Partitioner<TSP>::Partition(std::vector<typename TSP::BT::type> &b) {
  */
 template <class TSP> // TSP : Tapas Static Params
 Cell<TSP>*
-Partitioner<TSP>::Partition(typename TSP::BT::type *b, index_t nb) {
+Partitioner<TSP>::Partition(typename TSP::Body *b, index_t nb) {
     using SFC = typename TSP::SFC;
     using FP = typename TSP::FP;
-    typedef typename TSP::BT BT;
-    typedef typename TSP::BT_ATTR BodyAttrType;
-    typedef typename BT::type BodyType;
+    typedef typename TSP::Body Body;
+    typedef typename TSP::BodyAttr BodyAttr;
     typedef Cell<TSP> CellType;
     const constexpr int kDim = TSP::Dim;
-    const constexpr int kPosOffset = TSP::BT::pos_offset;
-
+    const constexpr int kPosOffset = TSP::kBodyCoordOffset;
+    
     Region<TSP> r;
     // calculate region
     {
@@ -621,7 +618,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b, index_t nb) {
     }
     
     
-    BodyType *b_work = new BodyType[nb];
+    Body *b_work = new Body[nb];
     std::vector<HelperNode<TSP>> hn = CreateInitialNodes<TSP>(b, nb, r);
 
     // Sort the helper nodes using SFC keys
@@ -633,9 +630,9 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b, index_t nb) {
     // Sort particles to the same order of hn
     SortBodies<TSP>(b, b_work, hn.data(), hn.size());
 
-    std::memcpy(b, b_work, sizeof(BodyType) * nb);
-    //BodyAttrType *attrs = new BodyAttrType[nb];
-    BodyAttrType *attrs = (BodyAttrType*)calloc(nb, sizeof(BodyAttrType));
+    std::memcpy(b, b_work, sizeof(Body) * nb);
+    //BodyAttr *attrs = new BodyAttr[nb];
+    BodyAttr *attrs = (BodyAttr*)calloc(nb, sizeof(BodyAttr));
 
     KeyType root_key = 0;
     auto get_key = [](const HelperNode<TSP>& hn) { return hn.key; };
@@ -675,7 +672,7 @@ Partitioner<TSP>::Partition(typename TSP::BT::type *b, index_t nb) {
 template <class TSP>
 void Partitioner<TSP>::Refine(Cell<TSP> *c,
                               const std::vector<HelperNode<TSP>> &hn,
-                              const typename TSP::BT::type *b,
+                              const typename TSP::Body *b,
                               int cur_depth,
                               KeyType cur_key) const {
     const int Dim = TSP::Dim;
@@ -685,7 +682,7 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
     //typedef typename TSP::BT BT;
     
     TAPAS_LOG_INFO() << "Current depth: " << cur_depth << std::endl;
-    if (c->nb() <= max_nb_) {
+    if (c->nb() <= (size_t)max_nb_) {
         TAPAS_LOG_INFO() << "Small enough cell" << std::endl;
         return;
     }
@@ -747,115 +744,56 @@ Product(sn::Cell<TSP> &c1, sn::Cell<TSP> &c2) {
   return ProductIterator<CI,CI>(CI(c1), CI(c2));
 }
 
-/** 
- * @brief A dummy class to achieve template specialization.
- */
-template<int _Dim,
-         template<int __Dim, class __KeyType> class _SFC,
-         class _KeyType = uint64_t>
-struct SingleNodeHOT {
-  using SFC = _SFC<_Dim, _KeyType>;
-  using KeyType = typename SFC::KeyType;
+// New Tapas Static Params base class
+template<int _DIM, class _FP, class _BODY_TYPE, size_t _BODY_COORD_OFST, class _BODY_ATTR, class _CELL_ATTR>
+struct HOT {
+  static const constexpr int Dim = _DIM;
+  static const constexpr size_t kBodyCoordOffset = _BODY_COORD_OFST;
+  using FP = _FP;
+  using Body = _BODY_TYPE;
+  using BodyAttr = _BODY_ATTR;
+  using CellAttr = _CELL_ATTR;
+  using SFC = tapas::sfc::Morton<_DIM, uint64_t>;
+  using Vectormap = tapas::Vectormap_CPU<_DIM, _FP, _BODY_TYPE, _BODY_ATTR>;
+  using Threading = tapas::threading::Default;
+
+  template<class _CELL, class _BODY, class _LET>
+  using Mapper = single_node_hot::CPUMapper<_CELL, _BODY, _LET>;
+  template<class _TSP> using Partitioner = single_node_hot::Partitioner<_TSP>;
 };
 
-/** 
- * @brief Advance decleration of a dummy class to achieve template specialization.
- */
-template <int DIM, class FP, class BT,
-          class BT_ATTR, class CELL_ATTR,
-          class PartitionAlgorithm,
-          class Threading
-#ifdef TAPAS_USE_VECTORMAP
-          , class Vectormap
-#endif /*TAPAS_USE_VECTORMAP*/
->
-class Tapas;
+#ifdef __CUDACC__
 
-/**
- * @brief Specialization of Tapas for HOT (single node HOT) algorithm
- */
-template <int DIM, class FP, class BT,
-          class BT_ATTR, class CELL_ATTR, class Threading
-#ifdef TAPAS_USE_VECTORMAP
-          , class Vectormap
-#endif /*TAPAS_USE_VECTORMAP*/
-          >
-class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
-            SingleNodeHOT<DIM, tapas::sfc::Morton>, Threading
-#ifdef TAPAS_USE_VECTORMAP
-            , Vectormap
-#endif /*TAPAS_USE_VECTORMAP*/
-            > {
- public:
-  using SingleNodeMortonHOT = SingleNodeHOT<DIM, tapas::sfc::Morton>;
-  using SFC = typename SingleNodeMortonHOT::SFC;
-  
- private:
-  typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR, Threading,
-                            typename SingleNodeMortonHOT::SFC
-#ifdef TAPAS_USE_VECTORMAP
-                            , Vectormap
-#endif /*TAPAS_USE_VECTORMAP*/
-                            > TSP; // Tapas static params
- public:
+template<int _DIM, class _FP, class _BODY_TYPE, size_t _BODY_COORD_OFST, class _BODY_ATTR, class _CELL_ATTR>
+struct HOT_GPU {
+  using SFC = tapas::sfc::Morton<_DIM, uint64_t>;
+  using Vectormap = tapas::Vectormap_CPU<_DIM, _FP, _BODY_TYPE, _BODY_ATTR>;
+  using Body = _BODY_TYPE;
+  static const constexpr int kBodyCoordOffset = _BODY_COORD_OFST;
+};
+
+#endif // __CUDACC__
+
+template<class _TSP>
+struct Tapas2 {
+  using TSP = _TSP;
+  using Partitioner = typename TSP::template Partitioner<TSP>;
   using Region = tapas::Region<TSP>;
   using Cell = single_node_hot::Cell<TSP>;
   using BodyIterator = typename Cell::BodyIterator;
-
-  /**
-   * @brief Partition and build an octree of the target space.
-   * @param b Array of body of BT::type.
-   */
-  static Cell *Partition(typename BT::type *b, index_t nb, int max_nb) {
-    single_node_hot::Partitioner<TSP> part(max_nb);
-    return part.Partition(b, nb);
-  }
-};
-
-/**
- * @brief Specialization of Tapas for HOT (single node Morton HOT) algorithm
- * With default threading policy 'Serial'
- */
-template <int DIM, class FP, class BT,
-          class BT_ATTR, class CELL_ATTR
-#ifdef TAPAS_USE_VECTORMAP
-          , class Vectormap
-#endif /*TAPAS_USE_VECTORMAP*/
->
-class Tapas<DIM, FP, BT, BT_ATTR, CELL_ATTR,
-            SingleNodeHOT<DIM, tapas::sfc::Morton>,
-            tapas::threading::Serial
-#ifdef TAPAS_USE_VECTORMAP
-            , Vectormap
-#endif /*TAPAS_USE_VECTORMAP*/
-            > {
- public:
-  using SingleNodeMortonHOT = SingleNodeHOT<DIM, tapas::sfc::Morton>;
-  using SFC = typename SingleNodeMortonHOT::SFC;
-  
- private:
-  
-  typedef TapasStaticParams<DIM, FP, BT, BT_ATTR, CELL_ATTR,
-                            tapas::threading::Serial,
-                            typename SingleNodeMortonHOT::SFC
-#ifdef TAPAS_USE_VECTORMAP
-                            , Vectormap
-#endif /*TAPAS_USE_VECTORMAP*/
-                            > TSP; // Tapas static params
- public:
-  using Region = tapas::Region<TSP>;
-  using Cell = single_node_hot::Cell<TSP>;
-  using BodyIterator = typename Cell::BodyIterator;
+  using Body = typename TSP::Body;
+  //using Mapper = typename TSP::template Mapper<Cell, Body, NONE>; // single node mapper does not require LET component
   
   /**
    * @brief Partition and build an octree of the target space.
    * @param b Array of body of BT::type.
    */
-  static Cell *Partition(typename BT::type *b, index_t nb, int max_nb) {
-    single_node_hot::Partitioner<TSP> part(max_nb);
+  static Cell *Partition(Body *b, index_t nb, int max_nb) {
+    Partitioner part(max_nb);
     return part.Partition(b, nb);
   }
 };
+
 
 } // namespace tapas
 

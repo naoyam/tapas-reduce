@@ -19,8 +19,8 @@ struct SharedData {
   using CellType = Cell<TSP>;
   using CellHashTable = typename std::unordered_map<KeyType, CellType*>;
   using KeySet = std::unordered_set<KeyType>;
-  using BodyType = typename TSP::BT::type;
-  using BodyAttrType = typename TSP::BT_ATTR;
+  using BodyType = typename TSP::Body;
+  using BodyAttrType = typename TSP::BodyAttr;
   using Mapper = typename CellType::Mapper;
   
 #ifdef TAPAS_USE_VECTORMAP

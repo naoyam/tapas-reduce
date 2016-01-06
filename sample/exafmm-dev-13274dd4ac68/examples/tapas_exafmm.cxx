@@ -9,10 +9,10 @@
 // NOTE:
 // This macro (TO_MTHREAD_NATIVE or TO_SERIAL) is needed by tpswitch.h, which included in the original ExaFMM.
 // Although this is not necessary in Tapas, ExaFMM's logger class is still using it.
-#if MTHREADS
+#if MTHREAD
 # define TO_MTHREAD_NATIVE 1
 # define TO_SERIAL 0
-#else /* MTHREADS */
+#else /* MTHREAD */
 # define TO_SERIAL 1
 #endif
 
@@ -56,7 +56,7 @@ static Region &asn(Region &x, const Bounds &y) {
 #endif
 
 // UpDownPass::upwardPass
-static inline void FMM_Upward(Tapas::Cell &c, real_t /* theta */) {
+static inline void FMM_Upward(TapasFMM::Cell &c, real_t /* theta */) {
   // theta is not used now; to be deleted
   c.attr().R = 0;
   c.attr().M = 0;
@@ -65,7 +65,7 @@ static inline void FMM_Upward(Tapas::Cell &c, real_t /* theta */) {
 #ifdef TAPAS_DEBUG
   {
     tapas::debug::DebugStream e("FMM_Upward");
-    e.out() << Tapas::SFC::Simplify(c.key()) << " (1) " << c.IsLeaf() << " ";
+    e.out() << TapasFMM::TSP::SFC::Simplify(c.key()) << " (1) " << c.IsLeaf() << " ";
     e.out() << "c.attr().R = " << std::fixed << std::setprecision(6) << c.attr().R << " ";
     e.out() << std::endl;
   }
@@ -87,7 +87,7 @@ static inline void FMM_Upward(Tapas::Cell &c, real_t /* theta */) {
 #endif
 }
 
-static inline void FMM_Downward(Tapas::Cell &c) {
+static inline void FMM_Downward(TapasFMM::Cell &c) {
   //if (c.nb() == 0) return;
   if (!c.IsRoot()) L2L(c);
   if (c.IsLeaf() && c.nb() > 0) {
@@ -273,7 +273,7 @@ void CheckResult(Bodies &bodies, int numSamples, real_t cycle, int images) {
 /**
  * \brief Copy particle informations from Tapas to user's program to check result
  */
-static inline void CopyBackResult(Bodies &bodies, Tapas::Cell *root) {
+static inline void CopyBackResult(Bodies &bodies, TapasFMM::Cell *root) {
   bodies.clear();
 
   Body *beg = &root->local_body(0);
@@ -287,7 +287,7 @@ static inline void CopyBackResult(Bodies &bodies, Tapas::Cell *root) {
 
 
 // Debug function: Dump the M vectors of all cells.
-void dumpM(Tapas::Cell &root) {
+void dumpM(TapasFMM::Cell &root) {
   std::stringstream ss;
 #ifdef USE_MPI
   int rank;
@@ -298,9 +298,9 @@ void dumpM(Tapas::Cell &root) {
 #endif
   std::mutex mtx;
   std::ofstream ofs(ss.str().c_str());
-  std::function<void(Tapas::Cell&)> dump = [&](Tapas::Cell& cell) {
+  std::function<void(TapasFMM::Cell&)> dump = [&](TapasFMM::Cell& cell) {
     mtx.lock();
-    ofs << std::setw(20) << std::right << Tapas::SFC::Simplify(cell.key()) << " ";
+    ofs << std::setw(20) << std::right << TapasFMM::TSP::SFC::Simplify(cell.key()) << " ";
     ofs << std::setw(3) << cell.depth() << " ";
     ofs << (cell.IsLeaf() ? "L" : "_") << " ";
     ofs << cell.attr().M << std::endl;
@@ -311,7 +311,7 @@ void dumpM(Tapas::Cell &root) {
 }
 
 // Debug function: Dump the L vectors of all cells.
-void dumpL(Tapas::Cell &root) {
+void dumpL(TapasFMM::Cell &root) {
   std::stringstream ss;
 #ifdef USE_MPI
   int rank;
@@ -322,7 +322,7 @@ void dumpL(Tapas::Cell &root) {
 #endif
   std::mutex mtx;
   std::ofstream ofs(ss.str().c_str());
-  std::function<void(Tapas::Cell&)> dump = [&](Tapas::Cell& cell) {
+  std::function<void(TapasFMM::Cell&)> dump = [&](TapasFMM::Cell& cell) {
     mtx.lock();
     ofs << std::setw(20) << std::right << cell.key() << " ";
     ofs << std::setw(3) << std::noshowpos << cell.depth() << " ";
@@ -350,7 +350,7 @@ void dumpL(Tapas::Cell &root) {
 }
 
 // Debug function: Dump the body attrs of all cells
-void dumpBodies(Tapas::Cell &root) {
+void dumpBodies(TapasFMM::Cell &root) {
   std::stringstream ss;
 #ifdef USE_MPI
   int rank;
@@ -361,10 +361,10 @@ void dumpBodies(Tapas::Cell &root) {
 #endif
   std::mutex mtx;
   std::ofstream ofs(ss.str().c_str());
-  std::function<void(Tapas::Cell&)> dump = [&](Tapas::Cell& cell) {
+  std::function<void(TapasFMM::Cell&)> dump = [&](TapasFMM::Cell& cell) {
     if (cell.IsLeaf()) {
       mtx.lock();
-      //ofs << std::setw(20) << std::right << Tapas::SFC::Simplify(cell.key()) << " ";
+      //ofs << std::setw(20) << std::right << TapasFMM::SFC::Simplify(cell.key()) << " ";
       auto iter = cell.bodies();
       for (int bi = 0; bi < (int)cell.nb(); bi++, iter++) {
         ofs << std::showpos << iter->X << " ";
@@ -384,7 +384,7 @@ void dumpBodies(Tapas::Cell &root) {
 }
 
 // Debug function: dump all leaves
-void dumpLeaves(Tapas::Cell &root) {
+void dumpLeaves(TapasFMM::Cell &root) {
   std::stringstream ss;
 #ifdef USE_MPI
   int rank;
@@ -396,7 +396,7 @@ void dumpLeaves(Tapas::Cell &root) {
   std::mutex mtx;
   std::ofstream ofs(ss.str().c_str(), std::ios_base::app);
   
-  std::function<void(Tapas::Cell&)> f = [&](Tapas::Cell& cell) {
+  std::function<void(TapasFMM::Cell&)> f = [&](TapasFMM::Cell& cell) {
     if (cell.IsLeaf()) {
       mtx.lock();
       ofs << std::setw(20) << cell.key() << ", depth=" << cell.depth() << ", nb=" << cell.nb() << ", r=" << cell.region() << std::endl;
@@ -423,7 +423,7 @@ int main(int argc, char ** argv) {
 #endif
 
 #ifdef TAPAS_USE_VECTORMAP
-  Tapas::Cell::TSPClass::Vectormap::vectormap_setup(64, 31);
+  TapasFMM::Cell::TSPClass::Vectormap::vectormap_setup(64, 31);
 #endif /*TAPAS_USE_VECTORMAP*/
 
   Bodies bodies, bodies2, bodies3, jbodies;
@@ -475,7 +475,7 @@ int main(int argc, char ** argv) {
     logger::startPAPI();
     logger::startDAG();
     
-    Tapas::Cell *root = Tapas::Partition(bodies.data(), bodies.size(), args.ncrit);
+    TapasFMM::Cell *root = TapasFMM::Partition(bodies.data(), bodies.size(), args.ncrit);
 
     root->SetOptMutual(args.mutual);
     
@@ -499,7 +499,7 @@ int main(int argc, char ** argv) {
     logger::startTimer("Traverse");
     
 #ifdef TAPAS_USE_VECTORMAP
-    Tapas::Cell::TSPClass::Vectormap::vectormap_start();
+    TapasFMM::Cell::TSPClass::Vectormap::vectormap_start();
 #endif /*TAPAS_USE_VECTORMAP*/
     
     numM2L = 0; numP2P = 0;
@@ -508,9 +508,9 @@ int main(int argc, char ** argv) {
 #ifdef TAPAS_USE_VECTORMAP
     vec3 Xperiodic = 0; // dummy; periodic not ported
     int mutual = 0;     // dummy; mutual interaction is not ported to CUDA
-    Tapas::Cell::TSPClass::Vectormap::vectormap_finish(P2P(),
-                                                       *root,
-                                                       Xperiodic, mutual);
+    TapasFMM::Cell::TSPClass::Vectormap::vectormap_finish(P2P(),
+                                                          *root,
+                                                          Xperiodic, mutual);
 #endif /*TAPAS_USE_VECTORMAP*/
     
     logger::stopTimer("Traverse");

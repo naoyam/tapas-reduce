@@ -131,7 +131,7 @@ void evalLocal(real_t rho, real_t alpha, real_t beta, complex_t * Ynm) {
 // ---------------------------------------------
 #if 0
 
-void P2M(Tapas::Cell &C) {
+void P2M(TapasFMM::Cell &C) {
   VecP init = {0.0};
   C.attr().M = tapas::Reduce(C.bodies(), init, P2M_impl);
 }
@@ -139,7 +139,7 @@ void P2M(Tapas::Cell &C) {
 // ---------------------------------------------
 #endif
 
-void P2M(Tapas::Cell &C) {
+void P2M(TapasFMM::Cell &C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
   
   for (size_t i = 0; i < C.nb(); ++i) {
@@ -162,11 +162,11 @@ void P2M(Tapas::Cell &C) {
   //e.out() << std::setw(10) << Tapas::SFC::Simplify(C.key()) << "M=" << C.attr().M << std::endl;
 }
 
-void M2M(Tapas::Cell & C) {
+void M2M(TapasFMM::Cell & C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
 
   for (int i = 0; i < C.nsubcells(); ++i) {
-    Tapas::Cell &Cj=C.subcell(i);
+    TapasFMM::Cell &Cj=C.subcell(i);
     
     // Skip empty cell
     // NOTE: This is not allowed in
@@ -265,9 +265,9 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
   if (mutual) Cj.attr() = attr_j;
 }
 
-void L2P(Tapas::BodyIterator &B) {
+void L2P(TapasFMM::BodyIterator &B) {
   complex_t Ynm[P*P], YnmTheta[P*P];
-  const Tapas::Cell &C = B.cell();
+  const TapasFMM::Cell &C = B.cell();
   vec3 dX = B->X - tovec(C.center());
   vec3 spherical = 0;
   vec3 cartesian = 0;
@@ -300,9 +300,9 @@ void L2P(Tapas::BodyIterator &B) {
   B.attr()[3] += cartesian[2]; 
 }
 
-void L2L(Tapas::Cell &C) {
+void L2L(TapasFMM::Cell &C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
-  const Tapas::Cell &Cj = C.parent();
+  const TapasFMM::Cell &Cj = C.parent();
   vec3 dX = tovec(C.center() - Cj.center());
   real_t rho, alpha, beta;
 

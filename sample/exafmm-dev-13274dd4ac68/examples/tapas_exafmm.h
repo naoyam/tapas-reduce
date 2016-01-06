@@ -12,34 +12,47 @@ struct CellAttr {
     vecP L;
 };
 
-typedef tapas::BodyInfo<Body, 0> BodyInfo;
+template<class T, class U>
+constexpr size_t MemberOffset(U T::*pmem) {
+  return (char*)&((T*)nullptr->*pmem) - (char*)nullptr;
+}
+
+//
+// Offset of coordinate values in Body
+// ex.
+// If body type is
+//   struct MyBody {
+//     vec3 X;
+//   };
+// then it's 0.
+//
+const constexpr size_t kBodyCoordOffset = MemberOffset(&Body::X);
 
 // Select MPI or single-process
 #ifdef USE_MPI
-
-// Use multi-process version of hashed octree
 #include "tapas/hot.h"
-using HOT = tapas::HOT<3, tapas::sfc::Morton>;
-
-#else /* USE_MPI */
-
-// Use single-process version of hashed octree
+#else
 #include "tapas/single_node_hot.h"
-using HOT = tapas::SingleNodeHOT<3, tapas::sfc::Morton>;
-
 #endif /* USE_MPI */
 
+#ifdef MTHREADS
+#warning "MTHREADS is defined. Do you mean \"MTHREAD\"?"
+#endif
+
+#ifndef MTHREAD
+#warning "tapas_exafmm: building non-threaded code"
+#endif
 
 // Select threading component: serial or MassiveThreads
-#if defined(MTHREAD) || defined(MTHREADS)
+#ifdef MTHREAD
 #include "tapas/threading/massivethreads.h"
 using Threading = tapas::threading::MassiveThreads;
-#else /* no MTHREADS */
-using Threading = tapas::threading::Default;
-#endif /* MTHREADS */
+#endif /* MTHREAD */
 
-typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr,
-                     HOT, Threading
+#if 0 // ----------------------------------------------------------- Old TSP
+
+typedef tapas::Tapas<3, real_t, Body, kBodyCoordOffset, kvec4, CellAttr,
+                     HOT, Threading, Mapper
 #ifdef TAPAS_USE_VECTORMAP
 #  ifdef __CUDACC__
                      , tapas::Vectormap_CUDA_Packed<3, real_t, BodyInfo, kvec4>
@@ -49,7 +62,19 @@ typedef tapas::Tapas<3, real_t, BodyInfo, kvec4, CellAttr,
 #endif /*TAPAS_USE_VECTORMAP*/
                      > Tapas;
 
-typedef Tapas::Region Region;
+#else // ---------------------------------------------------------- New TSP
+
+struct FMM_Params : public tapas::HOT<3, real_t, Body, kBodyCoordOffset, kvec4, CellAttr> {
+#ifdef MTHREAD
+  using Threading = tapas::threading::MassiveThreads;
+#endif
+};
+
+using TapasFMM = tapas::Tapas2<FMM_Params>;
+
+#endif // ------------------------------------------------------------
+
+typedef TapasFMM::Region Region;
 
 #if 0 // to be deleted 
 namespace tapas_kernel {
