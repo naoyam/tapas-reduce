@@ -16,11 +16,9 @@ static void ProductMapImpl(Mapper &mapper,
                            T1_Iter iter1, int beg1, int end1,
                            T2_Iter iter2, int beg2, int end2,
                            Funct f, Args... args) {
-  assert(beg1 < end1 && beg2 < end2);
+  TAPAS_ASSERT(beg1 < end1 && beg2 < end2);
   
   using CellType = typename T1_Iter::CellType;
-  //using C1 = typename T1_Iter::value_type; // Container type (actually Body or Cell)
-  //using C2 = typename T2_Iter::value_type;
   using Th = typename CellType::Threading;
 
   using Callback = CallbackWrapper<Funct, Args...>;
@@ -131,15 +129,9 @@ struct CPUMapper {
    */
   template <class Funct, class... Args>
   void Map(Funct f, tapas::iterator::SubCellIterator<Cell> iter, Args...args) {
-    TAPAS_LOG_DEBUG() << "map non-product subcell iterator size: "
-                      << iter.size() << std::endl;
-    typedef typename Cell::Threading Th;
-  
-    // pack args... into a lambda closure
-    // FIXME: replace lambda with auto
-    std::function<void(Cell&)> lambda = [=](Cell &cell) { f(cell, args...); };
-  
+    using Th = typename Cell::Threading;
     typename Th::TaskGroup tg;
+    
     for (int i = 0; i < iter.size(); i++) {
       Cell &c = *iter;
       tg.createTask([f, c, &args...]() { c.mapper().Map(f, c, args...); });
@@ -194,15 +186,12 @@ struct CPUMapper {
    */
   template <class Funct, class... Args>
   void Map(Funct f, BodyIterator<Cell> iter, Args...args) {
-    TAPAS_LOG_DEBUG() << "map non-product body iterator size: "
-                      << iter.size() << std::endl;
     for (int i = 0; i < iter.size(); ++i) {
       f(*iter, args...);
       iter++;
     }
   }
 }; // class CPUMapper
-
 
 } // namespace hot
 } // namespace tapas
