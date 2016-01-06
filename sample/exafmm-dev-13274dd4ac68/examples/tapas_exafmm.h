@@ -49,21 +49,6 @@ const constexpr size_t kBodyCoordOffset = MemberOffset(&Body::X);
 using Threading = tapas::threading::MassiveThreads;
 #endif /* MTHREAD */
 
-#if 0 // ----------------------------------------------------------- Old TSP
-
-typedef tapas::Tapas<3, real_t, Body, kBodyCoordOffset, kvec4, CellAttr,
-                     HOT, Threading, Mapper
-#ifdef TAPAS_USE_VECTORMAP
-#  ifdef __CUDACC__
-                     , tapas::Vectormap_CUDA_Packed<3, real_t, BodyInfo, kvec4>
-#  else
-                     , tapas::Vectormap_CPU<3, real_t, BodyInfo, kvec4>
-#  endif /*__CUDACC__*/
-#endif /*TAPAS_USE_VECTORMAP*/
-                     > Tapas;
-
-#else // ---------------------------------------------------------- New TSP
-
 struct FMM_Params : public tapas::HOT<3, real_t, Body, kBodyCoordOffset, kvec4, CellAttr> {
 #ifdef MTHREAD
   using Threading = tapas::threading::MassiveThreads;
@@ -71,8 +56,6 @@ struct FMM_Params : public tapas::HOT<3, real_t, Body, kBodyCoordOffset, kvec4, 
 };
 
 using TapasFMM = tapas::Tapas2<FMM_Params>;
-
-#endif // ------------------------------------------------------------
 
 typedef TapasFMM::Region Region;
 

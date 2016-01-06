@@ -210,7 +210,6 @@ class Cell: public tapas::BasicCell<TSP> {
   typedef typename TSP::SFC SFC;
   typedef typename SFC::KeyType KeyType;
   using CellType = Cell<TSP>;
-  using Mapper = typename TSP::template Mapper<CellType, Body, LET<TSP>>;
 
   typedef std::unordered_map<KeyType, Cell*> CellHashTable;
   using KeySet = std::unordered_set<KeyType>;
@@ -221,6 +220,10 @@ class Cell: public tapas::BasicCell<TSP> {
   typedef typename TSP::BodyAttr BodyAttrType;
   typedef typename TSP::Threading Threading;
 
+  using Body = BodyType;
+  using BodyAttr = BodyAttrType;
+  using Mapper = typename TSP::template Mapper<CellType, Body, LET<TSP>>;
+  
   using BodyIterator = iter::BodyIterator<Cell>;
   using SubCellIterator = iter::SubCellIterator<Cell>;
 

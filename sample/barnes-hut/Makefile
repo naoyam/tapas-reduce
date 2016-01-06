@@ -4,8 +4,7 @@
 # CXXFLAGS := -std=c++11 -Wall -Wextra -O0
 # CXXFLAGS += -g -g3 -ggdb -Wall -fno-elide-constructors
 
-MODE ?= debug
-#MODE ?= release
+MODE ?= release
 
 ifeq ($(MODE),debug)
 	OPT = -O0

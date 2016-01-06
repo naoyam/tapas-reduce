@@ -75,6 +75,8 @@ static void ProductMapImpl(T1_Iter iter1, int beg1, int end1,
 
 template<class Cell, class Body, class LET>
 struct CPUMapper {
+  using ProxyCell = typename LET::ProxyCell;
+  using ProxyBody = typename LET::ProxyBody;
   /**
    * @brief Map function f over product of two iterators
    */

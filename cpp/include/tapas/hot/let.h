@@ -358,6 +358,7 @@ struct LET {
     using CellType = ProxyCell;
     using value_type = ProxyBodyIterator;
     using attr_type = ProxyBodyAttr;
+    using Mapper = typename CellType::Mapper;
 
    private:
     ProxyCell *c_;
@@ -371,6 +372,9 @@ struct LET {
     ProxyBodyIterator &operator*() {
       return *this;
     }
+
+    Mapper &mapper() { return c_->mapper(); }
+    const Mapper &mapper() const { return c_->mapper(); }
 
     inline int index() const { return idx_; }
     

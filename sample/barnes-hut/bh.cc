@@ -13,7 +13,6 @@
 #endif
 
 #include "tapas.h"
-#include "tapas/single_node_hot.h"
 
 //#define DIM (3)
 typedef double real_t;
@@ -41,6 +40,12 @@ typedef tapas::BodyInfo<float4, 0> BodyInfo;
 
 #ifdef USE_MPI
 #include "tapas/hot.h"
+#else
+#include "tapas/single_node_hot.h"
+#endif
+
+#if 0
+#if 0
 typedef tapas::Tapas<DIM, real_t,
                      BodyInfo, // BT
                      float4,   // Cell attr
@@ -54,7 +59,23 @@ typedef tapas::Tapas<DIM, real_t, BodyInfo,
                      float4,
                      tapas::SingleNodeHOT<DIM, tapas::sfc::Morton>,
                      tapas::threading::Default> Tapas;
+#endif // 0
+#endif // 0
+
+// Select threading component: serial or MassiveThreads
+#ifdef MTHREAD
+#include "tapas/threading/massivethreads.h"
+using Threading = tapas::threading::MassiveThreads;
+#endif /* MTHREAD */
+
+const constexpr size_t kBodyCoordOffset = 0;
+struct BH_Params : public tapas::HOT<3, real_t, float4, kBodyCoordOffset, float4, float4> {
+#ifdef MTHREAD
+  using Threading = tapas::threading::MassiveThreads;
 #endif
+};
+
+using Tapas = tapas::Tapas2<BH_Params>;
 
 double get_time() {
   struct timeval tv;

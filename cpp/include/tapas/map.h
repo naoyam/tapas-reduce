@@ -153,9 +153,14 @@ inline void DownwardMap(Funct f, T &x, Args...args) {
 /*EMPTY*/
 #else
 template <class Funct, class T, class... Args>
-void Map(Funct f, T &&x, Args...args) {
+void Map(Funct f, T &x, Args...args) {
   x.mapper().Map(f, std::forward(x), args...);
 }
+
+// template <class Funct, class T, class... Args>
+// void Map(Funct f, T &&x, Args...args) {
+//   x.mapper().Map(f, std::forward(x), args...);
+// }
 #endif /*TAPAS_USE_VECTORMAP*/
 
 } // namespace tapas

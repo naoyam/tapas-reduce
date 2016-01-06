@@ -93,7 +93,7 @@ class SharedData {
 #endif
   
   using BodyType = typename TSP::Body;
-  using BodyATtrType = typename TSP::BodyAttr;
+  using BodyAttrType = typename TSP::BodyAttr;
 
   HashTable ht_;
   bool opt_mutual_;
@@ -114,7 +114,8 @@ class Cell: public tapas::BasicCell<TSP> {
  public:
   typedef typename TSP::CellAttr attr_type;
   typedef typename TSP::Body BodyType;
-  typedef typename TSP::BodyAttr BodyAttrType;
+  typedef typename TSP::BodyAttr BodyAttrType; // to be fixed
+  typedef typename TSP::BodyAttr BodyAttr;
   typedef typename TSP::Threading Threading;
   
   using SFC = typename TSP::SFC;

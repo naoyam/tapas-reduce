@@ -90,13 +90,13 @@ echo Detecting mpicxx implementation
 # detect MPI implementation
 if mpicxx --showme:version 2>/dev/null | grep "Open MPI"; then
     # Opne MPI
-    MPICC="\"env CC=${CC} CXX=${CXX} mpicc\""
-    MPICXX="\"env CC=${CC} CXX=${CXX} mpicxx\""
+    MPICC="env CC=${CC} CXX=${CXX} mpicc"
+    MPICXX="env CC=${CC} CXX=${CXX} mpicxx"
     echo Looks like Open MPI.
 else
     # mpich family (mpich and mvapich)
-    MPICC="\"env MPICH_CXX=${CXX} MPICH_CC=${CC} mpicc\""
-    MPICXX="\"env MPICH_CXX=${CXX} MPICH_CC=${CC} mpicxx\""
+    MPICC="env MPICH_CXX=${CXX} MPICH_CC=${CC} mpicc"
+    MPICXX="env MPICH_CXX=${CXX} MPICH_CC=${CC} mpicxx"
     echo Looks like Mpich.
 fi
 

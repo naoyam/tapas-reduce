@@ -15,7 +15,9 @@ class BodyIterator {
  public:
   typedef Cell CellType;
   typedef BodyIterator value_type;
-  typedef typename CellType::BodyAttrType attr_type;
+  using Body = typename CellType::Body;
+  using BodyAttr = typename CellType::BodyAttr;
+  using attr_type = typename CellType::BodyAttr;
 
 #ifdef TAPAS_BODY_THREAD_SPAWN_THRESHOLD
   static const constexpr int kThreadSpawnThreshold = TAPAS_BODY_THREAD_SPAWN_THRESHOLD;
