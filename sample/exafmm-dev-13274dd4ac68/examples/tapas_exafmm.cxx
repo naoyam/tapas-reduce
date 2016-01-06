@@ -47,14 +47,6 @@ vec<DIM, FP> &asn(vec<DIM, FP> &dst, const tapas::Vec<DIM, FP> &src) {
   return dst;
 }
 
-#if 0
-static Region &asn(Region &x, const Bounds &y) {
-  asn(x.min(), y.Xmin);
-  asn(x.max(), y.Xmax);
-  return x;
-}
-#endif
-
 // UpDownPass::upwardPass
 static inline void FMM_Upward(TapasFMM::Cell &c, real_t /* theta */) {
   // theta is not used now; to be deleted
@@ -421,7 +413,7 @@ int main(int argc, char ** argv) {
   MPI_Comm_rank(MPI_COMM_WORLD, &args.mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &args.mpi_size);
 #endif
-
+  
 #ifdef TAPAS_USE_VECTORMAP
   TapasFMM::Cell::TSPClass::Vectormap::vectormap_setup(64, 31);
 #endif /*TAPAS_USE_VECTORMAP*/

@@ -59,21 +59,4 @@ using TapasFMM = tapas::Tapas2<FMM_Params>;
 
 typedef TapasFMM::Region Region;
 
-#if 0 // to be deleted 
-namespace tapas_kernel {
-
-void P2M(Tapas::Cell &C);
-void M2M(Tapas::Cell &C);
-void M2L(Tapas::Cell &Ci, Tapas::Cell &Cj, vec3 Xperiodic, bool mutual);
-void L2L(Tapas::Cell &C);
-void L2P(Tapas::BodyIterator &B);
-#ifdef TAPAS_USE_VECTORMAP
-struct P2P;
-#else
-void P2P(Tapas::BodyIterator &Ci, Tapas::BodyIterator &Cj, vec3 Xperiodic);
-#endif /*TAPAS_USE_VECTORMAP*/
-
-} // tapas_kernel
-#endif /* if 0 */
-
 #endif // EXAFMM_TAPAS_H_
