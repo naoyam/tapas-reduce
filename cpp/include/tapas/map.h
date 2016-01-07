@@ -148,11 +148,11 @@ inline void DownwardMap(Funct f, T &x, Args...args) {
 #ifdef TAPAS_USE_VECTORMAP
 /*EMPTY*/
 #else
-template <class Funct, class T, class... Args>
-void Map(Funct f, T x, Args...args) {
-  using Tn = typename std::remove_reference<T>::type;
-  x.mapper().Map(f, std::forward<Tn>(x), args...);
-}
+// template <class Funct, class T, class... Args>
+// void Map(Funct f, T x, Args...args) {
+//   using Tn = typename std::remove_reference<T>::type;
+//   x.mapper().Map(f, std::forward<Tn>(x), args...);
+// }
 
 // template <class Funct, class T, class... Args>
 // void Map(Funct f, T &&x, Args...args) {

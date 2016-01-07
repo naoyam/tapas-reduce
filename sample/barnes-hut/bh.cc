@@ -134,21 +134,21 @@ static real_t distR2(const tapas::Vec<3, double> &p, const float4 &q) {
 
 struct ComputeForce {
   
-  template<class BodyIterator>
-  inline void operator()(BodyIterator &p1, float4 approx, real_t eps2) const {
-    real_t dx = approx.x - p1->x; // const BodyType * BodyIterator::operator->()
-    real_t dy = approx.y - p1->y;
-    real_t dz = approx.z - p1->z;
+  template<class Body, class BodyAttr>
+  inline void operator()(Body &p1, BodyAttr &p1_attr, float4 approx, real_t eps2) const {
+    real_t dx = approx.x - p1.x; // const BodyType * BodyIterator::operator->()
+    real_t dy = approx.y - p1.y;
+    real_t dz = approx.z - p1.z;
     real_t R2 = dx * dx + dy * dy + dz * dz + eps2;
     real_t invR = 1.0 / std::sqrt(R2);
     real_t invR3 = invR * invR * invR;
 
-    auto tmp = p1.attr();  // const ProxyBodyAttrType &BodyIterator::attr() const;
+    auto tmp = p1_attr;  // const ProxyBodyAttrType &BodyIterator::attr() const;
     tmp.x += dx * invR3 * approx.w;
     tmp.y += dy * invR3 * approx.w;
     tmp.z += dz * invR3 * approx.w;
     tmp.w += invR * approx.w;
-    p1.attr() = tmp; // ProxyBodyAttrType::operator=()
+    p1_attr = tmp; // ProxyBodyAttrType::operator=()
   }
 };
 

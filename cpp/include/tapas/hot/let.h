@@ -358,22 +358,24 @@ struct LET {
     using CellType = ProxyCell;
     using value_type = ProxyBodyIterator;
     using attr_type = ProxyBodyAttr;
-    using Mapper = typename CellType::Mapper;
+    //using Mapper = typename CellType::Mapper;
+    using Mapper = ProxyMapper;
 
    private:
     ProxyCell *c_;
     index_t idx_;
+    ProxyMapper mapper_;
 
    public:
     static const constexpr int kThreadSpawnThreshold = 100;
     
-    ProxyBodyIterator(ProxyCell *c) : c_(c), idx_(0) { }
+    ProxyBodyIterator(ProxyCell *c) : c_(c), idx_(0), mapper_() { }
   
     ProxyBodyIterator &operator*() {
       return *this;
     }
 
-    Mapper &mapper() { return c_->mapper(); }
+    Mapper &mapper() { return mapper_; }
     const Mapper &mapper() const { return c_->mapper(); }
 
     inline int index() const { return idx_; }
@@ -520,12 +522,12 @@ struct LET {
       return key_ < rhs.key_;
     }
 
-    template<class UserFunct>
-    static SplitType Pred(UserFunct f, KeyType trg_key, KeyType src_key, const Data &data) {
+    template<class UserFunct, class...Args>
+    static SplitType Pred(KeyType trg_key, KeyType src_key, const Data &data, UserFunct f, Args...args) {
       ProxyCell trg_cell(trg_key, data);
       ProxyCell src_cell(src_key, data);
     
-      f(trg_cell, src_cell);
+      f(trg_cell, src_cell, args...);
 
       if (trg_cell.marked_split_ && src_cell.marked_split_) {
         return SplitType::SplitBoth;
@@ -696,32 +698,52 @@ struct LET {
    * @brief A dummy class of Mapper
    */
   struct ProxyMapper {
-    template<class Funct, class...Args>
-    inline static void Map(Funct, ProxyBodyIterator &&, Args...) {
-      //f(p);
-    }
+    // body
+    // template<class Funct, class...Args>
+    // inline void Map(Funct, ProxyBodyIterator &&, Args...) {
+    //   //f(p);
+    // }
     
+    // body
     template<class Funct, class...Args>
-    inline static void Map(Funct, ProxyBodyIterator &, Args...) {
-      //f(p);
+    inline void Map(Funct, ProxyBodyIterator &, Args...) {
+      // empty
     }
 
-    /**
-     * \fn void ProxyCell::Map
-     */
+    // body x body
     template<class Funct, class ...Args>
-    static void Map(Funct, ProxyCell &, ProxyCell &, Args...) {
-      // f(c1, c2)
-    }
-    
-    template<class Funct, class ...Args>
-    inline static void Map(Funct, ProxyBodyIterator, ProxyBodyIterator, Args...) {
-      //f(p1, p2);
+    inline void Map(Funct, ProxyBodyIterator, ProxyBodyIterator, Args...) {
+      // empty
     }
 
+    // body iter x body
     template<class Funct, class ...Args>
-    inline static void Map(Funct, ProxyBodyIterator, ProxyBody &, Args...) {
-      //f(p1, p2);
+    inline void Map(Funct, ProxyBodyIterator, ProxyBody &, Args...) {
+      // empty
+    }
+
+    // cell x cell
+    template<class Funct, class ...Args>
+    inline void Map(Funct, ProxyCell &, ProxyCell &, Args...) {
+      // empty
+    }
+
+    // subcell iter X cell iter
+    template <class Funct, class...Args>
+    inline void Map(Funct, SubCellIterator<ProxyCell> &, CellIterator<ProxyCell> &, Args...) {
+      // empty
+    }
+    
+    // cell iter X subcell iter
+    template <class Funct, class...Args>
+    inline void Map(Funct, CellIterator<ProxyCell> &, SubCellIterator<ProxyCell> &, Args...) {
+      // empty
+    }
+
+    // subcell iter X subcell iter
+    template <class Funct, class...Args>
+    inline void Map(Funct, SubCellIterator<ProxyCell> &, SubCellIterator<ProxyCell> &, Args...) {
+      // empty
     }
 
     /**
@@ -729,9 +751,6 @@ struct LET {
      */
     template <class Funct, class T1_Iter, class T2_Iter, class... Args>
     inline void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
-      TAPAS_LOG_DEBUG() << "map product iterator size: "
-                        << prod.size() << std::endl;
-      
       if (prod.size() > 0) {
         ProductMapImpl(*this,
                        prod.t1_, 0, prod.t1_.size(),
@@ -750,24 +769,26 @@ struct LET {
   // only with TSP parameter. It's impossible to declare a partial specialization to be friend.
   
   // Supporting routine for Traverse(KeyType, KeyType, Data, KeySet, KeySet);
-  template<class UserFunct>
-  static void Traverse(UserFunct f, std::vector<KeyType> &trg_keys, KeyType src_key,
-                       Data &data, KeySet &list_attr, KeySet &list_body) {
+  template<class UserFunct, class...Args>
+  static void Traverse(std::vector<KeyType> &trg_keys, KeyType src_key,
+                       Data &data, KeySet &list_attr, KeySet &list_body,
+                       UserFunct f, Args...args) {
     // Apply Traverse for each keys in trg_keys. If interaction between trg_keys[i] and src_key is 'approximate',
     // trg_keys[i+1...] will be all 'approximate'.
     for (size_t i = 0; i < trg_keys.size(); i++) {
-      Traverse(f, trg_keys[i], src_key, data, list_attr, list_body);
+      Traverse(trg_keys[i], src_key, data, list_attr, list_body, f, args...);
     }
   }
 
   // Supporting routine for Traverse(KeyType, KeyType, Data, KeySet, KeySet);
-  template<class UserFunct>
-  static void Traverse(UserFunct f, KeyType trg_key, std::vector<KeyType> src_keys,
-                       Data &data, KeySet &list_attr, KeySet &list_body) {
+  template<class UserFunct, class...Args>
+  static void Traverse(KeyType trg_key, std::vector<KeyType> src_keys,
+                       Data &data, KeySet &list_attr, KeySet &list_body,
+                       UserFunct f, Args...args) {
     // Apply Traverse for each keys in src_keys.
     // If interaction between trg_key and src_keys[i] is 'approximate', trg_keys[i+1...] will be all 'approximate'.
     for (size_t i = 0; i < src_keys.size(); i++) {
-      Traverse(f, trg_key, src_keys[i], data, list_attr, list_body);
+      Traverse(trg_key, src_keys[i], data, list_attr, list_body, f, args...);
     }
   }
 
@@ -779,9 +800,10 @@ struct LET {
    * \param list_attr (output) Set of request keys of which attrs are to be sent
    * \param list_body (output) Set of request keys of which bodies are to be sent
    */
-  template<class UserFunct>
-  static void Traverse(UserFunct f, KeyType trg_key, KeyType src_key, Data &data,
-                       KeySet &list_attr, KeySet &list_body) {
+  template<class UserFunct, class...Args>
+  static void Traverse(KeyType trg_key, KeyType src_key, Data &data,
+                       KeySet &list_attr, KeySet &list_body,
+                       UserFunct f, Args...args) {
     // Traverse traverses the hypothetical global tree and constructs a list of
     // necessary cells required by the local process.
     auto &ht = data.ht_; // hash table
@@ -820,9 +842,9 @@ struct LET {
 #if defined(MANUAL_LET)
     SplitType split = InteractionPred<TSP>(data)(trg_key, src_key);
 #elif defined(AUTO_LET_SLOW)
-    SplitType split = LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data); // automated predicator object
+    SplitType split = LET<TSP>::ProxyCell::Pred(trg_key, src_key, data, f, args...); // automated predicator object
 #else
-    SplitType split = LET<TSP>::ProxyCell::Pred(f, trg_key, src_key, data); // automated predicator object
+    SplitType split = LET<TSP>::ProxyCell::Pred(trg_key, src_key, data, f, args...); // automated predicator object
 #endif
 
     switch(split) {
@@ -830,7 +852,7 @@ struct LET {
         for (KeyType trg_ch : SFC::GetChildren(trg_key)) {
           if (ht.count(trg_ch) > 0) {
             for (KeyType src_ch : SFC::GetChildren(src_key)) {
-              Traverse(f, trg_ch, src_ch, data, list_attr, list_body);
+              Traverse(trg_ch, src_ch, data, list_attr, list_body, f, args...);
             }
           }
         }
@@ -838,7 +860,7 @@ struct LET {
       case SplitType::SplitLeft:
         for (KeyType ch : SFC::GetChildren(trg_key)) {
           if (ht.count(ch) > 0) {
-            Traverse(f, ch, src_key, data, list_attr, list_body);
+            Traverse(ch, src_key, data, list_attr, list_body, f, args...);
           }
         }
         break;
@@ -847,7 +869,7 @@ struct LET {
         break;
 
       case SplitType::SplitRight:
-        Traverse(f, trg_key, SFC::GetChildren(src_key), data, list_attr, list_body);
+        Traverse(trg_key, SFC::GetChildren(src_key), data, list_attr, list_body, f, args...);
         break;
 
       case SplitType::Approx:
@@ -890,9 +912,10 @@ struct LET {
   /**
    * \brief Traverse hypothetical global tree and construct a cell list.
    */
-  template<class UserFunct>
-  static void DoTraverse(UserFunct f, CellType &root,
-                         KeySet &req_keys_attr, KeySet &req_keys_body) {
+  template<class UserFunct, class...Args>
+  static void DoTraverse(CellType &root,
+                         KeySet &req_keys_attr, KeySet &req_keys_body,
+                         UserFunct f, Args...args) {
     double beg = MPI_Wtime();
     
     req_keys_attr.clear(); // cells of which attributes are to be transfered from remotes to local
@@ -914,7 +937,7 @@ struct LET {
 #endif
     
 #else
-    Traverse(f, root.key(), root.key(), root.data(), req_keys_attr, req_keys_body);
+    Traverse(root.key(), root.key(), root.data(), req_keys_attr, req_keys_body, f, args...);
 #endif
 
     double end = MPI_Wtime();
@@ -1215,8 +1238,8 @@ struct LET {
   /**
    * \brief Build Locally essential tree
    */
-  template<class UserFunct>
-  static void Exchange(UserFunct f, CellType &root) {
+  template<class UserFunct, class...Args>
+  static void Exchange(CellType &root, UserFunct f, Args...args) {
     double beg = MPI_Wtime();
     
 #ifdef TAPAS_DEBUG
@@ -1227,7 +1250,7 @@ struct LET {
     KeySet req_cell_attr_keys; // cells of which attributes are to be transfered from remotes to local
     KeySet req_leaf_keys; // cells of which bodies are to be transfered from remotes to local
     
-    DoTraverse(f, root, req_cell_attr_keys, req_leaf_keys);
+    DoTraverse(root, req_cell_attr_keys, req_leaf_keys, f, args...);
     
     std::vector<KeyType> res_cell_attr_keys; // cell keys of which attributes are requested
     std::vector<KeyType> res_leaf_keys; // leaf cell keys of which bodies are requested

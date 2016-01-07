@@ -150,7 +150,7 @@ struct CPUMapper {
       if (c1.data().mpi_size_ > 1) {
         char t[] = "TAPAS_IN_LET=1";
         putenv(t); // to avoid warning "convertion from const char* to char*"
-        LET::Exchange(f, c1);
+        LET::Exchange(c1, f, args...);
         unsetenv("TAPAS_IN_LET");
       }
 
