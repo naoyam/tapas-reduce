@@ -141,7 +141,7 @@ class SamplingOctree {
     }
 
     // sum(nb) must be equal to keys.size(), becuase the for loop above cover the entire domain
-    TAPAS_ASSERT(std::accumulate(nb.begin(), nb.end(), 0) == keys.size());
+    TAPAS_ASSERT(std::accumulate(nb.begin(), nb.end(), 0) == (int)keys.size());
         
     std::vector<int> nb_iscan(W); // inclusive scan of nb vector
 
@@ -220,12 +220,12 @@ class SamplingOctree {
       TAPAS_ASSERT(SFC::GetDepth(sampled_keys[0]) == SFC::MAX_DEPTH);
       
       proc_first_keys_ = PartitionSpace(sampled_keys, data_->mpi_size_);
-      TAPAS_ASSERT(proc_first_keys_.size() == data_->mpi_size_);
+      TAPAS_ASSERT((int)proc_first_keys_.size() == data_->mpi_size_);
     }
 
     // Each process's starting key is broadcast.
     tapas::mpi::Bcast(proc_first_keys_, dd_proc_id, MPI_COMM_WORLD);
-    TAPAS_ASSERT(proc_first_keys_.size() == data_->mpi_size_);
+    TAPAS_ASSERT((int)proc_first_keys_.size() == data_->mpi_size_);
 
     double end = MPI_Wtime();
     data_->time_tree_sample = end - beg;

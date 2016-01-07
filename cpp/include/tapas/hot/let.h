@@ -989,7 +989,7 @@ struct LET {
     std::vector<KeyType> keys_attr_send(req_keys_attr.begin(), req_keys_attr.end());
     std::vector<KeyType> keys_body_send(req_keys_body.begin(), req_keys_body.end());
   
-    TAPAS_ASSERT(data.proc_first_keys_.size() == data.mpi_size_);
+    TAPAS_ASSERT((int)data.proc_first_keys_.size() == data.mpi_size_);
     
     // Determine the destination process of each cell request
     std::vector<int> attr_dest = Partitioner<TSP>::FindOwnerProcess(data.proc_first_keys_, keys_attr_send);
