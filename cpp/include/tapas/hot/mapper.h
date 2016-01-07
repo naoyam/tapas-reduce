@@ -46,7 +46,6 @@ static void ProductMapImpl(Mapper &mapper,
 #ifdef TAPAS_COMPILER_INTEL
 # pragma forceinline
 #endif
-            //f(*lhs, *rhs, args...);
             mapper.Map(callback, *lhs, *rhs);
           }
         }
