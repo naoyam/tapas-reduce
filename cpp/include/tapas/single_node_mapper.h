@@ -136,39 +136,40 @@ struct CPUMapper {
   // cell x cell iter
   template <class Funct, class...Args>
   inline void Map(Funct f, Cell &c1, CellIterator<Cell> &c2, Args...args) {
-    f(c1, *c2, args...);
+    Map(f, c1, *c2, args...);
   }
 
   // cell X subcell iter
   template <class Funct, class...Args>
   inline void Map(Funct f, Cell &c1, SubCellIterator<Cell> &c2, Args...args) {
-    f(c1, *c2, args...);
+    Map(f, c1, *c2, args...);
   }
 
-  // cell iter x cell iter
+  // cell iter x cell iter --> cell x cell
   template <class Funct, class...Args>
   inline void Map(Funct f, CellIterator<Cell> &c1, CellIterator<Cell> &c2, Args...args) {
-    f(*c1, *c2, args...);
+    Map(f, *c1, *c2, args...);
   }
-
+  
   // cell iter X subcell iter
   template <class Funct, class...Args>
   inline void Map(Funct f, CellIterator<Cell> &c1, SubCellIterator<Cell> &c2, Args...args) {
-    f(*c1, *c2, args...);
+    Map(f, *c1, *c2, args...);
   }
 
-  // cell iter X subcell iter
+  // subcell iter X cell iter
   template <class Funct, class...Args>
   inline void Map(Funct f, SubCellIterator<Cell> &c1, CellIterator<Cell> &c2, Args...args) {
-    f(*c1, *c2, args...);
+    Map(f, *c1, *c2, args...);
   }
 
   // subcell iter X subcell iter
   template <class Funct, class...Args>
   inline void Map(Funct f, SubCellIterator<Cell> &c1, SubCellIterator<Cell> &c2, Args...args) {
-    f(*c1, *c2, args...);
+    Map(f, *c1, *c2, args...);
   }
 
+  // bodies
   template <class Funct, class... Args>
   void Map(Funct f, BodyIterator<Cell> iter, Args...args) {
     for (int i = 0; i < iter.size(); ++i) {
@@ -176,7 +177,8 @@ struct CPUMapper {
       iter++;
     }
   }
-  
+
+  // body x body
   template <class Funct, class... Args>
   void Map(Funct f, BodyIterator<Cell> b1, BodyIterator<Cell> b2, Args...args) {
     f(*b1, b1.attr(), *b2, b2.attr(), args...);

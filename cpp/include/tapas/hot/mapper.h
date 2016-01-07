@@ -21,9 +21,6 @@ static void ProductMapImpl(Mapper &mapper,
   using CellType = typename T1_Iter::CellType;
   using Th = typename CellType::Threading;
 
-  using Callback = CallbackWrapper<Funct, Args...>;
-  Callback callback(f, args...);
-
   const constexpr int kT1 = T1_Iter::kThreadSpawnThreshold;
   const constexpr int kT2 = T2_Iter::kThreadSpawnThreshold;
   
@@ -46,7 +43,7 @@ static void ProductMapImpl(Mapper &mapper,
 #ifdef TAPAS_COMPILER_INTEL
 # pragma forceinline
 #endif
-            mapper.Map(callback, *lhs, *rhs);
+            mapper.Map(f, lhs, rhs, args...);
           }
         }
       }
@@ -130,31 +127,26 @@ struct CPUMapper {
   void Map(Funct f, tapas::iterator::SubCellIterator<Cell> iter, Args...args) {
     using Th = typename Cell::Threading;
     typename Th::TaskGroup tg;
+
+    TAPAS_ASSERT(iter.index() == 0);
     
     for (int i = 0; i < iter.size(); i++) {
-      Cell &c = *iter;
-      tg.createTask([f, c, &args...]() { c.mapper().Map(f, c, args...); });
+      tg.createTask([=]() mutable { this->Map(f, *iter, args...); });
       iter++;
     } 
     tg.wait();
   }
+  
+  // template <class Funct, class...Args>
+  // void Map(Funct f, Cell &c1, Args...args) {
+  //   f(c1, args...);
+  // }
 
-  template <class Funct, class...Args>
-  void Map(Funct f, Cell &c1, Args...args) {
-    f(c1, args...);
-  }
-
-  template<class Funct, class...Args>
-  void Map(Funct f, BodyIterator<Cell> b1, BodyIterator<Cell> b2, Args...args) {
-#ifdef TAPAS_COMPILER_INTEL
-# pragma forceinline
-#endif
-    f(*b1, b1.attr(), *b2, b2.attr(), args...);
-  }
-
+  // cell x cell
   template <class Funct, class...Args>
   void Map(Funct f, Cell &c1, Cell &c2, Args... args) {
     if (c1.IsRoot() && c2.IsRoot()) {
+      std::cerr << "************************** Root x Root is called" << std::endl;
       if (c1.data().mpi_size_ > 1) {
         char t[] = "TAPAS_IN_LET=1";
         putenv(t); // to avoid warning "convertion from const char* to char*"
@@ -179,10 +171,50 @@ struct CPUMapper {
 #endif
     }
   }
+
+  // cell x cell iter
+  template <class Funct, class...Args>
+  inline void Map(Funct f, Cell &c1, CellIterator<Cell> &c2, Args...args) {
+    Map(f, c1, *c2, args...);
+    //f(c1, *c2, args...);
+  }
   
-  /**
-   * 
-   */
+  // cell iter x cell iter
+  template <class Funct, class...Args>
+  inline void Map(Funct f, CellIterator<Cell> &c1, CellIterator<Cell> &c2, Args...args) {
+    Map(f, *c1, *c2, args...);
+    //f(*c1, *c2, args...);
+  }
+
+  // cell X subcell iter
+  template <class Funct, class...Args>
+  inline void Map(Funct f, Cell &c1, SubCellIterator<Cell> &c2, Args...args) {
+    Map(f, c1, *c2, args...);
+    //f(c1, *c2, args...);
+  }
+
+  // cell iter X subcell iter
+  template <class Funct, class...Args>
+  inline void Map(Funct f, CellIterator<Cell> &c1, SubCellIterator<Cell> &c2, Args...args) {
+    Map(f, *c1, *c2, args...);
+    //f(*c1, *c2, args...);
+  }
+
+  // subcell iter X cell iter
+  template <class Funct, class...Args>
+  inline void Map(Funct f, SubCellIterator<Cell> &c1, CellIterator<Cell> &c2, Args...args) {
+    Map(f, *c1, *c2, args...);
+    //f(*c1, *c2, args...);
+  }
+
+  // subcell iter X subcell iter
+  template <class Funct, class...Args>
+  inline void Map(Funct f, SubCellIterator<Cell> &c1, SubCellIterator<Cell> &c2, Args...args) {
+    //f(*c1, *c2, args...);
+    Map(f, *c1, *c2, args...);
+  }
+
+  // bodies
   template <class Funct, class... Args>
   void Map(Funct f, BodyIterator<Cell> iter, Args...args) {
     for (int i = 0; i < iter.size(); ++i) {
@@ -190,6 +222,16 @@ struct CPUMapper {
       iter++;
     }
   }
+  
+  // body x body 
+  template<class Funct, class...Args>
+  void Map(Funct f, BodyIterator<Cell> b1, BodyIterator<Cell> b2, Args...args) {
+#ifdef TAPAS_COMPILER_INTEL
+# pragma forceinline
+#endif
+    f(*b1, b1.attr(), *b2, b2.attr(), args...);
+  }
+
 }; // class CPUMapper
 
 } // namespace hot
