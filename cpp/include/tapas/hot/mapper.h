@@ -78,9 +78,6 @@ struct CPUMapper {
    */
   template <class Funct, class T1_Iter, class T2_Iter, class... Args>
   inline void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
-    TAPAS_LOG_DEBUG() << "map product iterator size: "
-                      << prod.size() << std::endl;
-    
     if (prod.size() > 0) {
       ProductMapImpl(*this,
                      prod.t1_, 0, prod.t1_.size(),
@@ -91,9 +88,6 @@ struct CPUMapper {
   
   template <class Funct, class T1_Iter, class ...Args>
   inline void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
-    TAPAS_LOG_DEBUG() << "map product iterator size: "
-                      << prod.size() << std::endl;
-    
     if (prod.size() > 0) {
       ProductMapImpl(*this,
                      prod.t1_, 0, prod.t1_.size(),
@@ -146,12 +140,15 @@ struct CPUMapper {
   template <class Funct, class...Args>
   void Map(Funct f, Cell &c1, Cell &c2, Args... args) {
     if (c1.IsRoot() && c2.IsRoot()) {
-      std::cerr << "************************** Root x Root is called" << std::endl;
       if (c1.data().mpi_size_ > 1) {
+#ifdef TAPAS_DEBUG
         char t[] = "TAPAS_IN_LET=1";
         putenv(t); // to avoid warning "convertion from const char* to char*"
+#endif
         LET::Exchange(c1, f, args...);
+#ifdef TAPAS_DEBUG
         unsetenv("TAPAS_IN_LET");
+#endif
       }
 
 #ifdef TAPAS_USE_VECTORMAP

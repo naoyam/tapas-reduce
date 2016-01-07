@@ -898,7 +898,7 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) {
     TAPAS_LOG_ERROR() << ss.str(); abort();
     TAPAS_ASSERT(c != nullptr);
   }
-#endif
+#endif // TAPAS_DEBUG
   
   return *c;
 }
@@ -1374,7 +1374,6 @@ ProductIterator<tapas::iterator::CellIterator<hot::Cell<TSP>>,
                 tapas::iterator::CellIterator<hot::Cell<TSP>>>
                                     Product(hot::Cell<TSP> &c1,
                                             hot::Cell<TSP> &c2) {
-  TAPAS_LOG_DEBUG() << "Cell-Cell product\n";
   typedef hot::Cell<TSP> CellType;
   typedef CellIterator<CellType> CellIterType;
   return ProductIterator<CellIterType, CellIterType>(

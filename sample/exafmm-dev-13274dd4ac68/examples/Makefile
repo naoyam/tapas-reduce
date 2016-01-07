@@ -19,7 +19,7 @@ ifeq ($(MODE),debug)
 	LFLAGS += -DASSERT # Turns on asserttions (otherwise define an empty macro function)
 else
 	OPT = -O3 # -O3 is also OK, but when gprof is used, gprof command misunderstand names of functions called as 'frame_dummy'
-	DEBUG = -DTAPAS_DEBUG=0
+	DEBUG = -DTAPAS_DEBUG=0 -DNDEBUG
 	LOG = -DTAPAS_LOG_LEVEL=0
 endif
 

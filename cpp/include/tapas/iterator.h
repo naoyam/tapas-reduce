@@ -144,7 +144,7 @@ class CellIterator {
     return c_ == x.c_;
   }
   CellIterator& operator+(int n) {
-    assert(n == 0);
+    assert(n == 0); (void)n;
     return *this;
   }
   CellIterator& operator+=(int n) {

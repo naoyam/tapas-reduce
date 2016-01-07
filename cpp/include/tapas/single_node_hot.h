@@ -638,7 +638,7 @@ Partitioner<TSP>::Partition(typename TSP::Body *b, index_t nb) {
     KeyType root_key = 0;
     auto get_key = [](const HelperNode<TSP>& hn) { return hn.key; };
     auto kp = GetBodyRange<SFC, HelperNode<TSP>>(root_key, hn, get_key);
-    assert(kp.first == (KeyType)0 && kp.second == (KeyType)nb);
+    assert(kp.first == (KeyType)0 && kp.second == (KeyType)nb); (void)kp;
 
     auto data = std::make_shared<SharedData<TSP>>();
     auto &ht = data->ht_;
