@@ -149,7 +149,7 @@ struct CPUMapper {
 #ifdef TAPAS_COMPILER_INTEL
 # pragma forceinline
 #endif
-    f(b1, b2, args...);
+    f(*b1, b1.attr(), *b2, b2.attr(), args...);
   }
 
   template <class Funct, class...Args>
@@ -186,7 +186,7 @@ struct CPUMapper {
   template <class Funct, class... Args>
   void Map(Funct f, BodyIterator<Cell> iter, Args...args) {
     for (int i = 0; i < iter.size(); ++i) {
-      f(*iter, args...);
+      f(*iter, iter.attr(), args...);
       iter++;
     }
   }

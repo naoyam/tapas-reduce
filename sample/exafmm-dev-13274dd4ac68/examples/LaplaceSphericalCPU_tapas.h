@@ -265,39 +265,38 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
   if (mutual) Cj.attr() = attr_j;
 }
 
-void L2P(TapasFMM::BodyIterator &B) {
+void L2P(Body &b, BodyAttr &ba, TapasFMM::Cell &c) {
   complex_t Ynm[P*P], YnmTheta[P*P];
-  const TapasFMM::Cell &C = B.cell();
-  vec3 dX = B->X - tovec(C.center());
+  vec3 dX = b.X - tovec(c.center());
   vec3 spherical = 0;
   vec3 cartesian = 0;
   real_t r, theta, phi;
   cart2sph(r, theta, phi, dX);
   evalMultipole(r, theta, phi, Ynm, YnmTheta);
-  B.attr() /= B->SRC;
+  ba /= b.SRC;
   for (int n=0; n<P; n++) {
     int nm  = n * n + n;
     int nms = n * (n + 1) / 2;
-    //B->TRG[0] += std::real(C.attr().L[nms] * Ynm[nm]);
-    B.attr()[0] += std::real(C.attr().L[nms] * Ynm[nm]);
-    spherical[0] += std::real(C.attr().L[nms] * Ynm[nm]) / r * n;
-    spherical[1] += std::real(C.attr().L[nms] * YnmTheta[nm]);
+    //b.TRG[0] += std::real(c.attr().L[nms] * Ynm[nm]);
+    ba[0] += std::real(c.attr().L[nms] * Ynm[nm]);
+    spherical[0] += std::real(c.attr().L[nms] * Ynm[nm]) / r * n;
+    spherical[1] += std::real(c.attr().L[nms] * YnmTheta[nm]);
     for( int m=1; m<=n; m++) {
       nm  = n * n + n + m;
       nms = n * (n + 1) / 2 + m;
-      //B->TRG[0] += 2 * std::real(C.attr().L[nms] * Ynm[nm]);
-      B.attr()[0] += 2 * std::real(C.attr().L[nms] * Ynm[nm]);
-      spherical[0] += 2 * std::real(C.attr().L[nms] * Ynm[nm]) / r * n;
-      spherical[1] += 2 * std::real(C.attr().L[nms] * YnmTheta[nm]);
-      spherical[2] += 2 * std::real(C.attr().L[nms] * Ynm[nm] * I) * m;
+      //b.TRG[0] += 2 * std::real(c.attr().L[nms] * Ynm[nm]);
+      ba[0] += 2 * std::real(c.attr().L[nms] * Ynm[nm]);
+      spherical[0] += 2 * std::real(c.attr().L[nms] * Ynm[nm]) / r * n;
+      spherical[1] += 2 * std::real(c.attr().L[nms] * YnmTheta[nm]);
+      spherical[2] += 2 * std::real(c.attr().L[nms] * Ynm[nm] * I) * m;
     }
   }
   sph2cart(r, theta, phi, spherical, cartesian);
-  B.attr()[1] += cartesian[0];
-  //B->TRG[2] += cartesian[1];
-  B.attr()[2] += cartesian[1];
-  //B->TRG[3] += cartesian[2];
-  B.attr()[3] += cartesian[2]; 
+  ba[1] += cartesian[0];
+  //b.TRG[2] += cartesian[1];
+  ba[2] += cartesian[1];
+  //b.TRG[3] += cartesian[2];
+  ba[3] += cartesian[2]; 
 }
 
 void L2L(TapasFMM::Cell &C) {

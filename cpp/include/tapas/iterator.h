@@ -33,11 +33,11 @@ class BodyIterator {
   }
   const Body &operator*() const {
     TAPAS_ASSERT(idx_ < c_.nb());
-    return *c_.body(idx_);
+    return c_.body(idx_);
   }
-  BodyIterator &operator*() {
+  Body& operator*() {
     TAPAS_ASSERT(idx_ < c_.nb());
-    return *this;
+    return c_.body(idx_);
   }
   BodyIterator<CellType>& operator+=(int n) {
     idx_ += n;
@@ -58,7 +58,7 @@ class BodyIterator {
   void rewind(int idx) {
     idx_ = idx;
   }
-  typename CellType::BodyAttrType &attr() const {
+  typename CellType::BodyAttrType &attr() {
     return c_.body_attr(idx_);
   }
   INLINE CellType &cell() {
@@ -300,10 +300,10 @@ class ProductIterator {
   typename T2::value_type &second() {
     return *t2_;
   }
-  typename T1::attr_type &attr_first() const {
+  typename T1::attr_type &attr_first() {
     return t1_.attr();
   }
-  typename T2::attr_type &attr_second() const {
+  typename T2::attr_type &attr_second() {
     return t2_.attr();
   }
   
@@ -357,10 +357,10 @@ class ProductIterator<ITER, void> {
   typename ITER::value_type &second() {
     return *t2_;
   }
-  typename ITER::attr_type &attr_first() const {
+  typename ITER::attr_type &attr_first() {
     return t1_.attr();
   }
-  typename ITER::attr_type &attr_second() const {
+  typename ITER::attr_type &attr_second() {
     return t2_.attr();
   }
   

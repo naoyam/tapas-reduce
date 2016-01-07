@@ -83,10 +83,6 @@ struct IfCell<T,T,T,Iter1,Iter2> {
 template <class Funct, class T1_Iter, class T2_Iter, class... Args>
 void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
   using CellType = typename T1_Iter::CellType;
-
-  TAPAS_LOG_DEBUG() << "map product iterator size: "
-                    << prod.size() << std::endl;
-  
   if (prod.size() > 0) {
     CellType &c = *(prod.t1_);
     c.mapper().Map(f, prod, args...);

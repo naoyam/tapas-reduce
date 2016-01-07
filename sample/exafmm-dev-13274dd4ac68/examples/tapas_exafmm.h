@@ -12,6 +12,9 @@ struct CellAttr {
     vecP L;
 };
 
+// Body is defined in types.h
+using BodyAttr = kvec4;
+
 template<class T, class U>
 constexpr size_t MemberOffset(U T::*pmem) {
   return (char*)&((T*)nullptr->*pmem) - (char*)nullptr;

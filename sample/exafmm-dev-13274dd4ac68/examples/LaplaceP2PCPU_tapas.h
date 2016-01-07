@@ -30,19 +30,19 @@ struct P2P {
 #else /* TAPAS_USE_VECTORMAP */
 
 struct P2P {
-  template<class BodyIterator>
-  void operator()(BodyIterator &Bi, BodyIterator &Bj, vec3 Xperiodic, int mutual) {
+  template<class _Body, class _BodyAttr>
+  void operator()(_Body &Bi, _BodyAttr &Bi_attr, _Body &Bj, _BodyAttr &Bj_attr, vec3 Xperiodic, int mutual) {
     kreal_t pot = 0; 
     kreal_t ax = 0;
     kreal_t ay = 0;
     kreal_t az = 0;
-    vec3 dX = Bi->X - Bj->X - Xperiodic;
+    vec3 dX = Bi.X - Bj.X - Xperiodic;
     real_t R2 = norm(dX) + EPS2;
 
     if (R2 != 0) {
-      auto attr = Bi.attr();
+      auto attr = Bi_attr;
       real_t invR2 = 1.0 / R2;
-      real_t invR = Bi->SRC * Bj->SRC * sqrt(invR2);
+      real_t invR = Bi.SRC * Bj.SRC * sqrt(invR2);
       dX *= invR2 * invR;
       pot += invR;
       ax += dX[0];
@@ -53,15 +53,15 @@ struct P2P {
       attr[1] -= dX[0];
       attr[2] -= dX[1];
       attr[3] -= dX[2];
-      Bi.attr() = attr; // Element-wise assignment to BodyAttribute is not allowed in Tapas
+      Bi_attr = attr; // Element-wise assignment to BodyAttribute is not allowed in Tapas
 
-      if (mutual && Bi != Bj) {
-        attr = Bj.attr();
+      if (mutual && Bi.X != Bj.X) {
+        attr = Bj_attr;
         attr[0] += invR;
         attr[1] += dX[0];
         attr[2] += dX[1];
         attr[3] += dX[2];
-        Bj.attr() = attr;
+        Bj_attr = attr;
       }
     }
   }
