@@ -108,13 +108,15 @@ struct CPUMapper {
 #endif
   
   template <class Funct, class... Args>
-  void Map(Funct f, tapas::iterator::SubCellIterator<Cell> iter, Args...args) {
+  void Map(Funct f, SubCellIterator<Cell> iter, Args...args) {
     typedef typename Cell::Threading Th;
+
+    TAPAS_ASSERT(iter.index() == 0);
 
     typename Th::TaskGroup tg;
     for (int i = 0; i < iter.size(); i++) {
-      Cell &c = *iter;
-      tg.createTask([&, this]() { this->Map(f, c, args...); });
+      //Cell &c = *iter;
+      tg.createTask([=]() mutable { this->Map(f, *iter, args...); });
       iter++;
     } 
     tg.wait();
@@ -152,6 +154,18 @@ struct CPUMapper {
   // cell iter X subcell iter
   template <class Funct, class...Args>
   inline void Map(Funct f, CellIterator<Cell> &c1, SubCellIterator<Cell> &c2, Args...args) {
+    f(*c1, *c2, args...);
+  }
+
+  // cell iter X subcell iter
+  template <class Funct, class...Args>
+  inline void Map(Funct f, SubCellIterator<Cell> &c1, CellIterator<Cell> &c2, Args...args) {
+    f(*c1, *c2, args...);
+  }
+
+  // subcell iter X subcell iter
+  template <class Funct, class...Args>
+  inline void Map(Funct f, SubCellIterator<Cell> &c1, SubCellIterator<Cell> &c2, Args...args) {
     f(*c1, *c2, args...);
   }
 
