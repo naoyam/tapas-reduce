@@ -25,31 +25,31 @@ class BodyIterator {
   static const constexpr int kThreadSpawnThreshold = 12800;
 #endif
   
-  int index() const { return idx_; } // for debugging
   BodyIterator(CellType &c)
       : c_(c), idx_(0) {}
-  index_t size() const {
+  inline int index() const { return idx_; } // for debugging
+  inline index_t size() const {
     return c_.nb();
   }
-  const Body &operator*() const {
+  inline const Body &operator*() const {
     TAPAS_ASSERT(idx_ < c_.nb());
     return c_.body(idx_);
   }
-  Body& operator*() {
+  inline Body& operator*() {
     TAPAS_ASSERT(idx_ < (int)c_.nb());
     return c_.body(idx_);
   }
-  BodyIterator<CellType>& operator+=(int n) {
+  inline BodyIterator<CellType>& operator+=(int n) {
     idx_ += n;
     TAPAS_ASSERT((size_t)idx_ < c_.nb());
     return *this;
   }
-  BodyIterator<CellType> operator+(int n) {
+  inline BodyIterator<CellType> operator+(int n) {
     BodyIterator<CellType> tmp(*this);
     tmp += n;
     return tmp;
   }
-  bool IsLocal() const {
+  inline bool IsLocal() const {
     return c_.IsLocal();
   }
   inline const typename CellType::BodyType *operator->() const {
@@ -61,10 +61,10 @@ class BodyIterator {
   typename CellType::BodyAttrType &attr() {
     return c_.body_attr(idx_);
   }
-  INLINE CellType &cell() {
+  inline CellType &cell() {
     return c_;
   }
-  INLINE const CellType &cell() const {
+  inline const CellType &cell() const {
     return c_;
   }
   inline const typename CellType::BodyType &operator++() {
@@ -73,11 +73,11 @@ class BodyIterator {
   inline const typename CellType::BodyType &operator++(int) {
     return c_.body(idx_++);
   }
-  bool operator==(const BodyIterator &x) const {
+  inline bool operator==(const BodyIterator &x) const {
     return c_ == x.c_ && idx_ == x.idx_;
   }
   
-  bool operator<(const BodyIterator &x) const {
+  inline bool operator<(const BodyIterator &x) const {
     if (!(c_ == x.c_)) {
       return c_ < x.c_;
     } else {
@@ -85,12 +85,12 @@ class BodyIterator {
     }
   }
   
-  bool operator!=(const BodyIterator &x) const {
+  inline bool operator!=(const BodyIterator &x) const {
     return !operator==(x);
   }
   template <class T>
-  bool operator==(const T &) const { return false; }
-  bool AllowMutualInteraction(const BodyIterator &x) const {
+  inline bool operator==(const T &) const { return false; }
+  inline bool AllowMutualInteraction(const BodyIterator &x) const {
     return c_.GetOptMutual() && c_ == x.c_;
   }
 };
