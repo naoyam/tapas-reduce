@@ -71,10 +71,6 @@ static void ProductMapImpl(Mapper &mapper,
 
 template<class Cell, class Body, class LET>
 struct CPUMapper {
-  using ProxyCell = typename LET::ProxyCell;
-  using ProxyBody = typename LET::ProxyBody;
-  using ProxyBodyIterator = typename LET::ProxyBodyIterator;
-  
   /**
    * @brief Map function f over product of two iterators
    */
@@ -175,41 +171,35 @@ struct CPUMapper {
   template <class Funct, class...Args>
   inline void Map(Funct f, Cell &c1, CellIterator<Cell> &c2, Args...args) {
     Map(f, c1, *c2, args...);
-    //f(c1, *c2, args...);
   }
   
   // cell iter x cell iter
   template <class Funct, class...Args>
   inline void Map(Funct f, CellIterator<Cell> &c1, CellIterator<Cell> &c2, Args...args) {
     Map(f, *c1, *c2, args...);
-    //f(*c1, *c2, args...);
   }
 
   // cell X subcell iter
   template <class Funct, class...Args>
   inline void Map(Funct f, Cell &c1, SubCellIterator<Cell> &c2, Args...args) {
     Map(f, c1, *c2, args...);
-    //f(c1, *c2, args...);
   }
 
   // cell iter X subcell iter
   template <class Funct, class...Args>
   inline void Map(Funct f, CellIterator<Cell> &c1, SubCellIterator<Cell> &c2, Args...args) {
     Map(f, *c1, *c2, args...);
-    //f(*c1, *c2, args...);
   }
 
   // subcell iter X cell iter
   template <class Funct, class...Args>
   inline void Map(Funct f, SubCellIterator<Cell> &c1, CellIterator<Cell> &c2, Args...args) {
     Map(f, *c1, *c2, args...);
-    //f(*c1, *c2, args...);
   }
 
   // subcell iter X subcell iter
   template <class Funct, class...Args>
   inline void Map(Funct f, SubCellIterator<Cell> &c1, SubCellIterator<Cell> &c2, Args...args) {
-    //f(*c1, *c2, args...);
     Map(f, *c1, *c2, args...);
   }
 
