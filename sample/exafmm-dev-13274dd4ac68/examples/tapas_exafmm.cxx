@@ -203,7 +203,7 @@ void CheckResult(Bodies &bodies, int numSamples, real_t cycle, int images) {
 
   for (int p = 0; p < mpi_size; p++) {
     if (p == mpi_rank) {
-      std::cerr << "Computing on rank " << p << " against " << bodies.size() << " bodies." << std::endl;
+      std::cout << "Computing on rank " << p << " against " << bodies.size() << " bodies." << std::endl;
       Cells cells;
       cells.resize(2);
       C_iter Ci = cells.begin(), Cj = cells.begin() + 1;
