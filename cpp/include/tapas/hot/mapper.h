@@ -23,6 +23,8 @@ static void ProductMapImpl(Mapper &mapper,
 
   const constexpr int kT1 = T1_Iter::kThreadSpawnThreshold;
   const constexpr int kT2 = T2_Iter::kThreadSpawnThreshold;
+
+  bool am = iter1.AllowMutualInteraction(iter2);
   
   if (end1 - beg1 <= kT1 || end2 - beg2 <= kT2) {
     // The two ranges (beg1,end1) and (beg2,end2) are fine enough to apply f in a serial manner.
@@ -36,7 +38,7 @@ static void ProductMapImpl(Mapper &mapper,
         T2_Iter rhs = iter2 + j;
         // if i and j are mutually interactive, f(i,j) is evaluated only once.
 
-        bool am = lhs.AllowMutualInteraction(rhs);
+        //bool am = lhs.AllowMutualInteraction(rhs);
         
         if ((am && i <= j) || !am) {
           if (lhs.IsLocal()) {
