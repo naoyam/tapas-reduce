@@ -237,16 +237,14 @@ struct Vectormap_CUDA_Simple {
 
     T* allocate(size_t n, const void* hint = 0) {
       T* p;
-      cudaError_t ce;
-      ce = cudaMallocManaged(&p, (sizeof(T) * n), cudaMemAttachGlobal);
-      assert(ce == cudaSuccess && p != 0);
+      CUDA_SAFE_CALL(cudaMallocManaged(&p, (sizeof(T) * n), cudaMemAttachGlobal));
+      assert(p != nullptr);
       fprintf(stderr, ";; cudaMallocManaged() p=%p n=%zd\n", p, n); fflush(0);
       return p;
     }
 
     void deallocate(T* p, size_t n) {
-      cudaError_t ce = cudaFree(p);
-      assert(ce == cudaSuccess);
+      CUDA_SAFE_CALL(cudaFree(p));
       fprintf(stderr, ";; cudaFree() p=%p n=%zd\n", p, n); fflush(0);
     }
 
@@ -286,9 +284,8 @@ struct Vectormap_CUDA_Simple {
 
 #endif /*EXAFMM_TAPAS_MPI*/
 
-    cudaError_t ce;
     int ngpus;
-    ce = cudaGetDeviceCount(&ngpus);
+    CUDA_SAFE_CALL(cudaGetDeviceCount(&ngpus));
     assert(ce == cudaSuccess);
     if (ngpus < nprocsinnode) {
       fprintf(stderr, "More ranks than GPUs on a node\n");
@@ -297,10 +294,8 @@ struct Vectormap_CUDA_Simple {
 
     tesla_dev.gpuno = rankinnode;
     cudaDeviceProp prop;
-    ce = cudaGetDeviceProperties(&prop, tesla_dev.gpuno);
-    assert(ce == cudaSuccess);
-    ce = cudaSetDevice(tesla_dev.gpuno);
-    assert(ce == cudaSuccess);
+    CUDA_SAFE_CALL(cudaGetDeviceProperties(&prop, tesla_dev.gpuno));
+    CUDA_SAFE_CALL(cudaSetDevice(tesla_dev.gpuno));
 
     printf(";; Rank#%d uses GPU#%d\n", rank, tesla_dev.gpuno);
 
@@ -323,15 +318,13 @@ struct Vectormap_CUDA_Simple {
     assert(prop.maxThreadsPerMultiProcessor >= prop.maxThreadsPerBlock * 2);
 
     for (int i = 0; i < tesla_dev.n_streams; i++) {
-      ce = cudaStreamCreate(&tesla_dev.streams[i]);
-      assert(ce == cudaSuccess);
+      CUDA_SAFE_CALL(cudaStreamCreate(&tesla_dev.streams[i]));
     }
   }
 
   static void vectormap_release() {
     for (int i = 0; i < tesla_dev.n_streams; i++) {
-      cudaError_t ce = cudaStreamDestroy(tesla_dev.streams[i]);
-      assert(ce == cudaSuccess);
+      CUDA_SAFE_CALL(cudaStreamDestroy(tesla_dev.streams[i]));
     }
   }
 
@@ -340,14 +333,7 @@ struct Vectormap_CUDA_Simple {
   template <class Funct, class... Args>
   static void vectormap_finish(Funct f, Args... args) {
     vectormap_check_error("vectormap_end", __FILE__, __LINE__);
-    cudaError_t ce;
-    ce = cudaDeviceSynchronize();
-    if (ce != cudaSuccess) {
-      fprintf(stderr,
-              "%s:%i (%s): CUDA ERROR (%d): %s.\n",
-              __FILE__, __LINE__, "cudaDeviceSynchronize", (int)ce, cudaGetErrorString(ce));
-      assert(ce == cudaSuccess);
-    }
+    CUDA_SAFE_CALL(cudaDeviceSynchronize());
   }
 
   /* (One argument mapping) */
@@ -373,10 +359,9 @@ struct Vectormap_CUDA_Simple {
     static struct cudaFuncAttributes tesla_attr0;
     if (tesla_attr0.binaryVersion == 0) {
       mutex0.lock();
-      cudaError_t ce = cudaFuncGetAttributes(
-        &tesla_attr0,
-        &vectormap_cuda_kernel1<Funct, typename Cell::BodyType, Args...>);
-      assert(ce == cudaSuccess);
+      CUDA_SAFE_CALL(cudaFuncGetAttributes(
+          &tesla_attr0,
+          &vectormap_cuda_kernel1<Funct, typename Cell::BodyType, Args...>));
       mutex0.unlock();
     }
     assert(tesla_attr0.binaryVersion != 0);
@@ -406,17 +391,16 @@ struct Vectormap_CUDA_Simple {
   template <class Funct, class Cell, class... Args>
   static void vectormap_cuda_plain(Funct f, Cell &c0, Cell &c1,
                                    Args... args) {
-    typedef typename Cell::BT::type BV;
-    typedef typename Cell::BT_ATTR BA;
+    using BV = typename Cell::Body;
+    using BA = typename Cell::BodyAttr;
 
     static std::mutex mutex1;
     static struct cudaFuncAttributes tesla_attr1;
     if (tesla_attr1.binaryVersion == 0) {
       mutex1.lock();
-      cudaError_t ce = cudaFuncGetAttributes(
-        &tesla_attr1,
-        &vectormap_cuda_plain_kernel2<Funct, BV, BA, Args...>);
-      assert(ce == cudaSuccess);
+      CUDA_SAFE_CALL(cudaFuncGetAttributes(
+          &tesla_attr1,
+          &vectormap_cuda_plain_kernel2<Funct, BV, BA, Args...>));
       mutex1.unlock();
     }
     assert(tesla_attr1.binaryVersion != 0);
@@ -489,8 +473,8 @@ struct Cell_Data {
 template<int _DIM, class _FP, class _BT, class _BT_ATTR>
 struct Vectormap_CUDA_Packed
   : Vectormap_CUDA_Simple<_DIM, _FP, _BT, _BT_ATTR> {
-  typedef typename _BT::type BV;
-  typedef _BT_ATTR BA;
+  using BV = _BT;
+  using BA = _BT_ATTR;
 
   using CellPair = std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>;
 
@@ -542,8 +526,8 @@ struct Vectormap_CUDA_Packed
   template <class Funct, class Cell, class... Args>
   static void vector_map2(Funct f, ProductIterator<BodyIterator<Cell>> prod,
                           Args... args) {
-    typedef typename Cell::BT::type BV;
-    typedef typename Cell::BT_ATTR BA;
+    using BV = typename Cell::Body;
+    using BA = typename Cell::BodyAttr;
 
     const Cell &c0 = prod.first().cell();
     const Cell &c1 = prod.second().cell();
@@ -584,8 +568,8 @@ struct Vectormap_CUDA_Packed
                                int tilesize,
                                size_t nblocks, int ctasize, int scratchpadsize,
                                Cell &dummy, Funct f, Args... args) {
-    typedef typename Cell::BT::type BV;
-    typedef typename Cell::BT_ATTR BA;
+    using BV = typename Cell::Body;
+    using BA = typename Cell::BodyAttr;
 
     /*AHO*/
     if (0) {
@@ -620,21 +604,19 @@ struct Vectormap_CUDA_Packed
 
   template <class Funct, class Cell, class... Args>
   static void vectormap_on_collected(Funct f, Cell dummy, Args... args) {
-    typedef typename Cell::BT::type BV;
-    typedef typename Cell::BT_ATTR BA;
+    using BV = typename Cell::Body;
+    using BA = typename Cell::BodyAttr;
 
     if (cellpairs().size() == 0) {
       return;
     }
-    cudaError_t ce;
     static std::mutex mutex2;
     static struct cudaFuncAttributes tesla_attr2;
     if (tesla_attr2.binaryVersion == 0) {
       mutex2.lock();
-      cudaError_t ce = cudaFuncGetAttributes(
-        &tesla_attr2,
-        &vectormap_cuda_pack_kernel2<Funct, BV, BA, Cell_Data, Args...>);
-      assert(ce == cudaSuccess);
+      CUDA_SAFE_CALL(cudaFuncGetAttributes(
+          &tesla_attr2,
+          &vectormap_cuda_pack_kernel2<Funct, BV, BA, Cell_Data, Args...>));
       mutex2.unlock();
       if (0) {
         /*GOMI*/
@@ -666,24 +648,16 @@ struct Vectormap_CUDA_Packed
     size_t nblocks = TAPAS_CEILING(N0, ctasize);
 
     if (npairs() < cellpairs().size()) {
-      ce = cudaFree(dvcells());
-      assert(ce == cudaSuccess);
-      ce = cudaFree(dacells());
-      assert(ce == cudaSuccess);
-      ce = cudaFree(hvcells());
-      assert(ce == cudaSuccess);
-      ce = cudaFree(hacells());
-      assert(ce == cudaSuccess);
+      CUDA_SAFE_CALL(cudaFree(dvcells()));
+      CUDA_SAFE_CALL(cudaFree(dacells()));
+      CUDA_SAFE_CALL(cudaFree(hvcells()));
+      CUDA_SAFE_CALL(cudaFree(hacells()));
 
       npairs() = cellpairs().size();
-      ce = cudaMalloc(&dvcells(), (sizeof(Cell_Data<BV>) * npairs()));
-      assert(ce == cudaSuccess);
-      ce = cudaMalloc(&dacells(), (sizeof(Cell_Data<BA>) * npairs()));
-      assert(ce == cudaSuccess);
-      ce = cudaMallocHost(&hvcells(), (sizeof(Cell_Data<BV>) * npairs()));
-      assert(ce == cudaSuccess);
-      ce = cudaMallocHost(&hacells(), (sizeof(Cell_Data<BA>) * npairs()));
-      assert(ce == cudaSuccess);
+      CUDA_SAFE_CALL(cudaMalloc(&dvcells(), (sizeof(Cell_Data<BV>) * npairs())));
+      CUDA_SAFE_CALL(cudaMalloc(&dacells(), (sizeof(Cell_Data<BA>) * npairs())));
+      CUDA_SAFE_CALL(cudaMallocHost(&hvcells(), (sizeof(Cell_Data<BV>) * npairs())));
+      CUDA_SAFE_CALL(cudaMallocHost(&hacells(), (sizeof(Cell_Data<BA>) * npairs())));
     }
 
     std::sort(cellpairs().begin(), cellpairs().end(),
@@ -692,16 +666,14 @@ struct Vectormap_CUDA_Packed
       std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = cellpairs()[i];
       hvcells()[i] = std::get<0>(c);
     }
-    ce = cudaMemcpy(dvcells(), hvcells(), (sizeof(Cell_Data<BV>) * npairs()),
-                    cudaMemcpyHostToDevice);
-    assert(ce == cudaSuccess);
+    CUDA_SAFE_CALL(cudaMemcpy(dvcells(), hvcells(), (sizeof(Cell_Data<BV>) * npairs()),
+                              cudaMemcpyHostToDevice));
     for (size_t i = 0; i < npairs(); i++) {
       std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = cellpairs()[i];
       hacells()[i] = std::get<1>(c);
     }
-    ce = cudaMemcpy(dacells(), hacells(), (sizeof(Cell_Data<BA>) * npairs()),
-                    cudaMemcpyHostToDevice);
-    assert(ce == cudaSuccess);
+    CUDA_SAFE_CALL(cudaMemcpy(dacells(), hacells(), (sizeof(Cell_Data<BA>) * npairs()),
+                              cudaMemcpyHostToDevice));
 
     Cell_Data<BV> xr = std::get<2>(cellpairs()[0]);
     int xncells = 0;
@@ -743,14 +715,7 @@ struct Vectormap_CUDA_Packed
     //printf(";; vectormap_finish\n"); fflush(0);
     vectormap_on_collected(f, dummy, args...);
     vectormap_check_error("vectormap_end", __FILE__, __LINE__);
-    cudaError_t ce;
-    ce = cudaDeviceSynchronize();
-    if (ce != cudaSuccess) {
-      fprintf(stderr,
-              "%s:%i (%s): CUDA ERROR (%d): %s.\n",
-              __FILE__, __LINE__, "cudaDeviceSynchronize", (int)ce, cudaGetErrorString(ce));
-      assert(ce == cudaSuccess);
-    }
+    CUDA_SAFE_CALL(cudaDeviceSynchronize());
   }
 };
 

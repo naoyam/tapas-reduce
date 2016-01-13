@@ -3,7 +3,7 @@
 
 const real_t EPS2 = 0.0;                                        //!< Softening parameter (squared)
 
-#ifdef TAPAS_USE_VECTORMAP
+#ifdef __CUDACC__
 
 struct P2P {
 
@@ -27,7 +27,7 @@ struct P2P {
   }
 };
 
-#else /* TAPAS_USE_VECTORMAP */
+#else /* __CUDACC__ */
 
 struct P2P {
   template<class _Body, class _BodyAttr>
@@ -67,4 +67,4 @@ struct P2P {
   }
 };
 
-#endif /*TAPAS_USE_VECTORMAP*/
+#endif /* __CUDACC__ */

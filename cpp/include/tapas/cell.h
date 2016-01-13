@@ -17,18 +17,11 @@ template<class TSP> // TSP=TapasStaticParams
 class BasicCell {
   public:
   static const int Dim = TSP::Dim;
-#ifdef TAPAS_USE_VECTORMAP
-    typedef TSP TSPClass;
-#endif /*TAPAS_USE_VECTORMAP*/
   typedef typename TSP::FP FP;
   typedef typename TSP::Body BT;
   typedef typename TSP::BodyAttr BT_ATTR;
   typedef typename TSP::CellAttr ATTR;
-  protected:
-#if 0  
-    BT_ATTR *dummy_;
-    BT::type *BT_dummy_;
-#endif  
+ protected:
     ATTR attr_; // can be omitted when ATTR=NONE
     Region<TSP> region_;
     index_t bid_;

@@ -227,8 +227,20 @@ void SortByKeys(C1 &keys, C2 &vals) {
   keys = keys2;
   vals = vals2;
 }
-
-
 } // namespace tapas
 
+#ifdef __CUDACC__
+
+#define CUDA_SAFE_CALL(expr)                                            \
+  do {                                                                  \
+    cudaError_t err = (expr);                                           \
+    if (err != cudaSuccess) {                                           \
+      fprintf(stderr, "[Error] %s failed: %s (error code: %d) at %s:%d\n", \
+              #expr, cudaGetErrorString(err), err, __FILE__, __LINE__); \
+      exit(err);                                                        \
+    }                                                                   \
+  } while(0)
+
+#endif
+  
 #endif /* TAPAS_COMMON_ */

@@ -345,17 +345,17 @@ class ProductIterator<ITER, void> {
       return t1_.size() * t2_.size();
     }
   }
-  const typename ITER::value_type &first() const {
-    return *t1_;
+  const ITER &first() const {
+    return t1_;
   }
-  typename ITER::value_type &first() {
-    return *t1_;
+  ITER &first() {
+    return t1_;
   }
-  const typename ITER::value_type &second() const {
-    return *t2_;
+  const ITER &second() const {
+    return t2_;
   }
-  typename ITER::value_type &second() {
-    return *t2_;
+  ITER &second() {
+    return t2_;
   }
   typename ITER::attr_type &attr_first() {
     return t1_.attr();

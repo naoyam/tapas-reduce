@@ -416,7 +416,7 @@ public:
   operator       T* ()       {return data;}                     // Type-casting (lvalue)
   __host__ __device__ __forceinline__
   operator const T* () const {return data;}                     // Type-casting (rvalue)
-  __host__ __device__ __forceinline__
+  __host__ __forceinline__
   friend std::ostream &operator<<(std::ostream & s, const vec & v) {// Component-wise output stream
     for (int i=0; i<N; i++) s << v[i] << ' ';
     return s;

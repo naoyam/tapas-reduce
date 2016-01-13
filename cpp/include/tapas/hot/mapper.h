@@ -187,6 +187,9 @@ struct CPUMapper {
     f(*b1, b1.attr(), *b2, b2.attr(), args...);
   }
 
+  inline void Setup() {
+  }
+  
   inline void Start() {
   }
 
@@ -198,8 +201,14 @@ struct CPUMapper {
 
 #ifdef __CUDACC__
 
+#include "tapas/vectormap.h"
+#include "tapas/vectormap_cuda.h"
+
 template<class Cell, class Body, class LET>
 struct GPUMapper {
+
+  using Vectormap = tapas::Vectormap_CUDA_Packed<Cell::Dim, typename Cell::FP, typename Cell::Body, typename Cell::BodyAttr>;
+  
   /**
    * @brief Map function f over product of two iterators
    */
@@ -227,12 +236,14 @@ struct GPUMapper {
      with ProductIterator<BodyIterator<T>>). */
   template <class Funct, class...Args>
   inline void Map(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args...args) {
-    typedef typename Cell::TSPClass::Vectormap Vectormap;
     Vectormap::vector_map2(f, prod, args...);
   }
 
+  inline void Setup() {
+  }
+  
   inline void Start() {
-    Vectormap::start();
+    Vectormap::vectormap_start();
   }
 
   template <class Funct, class...Args>
