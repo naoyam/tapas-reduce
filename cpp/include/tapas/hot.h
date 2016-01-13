@@ -435,7 +435,6 @@ class Cell: public tapas::BasicCell<TSP> {
  protected:
   // utility/accessor functions
   inline Cell *Lookup(KeyType k) const;
-  CellHashTable *ht() { return ht_; }
 
   //========================================================
   // Member variables
@@ -446,9 +445,6 @@ class Cell: public tapas::BasicCell<TSP> {
   Data* data_;
   
   int nb_; //!< number of bodies in the local process (not bodies under this cell).
-  
-  //CellHashTable* ht_; //!< Hash table of KeyType -> Cell*
-  //std::mutex*    ht_mtx_; //!< mutex to manipulate ht_
   
   bool is_local_; //!< if it's a local cell or LET cell.
   bool is_local_subtree_; //!< If all of its descendants are local.
@@ -1388,8 +1384,12 @@ struct HOT {
   using SFC = tapas::sfc::Morton<_DIM, uint64_t>;
   using Vectormap = tapas::Vectormap_CPU<_DIM, _FP, _BODY_TYPE, _BODY_ATTR>;
   using Threading = tapas::threading::Default;
-  
+
+#ifdef __CUDACC__
   template<class _CELL, class _BODY, class _LET>  using Mapper = hot::CPUMapper<_CELL, _BODY, _LET>;
+#else
+  template<class _CELL, class _BODY, class _LET>  using Mapper = hot::GPUMapper<_CELL, _BODY, _LET>;
+#endif
   template <class _TSP> using Partitioner = hot::Partitioner<_TSP>;
 };
 

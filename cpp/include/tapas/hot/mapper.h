@@ -223,6 +223,161 @@ struct CPUMapper {
 
 }; // class CPUMapper
 
+
+template<class Cell, class Body, class LET>
+struct GPUMapper {
+  /**
+   * @brief Map function f over product of two iterators
+   */
+  template <class Funct, class T1_Iter, class T2_Iter, class... Args>
+  inline void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
+    if (prod.size() > 0) {
+      ProductMapImpl(*this,
+                     prod.t1_, 0, prod.t1_.size(),
+                     prod.t2_, 0, prod.t2_.size(),
+                     f, args...);
+    }
+  }
+  
+  template <class Funct, class T1_Iter, class ...Args>
+  inline void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
+    if (prod.size() > 0) {
+      ProductMapImpl(*this,
+                     prod.t1_, 0, prod.t1_.size(),
+                     prod.t2_, 0, prod.t2_.size(),
+                     f, args...);
+    }
+  }
+
+#ifdef TAPAS_USE_VECTORMAP
+  
+  /* (Specialization of the Map() below by a general ProductIterator<T>
+     with ProductIterator<BodyIterator<T>>). */
+  template <class Funct, class...Args>
+  void Map(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args...args) {
+    typedef typename Cell::TSPClass::Vectormap Vectormap;
+    Vectormap::vector_map2(f, prod, args...);
+  }
+
+#else
+  
+  // template <class Funct, class...Args>
+  // void Map(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args...args) {
+  // }
+  
+#endif
+  
+  /**
+   *
+   */
+  template <class Funct, class... Args>
+  void Map(Funct f, tapas::iterator::SubCellIterator<Cell> iter, Args...args) {
+    using Th = typename Cell::Threading;
+    typename Th::TaskGroup tg;
+
+    TAPAS_ASSERT(iter.index() == 0);
+    
+    for (int i = 0; i < iter.size(); i++) {
+      tg.createTask([=]() mutable { this->Map(f, *iter, args...); });
+      iter++;
+    } 
+    tg.wait();
+  }
+  
+  // template <class Funct, class...Args>
+  // void Map(Funct f, Cell &c1, Args...args) {
+  //   f(c1, args...);
+  // }
+
+  // cell x cell
+  template <class Funct, class...Args>
+  void Map(Funct f, Cell &c1, Cell &c2, Args... args) {
+    if (c1.IsRoot() && c2.IsRoot()) {
+      if (c1.data().mpi_size_ > 1) {
+#ifdef TAPAS_DEBUG
+        char t[] = "TAPAS_IN_LET=1";
+        putenv(t); // to avoid warning "convertion from const char* to char*"
+#endif
+        LET::Exchange(c1, f, args...);
+#ifdef TAPAS_DEBUG
+        unsetenv("TAPAS_IN_LET");
+#endif
+      }
+
+#ifdef TAPAS_USE_VECTORMAP
+      // -- CUDA initialization
+      //Cell<TSP>::TSPClass::Vectormap::vectormap_start();
+#endif
+    }
+
+    f(c1, c2, args...);
+    
+    if (c1.IsRoot() && c2.IsRoot()) {
+#ifdef TAPAS_USE_VECTORMAP
+      // vec3 Xperiodic = 0;
+      // int mutual = c1.GetOptMutual();
+      // assert(!mutual && "Mutual is not suppoted on CUDA");
+      // Cell<TSP>::TSPClass::Vectormap::vectormap_finish(P2P(), c1, Xperiodic, mutual);
+#endif
+    }
+  }
+
+  // cell x cell iter
+  template <class Funct, class...Args>
+  inline void Map(Funct f, Cell &c1, CellIterator<Cell> &c2, Args...args) {
+    Map(f, c1, *c2, args...);
+  }
+  
+  // cell iter x cell iter
+  template <class Funct, class...Args>
+  inline void Map(Funct f, CellIterator<Cell> &c1, CellIterator<Cell> &c2, Args...args) {
+    Map(f, *c1, *c2, args...);
+  }
+
+  // cell X subcell iter
+  template <class Funct, class...Args>
+  inline void Map(Funct f, Cell &c1, SubCellIterator<Cell> &c2, Args...args) {
+    Map(f, c1, *c2, args...);
+  }
+
+  // cell iter X subcell iter
+  template <class Funct, class...Args>
+  inline void Map(Funct f, CellIterator<Cell> &c1, SubCellIterator<Cell> &c2, Args...args) {
+    Map(f, *c1, *c2, args...);
+  }
+
+  // subcell iter X cell iter
+  template <class Funct, class...Args>
+  inline void Map(Funct f, SubCellIterator<Cell> &c1, CellIterator<Cell> &c2, Args...args) {
+    Map(f, *c1, *c2, args...);
+  }
+
+  // subcell iter X subcell iter
+  template <class Funct, class...Args>
+  inline void Map(Funct f, SubCellIterator<Cell> &c1, SubCellIterator<Cell> &c2, Args...args) {
+    Map(f, *c1, *c2, args...);
+  }
+
+  // bodies
+  template <class Funct, class... Args>
+  void Map(Funct f, BodyIterator<Cell> iter, Args...args) {
+    for (int i = 0; i < iter.size(); ++i) {
+      f(*iter, iter.attr(), args...);
+      iter++;
+    }
+  }
+  
+  // body x body 
+  template<class Funct, class...Args>
+  void Map(Funct f, BodyIterator<Cell> b1, BodyIterator<Cell> b2, Args...args) {
+#ifdef TAPAS_COMPILER_INTEL
+# pragma forceinline
+#endif
+    f(*b1, b1.attr(), *b2, b2.attr(), args...);
+  }
+
+}; // class GPUMapper
+
 } // namespace hot
 } // namespace tapas
 
