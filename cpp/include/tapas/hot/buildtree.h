@@ -60,11 +60,11 @@ class SamplingOctree {
   std::vector<KeyType> body_keys_;
   std::vector<KeyType> proc_first_keys_; // first key of each process's region
   Region<TSP> region_;
-  std::shared_ptr<Data> data_;
+  Data* data_;
   int ncrit_;
             
  public:
-  SamplingOctree(const BodyType *b, index_t nb, std::shared_ptr<Data> data, int ncrit)
+  SamplingOctree(const BodyType *b, index_t nb, Data *data, int ncrit)
       : bodies_(b, b+nb), body_keys_(), proc_first_keys_(), region_(), data_(data), ncrit_(ncrit)
   {
     Vec<kDim, FP> local_max, local_min;

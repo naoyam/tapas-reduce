@@ -1179,7 +1179,7 @@ struct LET {
    * \breif Register response cells to local LET hash table
    * \param [in,out] data Data structure (cells are registered to data->ht_lt_)
    */
-  static void Register(std::shared_ptr<Data> data,
+  static void Register(Data *data,
                        const std::vector<KeyType> &res_cell_attr_keys,
                        const std::vector<CellAttrType> &res_cell_attrs,
                        const std::vector<KeyType> &res_leaf_keys,

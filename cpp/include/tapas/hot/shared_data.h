@@ -10,7 +10,6 @@ template<class TSP> class DummyCell;
 
 /**
  * \brief Struct to hold shared data among Cells
- * Never accessed by users directly. Only held by Cells using shared_ptr.
  */
 template<class TSP, class SFC_>
 struct SharedData {

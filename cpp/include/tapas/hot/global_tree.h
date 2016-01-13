@@ -168,7 +168,7 @@ class GlobalTree {
   }
 
   static void GrowGlobalTree(const KeySet &gleaves, const HashTable &ht, HashTable &ht_gtree) {
-    std::shared_ptr<Data> dp = ht.at(0)->data_ptr();
+    Data *dp = ht.at(0)->data_ptr();
 
     for (auto && key : gleaves) {
       for (KeyType k = key; k != 0; k = SFC::Parent(k)) {

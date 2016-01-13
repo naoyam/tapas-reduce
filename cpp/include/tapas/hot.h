@@ -12,7 +12,6 @@
 #include <cmath>
 
 #include <algorithm>
-#include <memory>
 #include <numeric>
 #include <list>
 #include <vector>
@@ -231,9 +230,6 @@ class Cell: public tapas::BasicCell<TSP> {
   
   using Data = SharedData<TSP, SFC>;
 
-  template<class T>
-  using VecPtr = std::shared_ptr<std::vector<T>>;
-
   friend void FindLocalRoots<TSP>(KeyType, const CellHashTable&, KeySet&);
 
   //========================================================
@@ -241,7 +237,7 @@ class Cell: public tapas::BasicCell<TSP> {
   //========================================================
  public:
 
-  static Cell *CreateLocalCell(KeyType k, std::shared_ptr<Data> data) {
+  static Cell *CreateLocalCell(KeyType k, Data* data) {
     auto reg = CalcRegion(k, data->region_);
 
     // Check if I'm a leaf
@@ -276,7 +272,7 @@ class Cell: public tapas::BasicCell<TSP> {
     return c;
   }
 
-  static Cell *CreateRemoteCell(KeyType k, int nb, std::shared_ptr<Data> data) {
+  static Cell *CreateRemoteCell(KeyType k, int nb, Data *data) {
     auto reg = CalcRegion(k, data->region_);
     
     Cell *c = new Cell(reg, 0, 0);
@@ -349,7 +345,7 @@ class Cell: public tapas::BasicCell<TSP> {
   }
 
   Data &data() { return *data_; }
-  std::shared_ptr<Data> data_ptr() { return data_; }
+  Data* data_ptr() { return data_; }
   
 #ifdef DEPRECATED
   typename TSP::Body &particle(index_t idx) const {
@@ -447,12 +443,12 @@ class Cell: public tapas::BasicCell<TSP> {
  protected:
   KeyType key_; //!< Key of the cell
   bool is_leaf_;
-  std::shared_ptr<Data> data_;
+  Data* data_;
   
   int nb_; //!< number of bodies in the local process (not bodies under this cell).
   
-  std::shared_ptr<CellHashTable> ht_; //!< Hash table of KeyType -> Cell*
-  std::shared_ptr<std::mutex>    ht_mtx_; //!< mutex to manipulate ht_
+  //CellHashTable* ht_; //!< Hash table of KeyType -> Cell*
+  //std::mutex*    ht_mtx_; //!< mutex to manipulate ht_
   
   bool is_local_; //!< if it's a local cell or LET cell.
   bool is_local_subtree_; //!< If all of its descendants are local.
@@ -1311,7 +1307,7 @@ Partitioner<TSP>::Partition(typename TSP::Body *b, index_t num_bodies) {
   using CellType = Cell<TSP>;
   using Data = typename CellType::Data;
 
-  auto data = std::make_shared<Data>();
+  Data *data = new Data;
 
   MPI_Comm_rank(MPI_COMM_WORLD, &data->mpi_rank_);
   MPI_Comm_size(MPI_COMM_WORLD, &data->mpi_size_);
