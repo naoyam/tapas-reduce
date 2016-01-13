@@ -267,8 +267,9 @@ struct Vectormap_CUDA_Simple {
     tesla_dev.n_streams = nstreams;
 
     /*AHO*/ /* USE PROPER WAY TO KNOW OF USE OF MPI. */
+    std::cerr << "Vectormap_CUDA_Simple::vectormap_setup" << std::endl;
 
-#ifdef EXAFMM_TAPAS_MPI
+#ifdef USE_MPI
 
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -276,17 +277,16 @@ struct Vectormap_CUDA_Simple {
     int rankofnode, rankinnode, nprocsinnode;
     rank_in_node(MPI_COMM_WORLD, rankofnode, rankinnode, nprocsinnode);
 
-#else /*EXAFMM_TAPAS_MPI*/
+#else /* USE_MPI */
 
     int rank = 0;
     int rankinnode = 0;
     int nprocsinnode = 1;
 
-#endif /*EXAFMM_TAPAS_MPI*/
+#endif /* USE_MPI */
 
     int ngpus;
     CUDA_SAFE_CALL(cudaGetDeviceCount(&ngpus));
-    assert(ce == cudaSuccess);
     if (ngpus < nprocsinnode) {
       fprintf(stderr, "More ranks than GPUs on a node\n");
       assert(ngpus >= nprocsinnode);
@@ -635,6 +635,7 @@ struct Vectormap_CUDA_Packed
 
     //printf(";; pairs=%ld\n", cellpairs().size());
 
+    // cta = cooperative thread array = thread block
     int cta0 = (TAPAS_CEILING(tesla_dev.cta_size, 32) * 32);
     int ctasize = std::min(cta0, tesla_attr2.maxThreadsPerBlock);
     assert(ctasize == tesla_dev.cta_size);
@@ -648,16 +649,16 @@ struct Vectormap_CUDA_Packed
     size_t nblocks = TAPAS_CEILING(N0, ctasize);
 
     if (npairs() < cellpairs().size()) {
-      CUDA_SAFE_CALL(cudaFree(dvcells()));
-      CUDA_SAFE_CALL(cudaFree(dacells()));
-      CUDA_SAFE_CALL(cudaFree(hvcells()));
-      CUDA_SAFE_CALL(cudaFree(hacells()));
+      CUDA_SAFE_CALL( cudaFree(dvcells()) );
+      CUDA_SAFE_CALL( cudaFree(dacells()) );
+      CUDA_SAFE_CALL( cudaFree(hvcells()) );
+      CUDA_SAFE_CALL( cudaFree(hacells()) );
 
       npairs() = cellpairs().size();
-      CUDA_SAFE_CALL(cudaMalloc(&dvcells(), (sizeof(Cell_Data<BV>) * npairs())));
-      CUDA_SAFE_CALL(cudaMalloc(&dacells(), (sizeof(Cell_Data<BA>) * npairs())));
-      CUDA_SAFE_CALL(cudaMallocHost(&hvcells(), (sizeof(Cell_Data<BV>) * npairs())));
-      CUDA_SAFE_CALL(cudaMallocHost(&hacells(), (sizeof(Cell_Data<BA>) * npairs())));
+      CUDA_SAFE_CALL( cudaMalloc(&dvcells(), (sizeof(Cell_Data<BV>) * npairs())) );
+      CUDA_SAFE_CALL( cudaMalloc(&dacells(), (sizeof(Cell_Data<BA>) * npairs())) );
+      CUDA_SAFE_CALL( cudaMallocHost(&hvcells(), (sizeof(Cell_Data<BV>) * npairs())) );
+      CUDA_SAFE_CALL( cudaMallocHost(&hacells(), (sizeof(Cell_Data<BA>) * npairs())) );
     }
 
     std::sort(cellpairs().begin(), cellpairs().end(),
@@ -692,7 +693,9 @@ struct Vectormap_CUDA_Packed
       }
       Cell_Data<BV> &l = std::get<0>(c);
       size_t nb = TAPAS_CEILING((xndata + l.size), ctasize);
+      //std::cerr << "nb = " << nb << ", nblocks = " << nblocks << std::endl;
       if (nb > nblocks) {
+        //std::cerr << "i = " << i << ", xncells = " << xncells << std::endl;
         assert(i != 0 && xncells > 0);
         vectormap_invoke((i - xncells), xncells, xr,
                          tilesize, nblocks, ctasize, scratchpadsize,

@@ -244,6 +244,7 @@ struct GPUMapper {
 
   inline void Setup() {
     std::cerr << "GPUMapper::Setup()" << std::endl;
+    Vectormap::vectormap_setup(64,31);
   }
   
   inline void Start() {

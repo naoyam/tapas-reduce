@@ -12,8 +12,6 @@
 #include <assert.h>
 #include <memory>
 
-//#define TAPAS_USE_VECTORMAP
-
 namespace tapas {
 
 #ifdef __CUDACC__

@@ -410,10 +410,6 @@ int main(int argc, char ** argv) {
   MPI_Comm_size(MPI_COMM_WORLD, &args.mpi_size);
 #endif
   
-#ifdef TAPAS_USE_VECTORMAP
-  TapasFMM::Cell::TSPClass::Vectormap::vectormap_setup(64, 31);
-#endif /*TAPAS_USE_VECTORMAP*/
-
   Bodies bodies, bodies2, bodies3, jbodies;
   Cells cells, jcells;
   Dataset data;

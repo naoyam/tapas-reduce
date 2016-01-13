@@ -29,7 +29,6 @@ class BasicCell {
   public:
     BasicCell(const Region<TSP> &region, index_t bid, index_t nb):
       region_(region), bid_(bid), nb_(nb) {
-      TAPAS_ASSERT(nb_ >= 0);
     }
   index_t bid() const { return bid_; }
   size_t nb() const { return nb_; }

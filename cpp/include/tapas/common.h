@@ -61,7 +61,7 @@
 #include <sys/syscall.h> // for gettid()
 #include <sys/types.h>   // for gettid()
 
-#if defined(EXAFMM_TAPAS_MPI) || defined(USE_MPI) // FIXME: EXAFMM_TAPAS_MPI is only for debug
+#ifdef USE_MPI
 #include <mpi.h>
 #endif
 

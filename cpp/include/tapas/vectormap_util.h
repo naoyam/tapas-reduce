@@ -16,7 +16,7 @@ namespace tapas {
 
 /*AHO*/ /* NOTE: BELOW BE A PROPER WAY TO KNOW THE USE OF MPI. */
 
-#ifdef EXAFMM_TAPAS_MPI
+#ifdef USE_MPI
 
 /** Finds the number of MPI processes on a node, and returns
     rank-of-node, rank-in-node and nprocs-in-node.  It is collective
@@ -97,7 +97,7 @@ static void rank_in_node(MPI_Comm comm, int &rankofnode, int &rankinnode,
   nprocsinnode = (int)group.size();
 }
 
-#endif /*EXAFMM_TAPAS_MPI*/
+#endif /* USE_MPI */
 
 }
 

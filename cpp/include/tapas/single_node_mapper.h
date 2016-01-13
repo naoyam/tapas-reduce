@@ -93,20 +93,6 @@ struct CPUMapper {
     }
   }
 
-#ifdef TAPAS_USE_VECTORMAP
-  
-  /* (Specialization of the Map() below by a general ProductIterator<T>
-     with ProductIterator<BodyIterator<T>>). */
-  template <class Funct, class...Args>
-  void Map(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args...args) {
-    // GPU-Map is temporarily located here.
-    // GPUMapper will be implemented soon 
-    typedef typename Cell::TSPClass::Vectormap Vectormap;
-    Vectormap::vector_map2(f, prod, args...);
-  }
-  
-#endif
-  
   template <class Funct, class... Args>
   void Map(Funct f, SubCellIterator<Cell> iter, Args...args) {
     typedef typename Cell::Threading Th;
