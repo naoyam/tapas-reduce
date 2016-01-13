@@ -21,14 +21,8 @@ struct SharedData {
   using BodyType = typename TSP::Body;
   using BodyAttrType = typename TSP::BodyAttr;
   using Mapper = typename CellType::Mapper;
-  
-#ifdef TAPAS_USE_VECTORMAP
-  template <typename T>
-  using vector_allocator = typename TSP::Vectormap:: template um_allocator<T>;
-  template<class T> using Allocator = vector_allocator<T>;
-#else
-  template<class T> using Allocator = std::allocator<T>;
-#endif /*TAPAS_USE_VECTORMAP*/
+
+  template<class T> using Allocator = typename TSP::template Allocator<T>;
 
   CellHashTable ht_;
   CellHashTable ht_let_;
@@ -48,17 +42,10 @@ struct SharedData {
   std::vector<index_t> leaf_nb_;   //!< Number of bodies in each leaf cell
   std::vector<int>     leaf_owners_; //!< Owner process of leaf[i]
   
-#ifdef TAPAS_USE_VECTORMAP
-  std::vector<BodyType, vector_allocator<BodyType>> local_bodies_; //!< Bodies that belong to the local process
-  std::vector<BodyType, vector_allocator<BodyType>> let_bodies_; //!< Bodies sent from remote processes
-  std::vector<BodyAttrType, vector_allocator<BodyAttrType>> local_body_attrs_; //!< Local body attributes
-  std::vector<BodyAttrType, vector_allocator<BodyAttrType>> let_body_attrs_; //!< Local body attributes
-#else /*TAPAS_USE_VECTORMAP*/
-  std::vector<BodyType> local_bodies_; //!< Bodies that belong to the local process
-  std::vector<BodyType> let_bodies_; //!< Bodies that belong to the local process
-  std::vector<BodyAttrType> local_body_attrs_; //!< Local body attributes
-  std::vector<BodyAttrType> let_body_attrs_; //!< Local body attributes
-#endif /*TAPAS_USE_VECTORMAP*/
+  std::vector<BodyType, Allocator<BodyType>> local_bodies_; //!< Bodies that belong to the local process
+  std::vector<BodyType, Allocator<BodyType>> let_bodies_; //!< Bodies sent from remote processes
+  std::vector<BodyAttrType, Allocator<BodyAttrType>> local_body_attrs_; //!< Local body attributes
+  std::vector<BodyAttrType, Allocator<BodyAttrType>> let_body_attrs_; //!< Local body attributes
   
   std::vector<KeyType>  local_body_keys_; //!< SFC keys of local bodies
   

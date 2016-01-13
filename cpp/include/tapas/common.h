@@ -166,34 +166,6 @@ struct Type2Int {
   }
 };
 
-/** 
- * @brief Holder of template parameter types.
- */
-template<int _DIM, class _FP, class _BT, class _BT_ATTR, class _ATTR,
-         class _Threading,
-         class _SFC
-#ifdef TAPAS_USE_VECTORMAP
-         , class _Vectormap
-#endif /*TAPAS_USE_VECTORMAP*/
-         >
-struct TapasStaticParams {
-  static const int Dim = _DIM;  //!< dimension of simulation space
-  typedef _FP FP;               //!< Floating point types
-  typedef _BT BT;               //!< body info
-  typedef _BT_ATTR BT_ATTR;     //!< body attributes
-  typedef _ATTR ATTR;           //!< cell attributes
-  typedef _Threading Threading; //!< threading policy
-  typedef _SFC SFC;             //!< SFC implementation class
-#ifdef TAPAS_USE_VECTORMAP
-  typedef _Vectormap Vectormap;
-#endif /*TAPAS_USE_VECTORMAP*/
-  
-  // FIXME: the `SFC` class should not be here, because
-  //        the concept of `SFC` is specific to HOT partitioning algorithm.
-  //        As of now, HOT is the only implemented partitioning algorithm.
-};
-
-
 /**
  * @brief Sort vals using keys (assuming T1 is comparable). Both of keys and vals are sorted.
  *

@@ -1312,17 +1312,6 @@ Partitioner<TSP>::Partition(typename TSP::Body *b, index_t num_bodies) {
   SamplingOctree<TSP, SFC> stree(b, num_bodies, data, max_nb_);
   stree.Build();
     
-#ifdef TAPAS_USE_VECTORMAP
-  using BodyType = typename TSP::Body;
-  using BodyAttrType = typename TSP::Body;
-  
-  /* (No templates allowed.) */
-  typedef typename TSP::Vectormap:: template um_allocator<BodyType>
-    body_vector_allocator;
-  typedef typename TSP::Vectormap:: template um_allocator<BodyAttrType>
-    attr_vector_allocator;
-#endif /*TAPAS_USE_VECTORMAP*/
-
   // Build Global trees
   GlobalTree<TSP>::Build(*data);
 
@@ -1346,7 +1335,9 @@ Partitioner<TSP>::Partition(typename TSP::Body *b, index_t num_bodies) {
   }
 #endif
 
-  
+  // Initialize the mapper class (mainly for GPU)
+  data->mapper_.Setup();
+
   // return the root cell (root key is always 0)
   return data->ht_[0];
 }
@@ -1382,14 +1373,18 @@ struct HOT {
   using BodyAttr = _BODY_ATTR;
   using CellAttr = _CELL_ATTR;
   using SFC = tapas::sfc::Morton<_DIM, uint64_t>;
-  using Vectormap = tapas::Vectormap_CPU<_DIM, _FP, _BODY_TYPE, _BODY_ATTR>;
   using Threading = tapas::threading::Default;
 
 #ifdef __CUDACC__
+  using Vectormap = tapas::Vectormap_CUDA_Packed<_DIM, _FP, _BODY_TYPE, _BODY_ATTR>;
+  template<class T> using Allocator = typename Vectormap::template um_allocator<T>;
   template<class _CELL, class _BODY, class _LET>  using Mapper = hot::GPUMapper<_CELL, _BODY, _LET>;
 #else
+  using Vectormap = tapas::Vectormap_CPU<_DIM, _FP, _BODY_TYPE, _BODY_ATTR>;
+  template<class T> using Allocator = std::allocator<T>;
   template<class _CELL, class _BODY, class _LET>  using Mapper = hot::CPUMapper<_CELL, _BODY, _LET>;
 #endif
+
   template <class _TSP> using Partitioner = hot::Partitioner<_TSP>;
 };
 
