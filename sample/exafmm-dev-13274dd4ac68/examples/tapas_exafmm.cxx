@@ -118,11 +118,7 @@ struct FMM_DTT {
       numM2L++;
       M2L(Ci, Cj, Xperiodic, mutual);                   //  M2L kernel
     } else if (Ci.IsLeaf() && Cj.IsLeaf()) {            // Else if both cells are bodies
-#ifdef TAPAS_USE_VECTORMAP
       tapas::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic, mutual);
-#else
-      tapas::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic, mutual);
-#endif /*TAPAS_USE_VECTORMAP*/
 
       numP2P++;
     } else {                                                    // Else if cells are close but not bodies
@@ -490,20 +486,16 @@ int main(int argc, char ** argv) {
 
     logger::startTimer("Traverse");
     
-#ifdef TAPAS_USE_VECTORMAP
-    TapasFMM::Cell::TSPClass::Vectormap::vectormap_start();
-#endif /*TAPAS_USE_VECTORMAP*/
-    
     numM2L = 0; numP2P = 0;
+    
+    root->mapper().Start();
+    
     tapas::Map(FMM_DTT(), tapas::Product(*root, *root), args.mutual, args.nspawn, args.theta);
     
-#ifdef TAPAS_USE_VECTORMAP
-    vec3 Xperiodic = 0; // dummy; periodic not ported
-    int mutual = 0;     // dummy; mutual interaction is not ported to CUDA
-    TapasFMM::Cell::TSPClass::Vectormap::vectormap_finish(P2P(),
-                                                          *root,
-                                                          Xperiodic, mutual);
-#endif /*TAPAS_USE_VECTORMAP*/
+    {
+      vec3 Xperiodic = 0; // dummy; periodic not ported
+      root->mapper().Finish(P2P(), *root, Xperiodic, args.mutual);
+    }
     
     logger::stopTimer("Traverse");
     

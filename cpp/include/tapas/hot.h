@@ -1386,24 +1386,12 @@ struct HOT {
   using Threading = tapas::threading::Default;
 
 #ifdef __CUDACC__
-  template<class _CELL, class _BODY, class _LET>  using Mapper = hot::CPUMapper<_CELL, _BODY, _LET>;
-#else
   template<class _CELL, class _BODY, class _LET>  using Mapper = hot::GPUMapper<_CELL, _BODY, _LET>;
+#else
+  template<class _CELL, class _BODY, class _LET>  using Mapper = hot::CPUMapper<_CELL, _BODY, _LET>;
 #endif
   template <class _TSP> using Partitioner = hot::Partitioner<_TSP>;
 };
-
-#ifdef __CUDACC__
-
-template<int _DIM, class _FP, class _BODY_TYPE, size_t _BODY_COORD_OFST, class _BODY_ATTR, class _CELL_ATTR>
-struct HOT_GPU {
-  using SFC = tapas::sfc::Morton<_DIM, uint64_t>;
-  using Vectormap = tapas::Vectormap_CPU<_DIM, _FP, _BODY_TYPE, _BODY_ATTR>;
-  using Body = _BODY_TYPE;
-  static const constexpr int kBodyCoordOffset = _BODY_COORD_OFST;
-};
-
-#endif // __CUDACC__
 
 template<class _TSP>
 struct Tapas2 {

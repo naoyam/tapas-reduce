@@ -94,24 +94,6 @@ struct CPUMapper {
     }
   }
 
-#ifdef TAPAS_USE_VECTORMAP
-  
-  /* (Specialization of the Map() below by a general ProductIterator<T>
-     with ProductIterator<BodyIterator<T>>). */
-  template <class Funct, class...Args>
-  void Map(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args...args) {
-    typedef typename Cell::TSPClass::Vectormap Vectormap;
-    Vectormap::vector_map2(f, prod, args...);
-  }
-
-#else
-  
-  // template <class Funct, class...Args>
-  // void Map(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args...args) {
-  // }
-  
-#endif
-  
   /**
    *
    */
@@ -128,11 +110,6 @@ struct CPUMapper {
     } 
     tg.wait();
   }
-  
-  // template <class Funct, class...Args>
-  // void Map(Funct f, Cell &c1, Args...args) {
-  //   f(c1, args...);
-  // }
 
   // cell x cell
   template <class Funct, class...Args>
@@ -148,22 +125,11 @@ struct CPUMapper {
         unsetenv("TAPAS_IN_LET");
 #endif
       }
-
-#ifdef TAPAS_USE_VECTORMAP
-      // -- CUDA initialization
-      //Cell<TSP>::TSPClass::Vectormap::vectormap_start();
-#endif
     }
 
     f(c1, c2, args...);
     
     if (c1.IsRoot() && c2.IsRoot()) {
-#ifdef TAPAS_USE_VECTORMAP
-      // vec3 Xperiodic = 0;
-      // int mutual = c1.GetOptMutual();
-      // assert(!mutual && "Mutual is not suppoted on CUDA");
-      // Cell<TSP>::TSPClass::Vectormap::vectormap_finish(P2P(), c1, Xperiodic, mutual);
-#endif
     }
   }
 
@@ -221,8 +187,16 @@ struct CPUMapper {
     f(*b1, b1.attr(), *b2, b2.attr(), args...);
   }
 
+  inline void Start() {
+  }
+
+  template <class Funct, class...Args>
+  inline void Finish(Funct f, Cell &c, Args...args) {
+  }
 }; // class CPUMapper
 
+
+#ifdef __CUDACC__
 
 template<class Cell, class Body, class LET>
 struct GPUMapper {
@@ -249,29 +223,28 @@ struct GPUMapper {
     }
   }
 
-#ifdef TAPAS_USE_VECTORMAP
-  
   /* (Specialization of the Map() below by a general ProductIterator<T>
      with ProductIterator<BodyIterator<T>>). */
   template <class Funct, class...Args>
-  void Map(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args...args) {
+  inline void Map(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args...args) {
     typedef typename Cell::TSPClass::Vectormap Vectormap;
     Vectormap::vector_map2(f, prod, args...);
   }
 
-#else
-  
-  // template <class Funct, class...Args>
-  // void Map(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args...args) {
-  // }
-  
-#endif
-  
+  inline void Start() {
+    Vectormap::start();
+  }
+
+  template <class Funct, class...Args>
+  inline void Finish(Funct f, Cell &c, Args...args) {
+    Vectormap::vectormap_finish(f, c, args...);
+  }
+
   /**
    *
    */
   template <class Funct, class... Args>
-  void Map(Funct f, tapas::iterator::SubCellIterator<Cell> iter, Args...args) {
+  inline void Map(Funct f, tapas::iterator::SubCellIterator<Cell> iter, Args...args) {
     using Th = typename Cell::Threading;
     typename Th::TaskGroup tg;
 
@@ -284,14 +257,9 @@ struct GPUMapper {
     tg.wait();
   }
   
-  // template <class Funct, class...Args>
-  // void Map(Funct f, Cell &c1, Args...args) {
-  //   f(c1, args...);
-  // }
-
   // cell x cell
   template <class Funct, class...Args>
-  void Map(Funct f, Cell &c1, Cell &c2, Args... args) {
+  inline void Map(Funct f, Cell &c1, Cell &c2, Args... args) {
     if (c1.IsRoot() && c2.IsRoot()) {
       if (c1.data().mpi_size_ > 1) {
 #ifdef TAPAS_DEBUG
@@ -302,23 +270,18 @@ struct GPUMapper {
 #ifdef TAPAS_DEBUG
         unsetenv("TAPAS_IN_LET");
 #endif
-      }
 
-#ifdef TAPAS_USE_VECTORMAP
-      // -- CUDA initialization
-      //Cell<TSP>::TSPClass::Vectormap::vectormap_start();
-#endif
+        if (c1.GetOptMutual()) {
+          std::cerr << "Error: mutual is not supported in CUDA implementation" << std::endl;
+          exit(-1);
+        }
+      }
     }
 
     f(c1, c2, args...);
     
     if (c1.IsRoot() && c2.IsRoot()) {
-#ifdef TAPAS_USE_VECTORMAP
-      // vec3 Xperiodic = 0;
-      // int mutual = c1.GetOptMutual();
-      // assert(!mutual && "Mutual is not suppoted on CUDA");
-      // Cell<TSP>::TSPClass::Vectormap::vectormap_finish(P2P(), c1, Xperiodic, mutual);
-#endif
+      // post-process (empty for now)
     }
   }
 
@@ -360,7 +323,7 @@ struct GPUMapper {
 
   // bodies
   template <class Funct, class... Args>
-  void Map(Funct f, BodyIterator<Cell> iter, Args...args) {
+  inline void Map(Funct f, BodyIterator<Cell> iter, Args...args) {
     for (int i = 0; i < iter.size(); ++i) {
       f(*iter, iter.attr(), args...);
       iter++;
@@ -369,7 +332,7 @@ struct GPUMapper {
   
   // body x body 
   template<class Funct, class...Args>
-  void Map(Funct f, BodyIterator<Cell> b1, BodyIterator<Cell> b2, Args...args) {
+  inline void Map(Funct f, BodyIterator<Cell> b1, BodyIterator<Cell> b2, Args...args) {
 #ifdef TAPAS_COMPILER_INTEL
 # pragma forceinline
 #endif
@@ -377,6 +340,8 @@ struct GPUMapper {
   }
 
 }; // class GPUMapper
+
+#endif /* __CUDACC__ */
 
 } // namespace hot
 } // namespace tapas
