@@ -222,6 +222,8 @@ struct cellcompare_r {
   }
 };
 
+
+
 template<int _DIM, class _FP, class _BT, class _BT_ATTR>
 struct Vectormap_CUDA_Simple {
 
@@ -475,6 +477,77 @@ struct Cell_Data {
   T* data;
 };
 
+// Launches a kernel on Tesla.
+// Used by Vectormap_CUDA_Pakced.
+template <class Caller, class Funct, class Cell, class... Args>
+void invoke(Caller *caller, int start, int nc, Cell_Data<typename Cell::Body> &r,
+            int tilesize,
+            size_t nblocks, int ctasize, int scratchpadsize,
+            Cell &dummy, Funct f, Args... args) {
+  using BV = typename Cell::Body;
+  using BA = typename Cell::BodyAttr;
+
+  TESLA &tesla_dev = caller->tesla_dev();
+  
+  /*AHO*/
+  if (0) {
+    printf("kernel(nblocks=%ld ctasize=%d scratchpadsize=%d tilesize=%d\n",
+           nblocks, ctasize, scratchpadsize, tilesize);
+    printf("invoke(start=%d ncells=%d)\n", start, nc);
+    for (int i = 0; i < nc; i++) {
+      Cell_Data<BV> &lc = std::get<0>(caller->cellpairs_[start + i]);
+      Cell_Data<BA> &ac = std::get<1>(caller->cellpairs_[start + i]);
+      Cell_Data<BV> &rc = std::get<2>(caller->cellpairs_[start + i]);
+      assert(rc.data == r.data);
+      assert(ac.size == lc.size);
+      printf("pair(celll=%p[%d] cellr=%p[%d])\n",
+             lc.data, lc.size, rc.data, rc.size);
+    }
+    fflush(0);
+  }
+
+  streamid++;
+  int s = (streamid % tesla_dev.n_streams);
+  vectormap_cuda_pack_kernel2<<<nblocks, ctasize, scratchpadsize,
+      tesla_dev.streams[s]>>>
+      (&(caller->dvcells_[start]), &(caller->dacells_[start]), nc, r.size, r.data,
+       tilesize, f, args...);
+}
+
+
+#if 0 // kakikake
+// Abstract base class of Applier.
+// Subclasses take a particular function type (ex. P2P) and variadic arguments.
+template<class Cell>
+class AbstractApplier {
+ public:
+  virtual void apply(Cell &dummy) = 0;
+};
+
+template<class Funct, class Cell, class...Args>
+class Applier : AbstractApplier<Cell> {
+  Funct f_;
+  std::tuple<Args...> args_;
+  std::mutex mutex_;
+  
+ public:
+  Applier(Funct f, Args... args) : f_(f), args_(args...) { }
+  
+  // tesla_dev
+  // tesla_attr2
+  
+  // cellpairs
+  // dvcells_, dacells_, hvcells_, hacells_, npairs_  
+  virtual void apply(Cell &dummy, std::vector<CellPair> &cellpairs,
+                     Cell_Data<BV>* dvcells,
+                     Cell_Data<BV>* hvcells,
+                     Cell_Data<BA>* dacells,
+                     Cell_Data<BA>* hacells,
+                     size_t npairs) override {
+  }
+};
+#endif
+
 template<int _DIM, class _FP, class _BT, class _BT_ATTR>
 struct Vectormap_CUDA_Packed
     : public Vectormap_CUDA_Simple<_DIM, _FP, _BT, _BT_ATTR> {
@@ -508,8 +581,7 @@ struct Vectormap_CUDA_Packed
   /* (Two argument mapping with left packing.) */
 
   template <class Funct, class Cell, class... Args>
-  void map2(Funct f, ProductIterator<BodyIterator<Cell>> prod,
-                          Args... args) {
+  void map2(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args... args) {
     using BV = typename Cell::Body;
     using BA = typename Cell::BodyAttr;
 
@@ -544,47 +616,10 @@ struct Vectormap_CUDA_Packed
       pairs_mutex_.unlock();
     }
   }
-
-  /* Launches a kernel on Tesla. */
-
-  template <class Funct, class Cell, class... Args>
-  void invoke(int start, int nc, Cell_Data<BV> &r,
-              int tilesize,
-              size_t nblocks, int ctasize, int scratchpadsize,
-              Cell &dummy, Funct f, Args... args) {
-    using BV = typename Cell::Body;
-    using BA = typename Cell::BodyAttr;
-
-    TESLA &tesla_dev = this->tesla_dev();
-
-    /*AHO*/
-    if (0) {
-      printf("kernel(nblocks=%ld ctasize=%d scratchpadsize=%d tilesize=%d\n",
-             nblocks, ctasize, scratchpadsize, tilesize);
-      printf("invoke(start=%d ncells=%d)\n", start, nc);
-      for (int i = 0; i < nc; i++) {
-        Cell_Data<BV> &lc = std::get<0>(cellpairs_[start + i]);
-        Cell_Data<BA> &ac = std::get<1>(cellpairs_[start + i]);
-        Cell_Data<BV> &rc = std::get<2>(cellpairs_[start + i]);
-        assert(rc.data == r.data);
-        assert(ac.size == lc.size);
-        printf("pair(celll=%p[%d] cellr=%p[%d])\n",
-               lc.data, lc.size, rc.data, rc.size);
-      }
-      fflush(0);
-    }
-
-    streamid++;
-    int s = (streamid % tesla_dev.n_streams);
-    vectormap_cuda_pack_kernel2<<<nblocks, ctasize, scratchpadsize,
-        tesla_dev.streams[s]>>>
-        (&(dvcells_[start]), &(dacells_[start]), nc, r.size, r.data,
-         tilesize, f, args...);
-  }
   
   /* Limit of the number of threads in grids. */
 
-  static const int N0 = (16 * 1024);
+  static const constexpr int N0 = (16 * 1024);
 
   /* Starts launching a kernel on collected cells. */
 
@@ -672,7 +707,7 @@ struct Vectormap_CUDA_Packed
       Cell_Data<BV> &r = std::get<2>(c);
       if (xr.data != r.data) {
         assert(i != 0 && xncells > 0);
-        invoke((i - xncells), xncells, xr,
+        invoke(this, (i - xncells), xncells, xr,
                tilesize, nblocks, ctasize, scratchpadsize,
                dummy, f, args...);
         xncells = 0;
@@ -685,7 +720,7 @@ struct Vectormap_CUDA_Packed
       if (nb > nblocks) {
         //std::cerr << "i = " << i << ", xncells = " << xncells << std::endl;
         assert(i != 0 && xncells > 0);
-        invoke((i - xncells), xncells, xr,
+        invoke(this, (i - xncells), xncells, xr,
                tilesize, nblocks, ctasize, scratchpadsize,
                dummy, f, args...);
         xncells = 0;
@@ -696,7 +731,7 @@ struct Vectormap_CUDA_Packed
       xndata += (TAPAS_CEILING(l.size, 32) * 32);
     }
     assert(xncells > 0);
-    invoke((npairs_ - xncells), xncells, xr,
+    invoke(this, (npairs_ - xncells), xncells, xr,
            tilesize, nblocks, ctasize, scratchpadsize,
            dummy, f, args...);
   }
