@@ -25,8 +25,8 @@ class BodyIterator {
   static const constexpr int kThreadSpawnThreshold = 12800;
 #endif
   
-  BodyIterator(CellType &c)
-      : c_(c), idx_(0) {}
+  explicit BodyIterator(CellType &c) : c_(c), idx_(0) {}
+  BodyIterator(const BodyIterator<Cell> &rhs) : c_(rhs.c_), idx_(rhs.idx_) { }
   inline int index() const { return idx_; } // for debugging
   inline index_t size() const {
     return c_.nb();

@@ -265,9 +265,9 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
   if (mutual) Cj.attr() = attr_j;
 }
 
-void L2P(Body &b, BodyAttr &ba, TapasFMM::Cell &c) {
+void L2P(Body &b, BodyAttr &ba, TapasFMM::Cell *c) { // c is a pointer here to avoid NVCC's bug of parsing C++ code.
   complex_t Ynm[P*P], YnmTheta[P*P];
-  vec3 dX = b.X - tovec(c.center());
+  vec3 dX = b.X - tovec(c->center());
   vec3 spherical = 0;
   vec3 cartesian = 0;
   real_t r, theta, phi;
@@ -277,18 +277,18 @@ void L2P(Body &b, BodyAttr &ba, TapasFMM::Cell &c) {
   for (int n=0; n<P; n++) {
     int nm  = n * n + n;
     int nms = n * (n + 1) / 2;
-    //b.TRG[0] += std::real(c.attr().L[nms] * Ynm[nm]);
-    ba[0] += std::real(c.attr().L[nms] * Ynm[nm]);
-    spherical[0] += std::real(c.attr().L[nms] * Ynm[nm]) / r * n;
-    spherical[1] += std::real(c.attr().L[nms] * YnmTheta[nm]);
+    //b.TRG[0] += std::real(c->attr().L[nms] * Ynm[nm]);
+    ba[0] += std::real(c->attr().L[nms] * Ynm[nm]);
+    spherical[0] += std::real(c->attr().L[nms] * Ynm[nm]) / r * n;
+    spherical[1] += std::real(c->attr().L[nms] * YnmTheta[nm]);
     for( int m=1; m<=n; m++) {
       nm  = n * n + n + m;
       nms = n * (n + 1) / 2 + m;
-      //b.TRG[0] += 2 * std::real(c.attr().L[nms] * Ynm[nm]);
-      ba[0] += 2 * std::real(c.attr().L[nms] * Ynm[nm]);
-      spherical[0] += 2 * std::real(c.attr().L[nms] * Ynm[nm]) / r * n;
-      spherical[1] += 2 * std::real(c.attr().L[nms] * YnmTheta[nm]);
-      spherical[2] += 2 * std::real(c.attr().L[nms] * Ynm[nm] * I) * m;
+      //b.TRG[0] += 2 * std::real(c->attr().L[nms] * Ynm[nm]);
+      ba[0] += 2 * std::real(c->attr().L[nms] * Ynm[nm]);
+      spherical[0] += 2 * std::real(c->attr().L[nms] * Ynm[nm]) / r * n;
+      spherical[1] += 2 * std::real(c->attr().L[nms] * YnmTheta[nm]);
+      spherical[2] += 2 * std::real(c->attr().L[nms] * Ynm[nm] * I) * m;
     }
   }
   sph2cart(r, theta, phi, spherical, cartesian);

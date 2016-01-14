@@ -42,7 +42,7 @@ static std::atomic<int> streamid (0);
    Kepler sm_35).  NCONNECTIONS is the number of physical command
    streams. (default=8 and maximum=32 on Kepler sm_35). */
 
-static struct TESLA {
+struct TESLA {
   int gpuno;
   int sm;
   int n_sm;
@@ -57,7 +57,7 @@ static struct TESLA {
 #ifdef __CUDACC__
   cudaStream_t streams[TAPAS_CUDA_MAX_NSTREAMS];
 #endif
-} tesla_dev;
+};
 
 #define TAPAS_CEILING(X,Y) (((X) + (Y) - 1) / (Y))
 #define TAPAS_FLOOR(X,Y) ((X) / (Y))
@@ -223,13 +223,15 @@ struct cellcompare_r {
 template<int _DIM, class _FP, class _BT, class _BT_ATTR>
 struct Vectormap_CUDA_Simple {
 
+  TESLA tesla_dev_;
+
   /** Memory allocator for the unified memory.  It will replace the
       vector allocators.  (N.B. Its name should be generic because it
       is used in CPUs also.) */
 
   template <typename T>
   struct um_allocator : public std::allocator<T> {
-  public:
+   public:
     /*typedef T* pointer;*/
     /*typedef const T* const_pointer;*/
     /*typedef T value_type;*/
@@ -260,11 +262,11 @@ struct Vectormap_CUDA_Simple {
     ~um_allocator() throw() {}
   };
 
-  static void vectormap_setup(int cta, int nstreams) {
+  void vectormap_setup(int cta, int nstreams) {
     assert(nstreams <= TAPAS_CUDA_MAX_NSTREAMS);
 
-    tesla_dev.cta_size = cta;
-    tesla_dev.n_streams = nstreams;
+    tesla_dev_.cta_size = cta;
+    tesla_dev_.n_streams = nstreams;
 
     /*AHO*/ /* USE PROPER WAY TO KNOW OF USE OF MPI. */
     std::cerr << "Vectormap_CUDA_Simple::vectormap_setup" << std::endl;
@@ -292,46 +294,46 @@ struct Vectormap_CUDA_Simple {
       assert(ngpus >= nprocsinnode);
     }
 
-    tesla_dev.gpuno = rankinnode;
+    tesla_dev_.gpuno = rankinnode;
     cudaDeviceProp prop;
-    CUDA_SAFE_CALL(cudaGetDeviceProperties(&prop, tesla_dev.gpuno));
-    CUDA_SAFE_CALL(cudaSetDevice(tesla_dev.gpuno));
+    CUDA_SAFE_CALL(cudaGetDeviceProperties(&prop, tesla_dev_.gpuno));
+    CUDA_SAFE_CALL(cudaSetDevice(tesla_dev_.gpuno));
 
-    printf(";; Rank#%d uses GPU#%d\n", rank, tesla_dev.gpuno);
+    printf(";; Rank#%d uses GPU#%d\n", rank, tesla_dev_.gpuno);
 
     assert(prop.unifiedAddressing);
 
-    tesla_dev.sm = (prop.major * 10 + prop.minor);
-    tesla_dev.n_sm = prop.multiProcessorCount;
+    tesla_dev_.sm = (prop.major * 10 + prop.minor);
+    tesla_dev_.n_sm = prop.multiProcessorCount;
 
-    tesla_dev.n_cores = 0;
+    tesla_dev_.n_cores = 0;
     for (struct TESLA_CORES &i : tesla_cores) {
-      if (i.sm == tesla_dev.sm) {
-        tesla_dev.n_cores = i.n_cores;
+      if (i.sm == tesla_dev_.sm) {
+        tesla_dev_.n_cores = i.n_cores;
         break;
       }
     }
-    assert(tesla_dev.n_cores != 0);
+    assert(tesla_dev_.n_cores != 0);
 
-    tesla_dev.scratchpad_size = prop.sharedMemPerBlock;
-    tesla_dev.max_cta_size = prop.maxThreadsPerBlock;
+    tesla_dev_.scratchpad_size = prop.sharedMemPerBlock;
+    tesla_dev_.max_cta_size = prop.maxThreadsPerBlock;
     assert(prop.maxThreadsPerMultiProcessor >= prop.maxThreadsPerBlock * 2);
 
-    for (int i = 0; i < tesla_dev.n_streams; i++) {
-      CUDA_SAFE_CALL(cudaStreamCreate(&tesla_dev.streams[i]));
+    for (int i = 0; i < tesla_dev_.n_streams; i++) {
+      CUDA_SAFE_CALL(cudaStreamCreate(&tesla_dev_.streams[i]));
     }
   }
-
-  static void vectormap_release() {
-    for (int i = 0; i < tesla_dev.n_streams; i++) {
-      CUDA_SAFE_CALL(cudaStreamDestroy(tesla_dev.streams[i]));
+  
+  void vectormap_release() {
+    for (int i = 0; i < tesla_dev_.n_streams; i++) {
+      CUDA_SAFE_CALL(cudaStreamDestroy(tesla_dev_.streams[i]));
     }
   }
 
   static void vectormap_start() {}
 
   template <class Funct, class... Args>
-  static void vectormap_finish(Funct f, Args... args) {
+  void vectormap_finish(Funct f, Args... args) {
     vectormap_check_error("vectormap_end", __FILE__, __LINE__);
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
   }
@@ -342,7 +344,7 @@ struct Vectormap_CUDA_Simple {
      coded to be run on GPUs, since it accesses the cell. */
 
   template <class Funct, class Cell, class... Args>
-  static void vector_map1(Funct f, BodyIterator<Cell> iter,
+  void vector_map1(Funct f, BodyIterator<Cell> iter,
                           Args... args) {
     int sz = iter.size();
     for (int i = 0; i < sz; i++) {
@@ -372,8 +374,8 @@ struct Vectormap_CUDA_Simple {
     size_t nblocks = TAPAS_CEILING(n0, ctasize);
 
     streamid++;
-    int s = (streamid % tesla_dev.n_streams);
-    vectormap_cuda_kernel1<<<nblocks, ctasize, 0, tesla_dev.streams[s]>>>
+    int s = (streamid % tesla_dev_.n_streams);
+    vectormap_cuda_kernel1<<<nblocks, ctasize, 0, tesla_dev_.streams[s]>>>
       (b0, n0, f, args...);
   }
 #endif
@@ -389,8 +391,7 @@ struct Vectormap_CUDA_Simple {
      preloading of the second cells). */
 
   template <class Funct, class Cell, class... Args>
-  static void vectormap_cuda_plain(Funct f, Cell &c0, Cell &c1,
-                                   Args... args) {
+  void vectormap_cuda_plain(Funct f, Cell &c0, Cell &c1, Args... args) {
     using BV = typename Cell::Body;
     using BA = typename Cell::BodyAttr;
 
@@ -417,11 +418,11 @@ struct Vectormap_CUDA_Simple {
     /*bool am = AllowMutual<T1_Iter, T2_Iter>::value(b0, b1);*/
     /*int n0up = (TAPAS_CEILING(n0, 256) * 256);*/
     /*int n0up = (TAPAS_CEILING(n0, 32) * 32);*/
-    int cta0 = (TAPAS_CEILING(tesla_dev.cta_size, 32) * 32);
+    int cta0 = (TAPAS_CEILING(tesla_dev_.cta_size, 32) * 32);
     int ctasize = std::min(cta0, tesla_attr1.maxThreadsPerBlock);
-    assert(ctasize == tesla_dev.cta_size);
+    assert(ctasize == tesla_dev_.cta_size);
 
-    int tile0 = (tesla_dev.scratchpad_size / sizeof(typename Cell::BodyType));
+    int tile0 = (tesla_dev_.scratchpad_size / sizeof(typename Cell::BodyType));
     int tile1 = (TAPAS_FLOOR(tile0, 32) * 32);
     int tilesize = std::min(ctasize, tile1);
     assert(tilesize > 0);
@@ -435,9 +436,9 @@ struct Vectormap_CUDA_Simple {
     fflush(0);
 #endif
 
-    int s = (((unsigned long)&c0 >> 4) % tesla_dev.n_streams);
+    int s = (((unsigned long)&c0 >> 4) % tesla_dev_.n_streams);
     vectormap_cuda_plain_kernel2<<<nblocks, ctasize, scratchpadsize,
-      tesla_dev.streams[s]>>>
+      tesla_dev_.streams[s]>>>
       (v0, v1, a0, n0, n1, tilesize, f, args...);
   }
 
@@ -448,10 +449,10 @@ struct Vectormap_CUDA_Simple {
    *        Cell::BodyAttrType&, and extra call arguments. 
    */
   template <class Funct, class Cell, class...Args>
-  static void vector_map2(Funct f, ProductIterator<BodyIterator<Cell>> prod,
-                          Args... args) {
+  void vector_map2(Funct f, ProductIterator<BodyIterator<Cell>> prod,
+                   Args... args) {
     printf("vector_map2X\n"); fflush(0);
-
+    
     typedef BodyIterator<Cell> Iter;
     const Cell &c0 = prod.first().cell();
     const Cell &c1 = prod.second().cell();
@@ -462,6 +463,8 @@ struct Vectormap_CUDA_Simple {
       vectormap_cuda_plain(f, c1, c0, args...);
     }
   }
+
+  inline TESLA& tesla_dev() { return tesla_dev_; } // used in the child class
 };
 
 template <class T>
@@ -472,7 +475,7 @@ struct Cell_Data {
 
 template<int _DIM, class _FP, class _BT, class _BT_ATTR>
 struct Vectormap_CUDA_Packed
-  : Vectormap_CUDA_Simple<_DIM, _FP, _BT, _BT_ATTR> {
+    : public Vectormap_CUDA_Simple<_DIM, _FP, _BT, _BT_ATTR> {
   using BV = _BT;
   using BA = _BT_ATTR;
 
@@ -481,50 +484,32 @@ struct Vectormap_CUDA_Packed
   /* STATIC MEMBER FIELDS. (It is a trick.  See:
      http://stackoverflow.com/questions/11709859/) */
 
-  static std::vector<CellPair> &cellpairs() {
-    static std::vector<CellPair> cellpairs_;
-    return cellpairs_;
-  }
+  std::vector<CellPair> cellpairs_;
+  std::mutex pairs_mutex_;
+  size_t npairs_;
 
-  static std::mutex &pairs_mutex() {
-    static std::mutex pairs_mutex_;
-    return pairs_mutex_;
-  }
-
-  static size_t &npairs() {
-    static size_t npairs_ = 0;
-    return npairs_;
-  }
-
-  static Cell_Data<BV>* &dvcells() {
-    static Cell_Data<BV>* dvcells_ = 0;
-    return dvcells_;
-  }
-
-  static Cell_Data<BV>* &hvcells() {
-    static Cell_Data<BV>* hvcells_ = 0;
-    return hvcells_;
-  }
-
-  static Cell_Data<BA>* &dacells() {
-    static Cell_Data<BA>* dacells_ = 0;
-    return dacells_;
-  }
-
-  static Cell_Data<BA>* &hacells() {
-    static Cell_Data<BA>* hacells_ = 0;
-    return hacells_;
-  }
-
-  static void vectormap_start() {
+  Cell_Data<BV>* dvcells_;
+  Cell_Data<BV>* hvcells_;
+  Cell_Data<BA>* dacells_;
+  Cell_Data<BA>* hacells_;
+  
+  void vectormap_start() {
     //printf(";; vectormap_start\n"); fflush(0);
-    cellpairs().clear();
+    cellpairs_.clear();
   }
+
+  Vectormap_CUDA_Packed()
+      : npairs_(0)
+      , dvcells_(nullptr)
+      , hvcells_(nullptr)
+      , dacells_(nullptr)
+      , hacells_(nullptr)
+  { }
 
   /* (Two argument mapping with left packing.) */
 
   template <class Funct, class Cell, class... Args>
-  static void vector_map2(Funct f, ProductIterator<BodyIterator<Cell>> prod,
+  void vector_map2(Funct f, ProductIterator<BodyIterator<Cell>> prod,
                           Args... args) {
     using BV = typename Cell::Body;
     using BA = typename Cell::BodyAttr;
@@ -550,26 +535,28 @@ struct Vectormap_CUDA_Packed
     a1.data = (BA*)&(c1.body_attr(0));
     
     if (c0 == c1) {
-      pairs_mutex().lock();
-      cellpairs().push_back(std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>(d0, a0, d1));
-      pairs_mutex().unlock();
+      pairs_mutex_.lock();
+      cellpairs_.push_back(std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>(d0, a0, d1));
+      pairs_mutex_.unlock();
     } else {
-      pairs_mutex().lock();
-      cellpairs().push_back(std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>(d0, a0, d1));
-      cellpairs().push_back(std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>(d1, a1, d0));
-      pairs_mutex().unlock();
+      pairs_mutex_.lock();
+      cellpairs_.push_back(std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>(d0, a0, d1));
+      cellpairs_.push_back(std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>(d1, a1, d0));
+      pairs_mutex_.unlock();
     }
   }
 
   /* Launches a kernel on Tesla. */
 
   template <class Funct, class Cell, class... Args>
-  static void vectormap_invoke(int start, int nc, Cell_Data<BV> &r,
-                               int tilesize,
-                               size_t nblocks, int ctasize, int scratchpadsize,
-                               Cell &dummy, Funct f, Args... args) {
+  void vectormap_invoke(int start, int nc, Cell_Data<BV> &r,
+                        int tilesize,
+                        size_t nblocks, int ctasize, int scratchpadsize,
+                        Cell &dummy, Funct f, Args... args) {
     using BV = typename Cell::Body;
     using BA = typename Cell::BodyAttr;
+
+    TESLA &tesla_dev = this->tesla_dev();
 
     /*AHO*/
     if (0) {
@@ -577,9 +564,9 @@ struct Vectormap_CUDA_Packed
              nblocks, ctasize, scratchpadsize, tilesize);
       printf("invoke(start=%d ncells=%d)\n", start, nc);
       for (int i = 0; i < nc; i++) {
-        Cell_Data<BV> &lc = std::get<0>(cellpairs()[start + i]);
-        Cell_Data<BA> &ac = std::get<1>(cellpairs()[start + i]);
-        Cell_Data<BV> &rc = std::get<2>(cellpairs()[start + i]);
+        Cell_Data<BV> &lc = std::get<0>(cellpairs_[start + i]);
+        Cell_Data<BA> &ac = std::get<1>(cellpairs_[start + i]);
+        Cell_Data<BV> &rc = std::get<2>(cellpairs_[start + i]);
         assert(rc.data == r.data);
         assert(ac.size == lc.size);
         printf("pair(celll=%p[%d] cellr=%p[%d])\n",
@@ -592,7 +579,7 @@ struct Vectormap_CUDA_Packed
     int s = (streamid % tesla_dev.n_streams);
     vectormap_cuda_pack_kernel2<<<nblocks, ctasize, scratchpadsize,
         tesla_dev.streams[s]>>>
-        (&(dvcells()[start]), &(dacells()[start]), nc, r.size, r.data,
+        (&(dvcells_[start]), &(dacells_[start]), nc, r.size, r.data,
          tilesize, f, args...);
   }
   
@@ -603,11 +590,13 @@ struct Vectormap_CUDA_Packed
   /* Starts launching a kernel on collected cells. */
 
   template <class Funct, class Cell, class... Args>
-  static void vectormap_on_collected(Funct f, Cell dummy, Args... args) {
+  void vectormap_on_collected(Funct f, Cell &dummy, Args... args) {
     using BV = typename Cell::Body;
     using BA = typename Cell::BodyAttr;
 
-    if (cellpairs().size() == 0) {
+    TESLA &tesla_dev = this->tesla_dev();
+
+    if (cellpairs_.size() == 0) {
       return;
     }
     static std::mutex mutex2;
@@ -633,7 +622,7 @@ struct Vectormap_CUDA_Packed
     }
     assert(tesla_attr2.binaryVersion != 0);
 
-    //printf(";; pairs=%ld\n", cellpairs().size());
+    //printf(";; pairs=%ld\n", cellpairs_.size());
 
     // cta = cooperative thread array = thread block
     int cta0 = (TAPAS_CEILING(tesla_dev.cta_size, 32) * 32);
@@ -648,39 +637,39 @@ struct Vectormap_CUDA_Packed
     int scratchpadsize = (sizeof(typename Cell::BodyType) * tilesize);
     size_t nblocks = TAPAS_CEILING(N0, ctasize);
 
-    if (npairs() < cellpairs().size()) {
-      CUDA_SAFE_CALL( cudaFree(dvcells()) );
-      CUDA_SAFE_CALL( cudaFree(dacells()) );
-      CUDA_SAFE_CALL( cudaFree(hvcells()) );
-      CUDA_SAFE_CALL( cudaFree(hacells()) );
+    if (npairs_ < cellpairs_.size()) {
+      CUDA_SAFE_CALL( cudaFree(dvcells_) );
+      CUDA_SAFE_CALL( cudaFree(dacells_) );
+      CUDA_SAFE_CALL( cudaFree(hvcells_) );
+      CUDA_SAFE_CALL( cudaFree(hacells_) );
 
-      npairs() = cellpairs().size();
-      CUDA_SAFE_CALL( cudaMalloc(&dvcells(), (sizeof(Cell_Data<BV>) * npairs())) );
-      CUDA_SAFE_CALL( cudaMalloc(&dacells(), (sizeof(Cell_Data<BA>) * npairs())) );
-      CUDA_SAFE_CALL( cudaMallocHost(&hvcells(), (sizeof(Cell_Data<BV>) * npairs())) );
-      CUDA_SAFE_CALL( cudaMallocHost(&hacells(), (sizeof(Cell_Data<BA>) * npairs())) );
+      npairs_ = cellpairs_.size();
+      CUDA_SAFE_CALL( cudaMalloc(&dvcells_, (sizeof(Cell_Data<BV>) * npairs_)) );
+      CUDA_SAFE_CALL( cudaMalloc(&dacells_, (sizeof(Cell_Data<BA>) * npairs_)) );
+      CUDA_SAFE_CALL( cudaMallocHost(&hvcells_, (sizeof(Cell_Data<BV>) * npairs_)) );
+      CUDA_SAFE_CALL( cudaMallocHost(&hacells_, (sizeof(Cell_Data<BA>) * npairs_)) );
     }
 
-    std::sort(cellpairs().begin(), cellpairs().end(),
+    std::sort(cellpairs_.begin(), cellpairs_.end(),
               cellcompare_r<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>());
-    for (size_t i = 0; i < npairs(); i++) {
-      std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = cellpairs()[i];
-      hvcells()[i] = std::get<0>(c);
+    for (size_t i = 0; i < npairs_; i++) {
+      std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = cellpairs_[i];
+      hvcells_[i] = std::get<0>(c);
     }
-    CUDA_SAFE_CALL(cudaMemcpy(dvcells(), hvcells(), (sizeof(Cell_Data<BV>) * npairs()),
+    CUDA_SAFE_CALL(cudaMemcpy(dvcells_, hvcells_, (sizeof(Cell_Data<BV>) * npairs_),
                               cudaMemcpyHostToDevice));
-    for (size_t i = 0; i < npairs(); i++) {
-      std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = cellpairs()[i];
-      hacells()[i] = std::get<1>(c);
+    for (size_t i = 0; i < npairs_; i++) {
+      std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = cellpairs_[i];
+      hacells_[i] = std::get<1>(c);
     }
-    CUDA_SAFE_CALL(cudaMemcpy(dacells(), hacells(), (sizeof(Cell_Data<BA>) * npairs()),
+    CUDA_SAFE_CALL(cudaMemcpy(dacells_, hacells_, (sizeof(Cell_Data<BA>) * npairs_),
                               cudaMemcpyHostToDevice));
 
-    Cell_Data<BV> xr = std::get<2>(cellpairs()[0]);
+    Cell_Data<BV> xr = std::get<2>(cellpairs_[0]);
     int xncells = 0;
     int xndata = 0;
-    for (size_t i = 0; i < npairs(); i++) {
-      std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = cellpairs()[i];
+    for (size_t i = 0; i < npairs_; i++) {
+      std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = cellpairs_[i];
       Cell_Data<BV> &r = std::get<2>(c);
       if (xr.data != r.data) {
         assert(i != 0 && xncells > 0);
@@ -708,13 +697,13 @@ struct Vectormap_CUDA_Packed
       xndata += (TAPAS_CEILING(l.size, 32) * 32);
     }
     assert(xncells > 0);
-    vectormap_invoke((npairs() - xncells), xncells, xr,
+    vectormap_invoke((npairs_ - xncells), xncells, xr,
                      tilesize, nblocks, ctasize, scratchpadsize,
                      dummy, f, args...);
   }
 
   template <class Funct, class Cell, class... Args>
-  static void vectormap_finish(Funct f, Cell dummy, Args... args) {
+  void vectormap_finish(Funct f, Cell &dummy, Args... args) {
     //printf(";; vectormap_finish\n"); fflush(0);
     vectormap_on_collected(f, dummy, args...);
     vectormap_check_error("vectormap_end", __FILE__, __LINE__);

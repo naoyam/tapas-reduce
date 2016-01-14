@@ -83,7 +83,7 @@ static inline void FMM_Downward(TapasFMM::Cell &c) {
   //if (c.nb() == 0) return;
   if (!c.IsRoot()) L2L(c);
   if (c.IsLeaf() && c.nb() > 0) {
-    tapas::Map(L2P, c.bodies(), c);
+    tapas::Map(L2P, c.bodies(), &c);
   }
 }
 

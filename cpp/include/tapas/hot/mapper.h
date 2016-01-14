@@ -187,18 +187,12 @@ struct CPUMapper {
     f(*b1, b1.attr(), *b2, b2.attr(), args...);
   }
 
-  inline void Setup() {
-    std::cerr << "CPUMapper::Setup()" << std::endl;
-  }
+  inline void Setup() {  }
   
-  inline void Start() {
-    std::cerr << "CPUMapper::Start()" << std::endl;
-  }
+  inline void Start() {  }
 
   template <class Funct, class...Args>
-  inline void Finish(Funct f, Cell &c, Args...args) {
-    std::cerr << "CPUMapper::Finish()" << std::endl;
-  }
+  inline void Finish(Funct f, Cell &c, Args...args) {  }
 }; // class CPUMapper
 
 
@@ -211,6 +205,8 @@ template<class Cell, class Body, class LET>
 struct GPUMapper {
 
   using Vectormap = tapas::Vectormap_CUDA_Packed<Cell::Dim, typename Cell::FP, typename Cell::Body, typename Cell::BodyAttr>;
+
+  Vectormap vmap_;
 
   /**
    * @brief Map function f over product of two iterators
@@ -239,21 +235,20 @@ struct GPUMapper {
      with ProductIterator<BodyIterator<T>>). */
   template <class Funct, class...Args>
   inline void Map(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args...args) {
-    Vectormap::vector_map2(f, prod, args...);
+    vmap_.vector_map2(f, prod, args...);
   }
 
   inline void Setup() {
-    std::cerr << "GPUMapper::Setup()" << std::endl;
-    Vectormap::vectormap_setup(64,31);
+    vmap_.vectormap_setup(64,31);
   }
   
   inline void Start() {
-    Vectormap::vectormap_start();
+    vmap_.vectormap_start();
   }
 
   template <class Funct, class...Args>
   inline void Finish(Funct f, Cell &c, Args...args) {
-    Vectormap::vectormap_finish(f, c, args...);
+    vmap_.vectormap_finish(f, c, args...);
   }
 
   /**
