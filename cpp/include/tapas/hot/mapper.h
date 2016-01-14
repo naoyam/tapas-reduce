@@ -191,8 +191,7 @@ struct CPUMapper {
   
   inline void Start() {  }
 
-  template <class Funct, class...Args>
-  inline void Finish(Funct f, Cell &c, Args...args) {  }
+  inline void Finish() {  }
 }; // class CPUMapper
 
 
@@ -246,9 +245,9 @@ struct GPUMapper {
     vmap_.start();
   }
 
-  template <class Funct, class...Args>
-  inline void Finish(Funct f, Cell &c, Args...args) {
-    vmap_.finish(f, c, args...);
+  // GPUMapper::Finish
+  inline void Finish() {
+    vmap_.finish();
   }
 
   /**
@@ -268,6 +267,7 @@ struct GPUMapper {
     tg.wait();
   }
   
+  // GPUMapper::Map
   // cell x cell
   template <class Funct, class...Args>
   inline void Map(Funct f, Cell &c1, Cell &c2, Args... args) {
@@ -286,13 +286,15 @@ struct GPUMapper {
           std::cerr << "Error: mutual is not supported in CUDA implementation" << std::endl;
           exit(-1);
         }
+
+        Start(); // initialize GPU
       }
     }
 
     f(c1, c2, args...);
     
     if (c1.IsRoot() && c2.IsRoot()) {
-      // post-process (empty for now)
+      Finish(); // Finish computation on GPU
     }
   }
 

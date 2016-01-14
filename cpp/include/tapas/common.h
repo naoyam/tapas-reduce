@@ -156,7 +156,7 @@ void PrintKeys(const T &s, std::ostream &os) {
 }
 
 /**
- * @brief Convert a type to an integer (not constexpr unfortunately)
+ * @brief Convert a type to an integer
  */
 template<typename T>
 struct Type2Int {

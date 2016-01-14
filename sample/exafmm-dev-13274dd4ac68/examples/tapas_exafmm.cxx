@@ -484,14 +484,7 @@ int main(int argc, char ** argv) {
     
     numM2L = 0; numP2P = 0;
     
-    root->mapper().Start();
-    
     tapas::Map(FMM_DTT(), tapas::Product(*root, *root), args.mutual, args.nspawn, args.theta);
-    
-    {
-      vec3 Xperiodic = 0; // dummy; periodic not ported
-      root->mapper().Finish(P2P(), *root, Xperiodic, args.mutual);
-    }
     
     logger::stopTimer("Traverse");
     

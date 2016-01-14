@@ -227,6 +227,9 @@ struct cellcompare_r {
 template<int _DIM, class _FP, class _BT, class _BT_ATTR>
 struct Vectormap_CUDA_Simple {
 
+  using Body = _BT;
+  using BodyAttr = _BT_ATTR;
+
   TESLA tesla_dev_;
 
   /** Memory allocator for the unified memory.  It will replace the
@@ -336,8 +339,7 @@ struct Vectormap_CUDA_Simple {
 
   void start() {}
 
-  template <class Funct, class... Args>
-  void finish(Funct f, Args... args) {
+  void finish() {
     vectormap_check_error("vectormap_end", __FILE__, __LINE__);
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
   }
@@ -367,7 +369,7 @@ struct Vectormap_CUDA_Simple {
       mutex0.lock();
       CUDA_SAFE_CALL(cudaFuncGetAttributes(
           &tesla_attr0,
-          &vectormap_cuda_kernel1<Funct, typename Cell::BodyType, Args...>));
+          &vectormap_cuda_kernel1<Funct, Body, Args...>));
       mutex0.unlock();
     }
     assert(tesla_attr0.binaryVersion != 0);
@@ -396,8 +398,8 @@ struct Vectormap_CUDA_Simple {
 
   template <class Funct, class Cell, class... Args>
   void vectormap_cuda_plain(Funct f, Cell &c0, Cell &c1, Args... args) {
-    using BV = typename Cell::Body;
-    using BA = typename Cell::BodyAttr;
+    using BV = Body;
+    using BA = BodyAttr;
 
     static std::mutex mutex1;
     static struct cudaFuncAttributes tesla_attr1;
@@ -426,12 +428,12 @@ struct Vectormap_CUDA_Simple {
     int ctasize = std::min(cta0, tesla_attr1.maxThreadsPerBlock);
     assert(ctasize == tesla_dev_.cta_size);
 
-    int tile0 = (tesla_dev_.scratchpad_size / sizeof(typename Cell::BodyType));
+    int tile0 = (tesla_dev_.scratchpad_size / sizeof(Body));
     int tile1 = (TAPAS_FLOOR(tile0, 32) * 32);
     int tilesize = std::min(ctasize, tile1);
     assert(tilesize > 0);
 
-    int scratchpadsize = (sizeof(typename Cell::BodyType) * tilesize);
+    int scratchpadsize = (sizeof(Body) * tilesize);
     size_t nblocks = TAPAS_CEILING(n0, ctasize);
 
 #if 0 /*AHO*/
@@ -449,8 +451,8 @@ struct Vectormap_CUDA_Simple {
   /** 
    * \fn Vectormap_CUDA_Simple::vector_map2
    * \brief Calls a function FN given by the user on each data pair in the
-   *        cells.  f takes arguments of Cell::BodyType&, Cell::BodyType&,
-   *        Cell::BodyAttrType&, and extra call arguments. 
+   *        cells.  f takes arguments of Body&, Body&,
+   *        BodyAttr&, and extra call arguments. 
    */
   template <class Funct, class Cell, class...Args>
   void vector_map2(Funct f, ProductIterator<BodyIterator<Cell>> prod,
@@ -479,12 +481,12 @@ struct Cell_Data {
 
 // Launches a kernel on Tesla.
 // Used by Vectormap_CUDA_Pakced and Applier.
-template <class Caller, class Funct, class Cell, class... Args>
-void invoke(Caller *caller, int start, int nc, Cell_Data<typename Cell::Body> &r,
+template <class Caller, class Funct, class... Args>
+void invoke(Caller *caller, int start, int nc, Cell_Data<Body> &r,
             int tilesize, size_t nblocks, int ctasize, int scratchpadsize,
-            Cell &dummy, Funct f, Args... args) {
-  using BV = typename Cell::Body;
-  using BA = typename Cell::BodyAttr;
+            Funct f, Args... args) {
+  using BV = typename Caller::Body;
+  using BA = typename Caller::BodyAttr;
 
   TESLA &tesla_dev = caller->tesla_dev();
   
@@ -527,28 +529,31 @@ struct gens<0, S...> {
 
 // Abstract base class of Applier.
 // Subclasses take a particular function type (ex. P2P) and variadic arguments.
-template<class Vectormap, class Funct, class Cell, class...Args>
+template<class Vectormap>
 class AbstractApplier {
  public:
-  virtual void apply(Vectormap *vm, Cell &dummy) = 0;
+  virtual void apply(Vectormap *vm) = 0;
 };
 
 // When tapas::Map <Body x Body> 
-template<class Vectormap, class Funct, class Cell, class...Args>
-class Applier : public AbstractApplier<Vectormap, Funct, Cell, Args...> {
+template<class Vectormap, class Funct, class...Args>
+class Applier : public AbstractApplier<Vectormap> {
   Funct f_;
   std::tuple<Args...> args_;
   std::mutex mutex_;
-  using S = typename gens<sizeof...(Args)>::type;
+  using ParamIdxSeq = typename gens<sizeof...(Args)>::type; // used to hold args... for invoke
 
  public:
 
+  using Body = typename Vectormap::Body;
+  using BodyAttr = typename Vectormap::BodyAttr;
+
   // Call ::invoke() function with args... 
   template<int ...ParamIdx>
-  inline void invoke2(Vectormap *caller, int start, int nc, Cell_Data<typename Cell::Body> &r,
+  inline void invoke2(Vectormap *caller, int start, int nc, Cell_Data<Body> &r,
                       int tilesize, size_t nblocks, int ctasize, int scratchpadsize,
-                      Cell &dummy, seq<ParamIdx...>) {
-    invoke(caller, start, nc, r, tilesize, nblocks, ctasize, scratchpadsize, dummy, f_, std::get<ParamIdx>(args_)...);
+                      seq<ParamIdx...>) {
+    invoke(caller, start, nc, r, tilesize, nblocks, ctasize, scratchpadsize, f_, std::get<ParamIdx>(args_)...);
   }
   
   Applier(Funct f, Args... args) : f_(f), args_(args...) { }
@@ -558,9 +563,9 @@ class Applier : public AbstractApplier<Vectormap, Funct, Cell, Args...> {
   
   // cellpairs
   // dvcells_, dacells_, hvcells_, hacells_, npairs_  
-  virtual void apply(Vectormap *vm, Cell &dummy) override {
-    using BV = typename Cell::Body;
-    using BA = typename Cell::BodyAttr;
+  virtual void apply(Vectormap *vm) override {
+    using BV = Body;
+    using BA = BodyAttr;
 
     TESLA &tesla_dev = vm->tesla_dev();
 
@@ -597,12 +602,12 @@ class Applier : public AbstractApplier<Vectormap, Funct, Cell, Args...> {
     int ctasize = std::min(cta0, tesla_attr2.maxThreadsPerBlock);
     assert(ctasize == tesla_dev.cta_size);
 
-    int tile0 = (tesla_dev.scratchpad_size / sizeof(typename Cell::BodyType));
+    int tile0 = (tesla_dev.scratchpad_size / sizeof(Body));
     int tile1 = (TAPAS_FLOOR(tile0, 32) * 32);
     int tilesize = std::min(ctasize, tile1);
     assert(tilesize > 0);
 
-    int scratchpadsize = (sizeof(typename Cell::BodyType) * tilesize);
+    int scratchpadsize = (sizeof(Body) * tilesize);
     size_t nblocks = TAPAS_CEILING(Vectormap::N0, ctasize);
 
     if (vm->npairs_ < vm->cellpairs_.size()) {
@@ -644,7 +649,7 @@ class Applier : public AbstractApplier<Vectormap, Funct, Cell, Args...> {
         assert(i != 0 && xncells > 0);
         invoke2(vm, (i - xncells), xncells, xr,
                 tilesize, nblocks, ctasize, scratchpadsize,
-                dummy, S());
+                ParamIdxSeq());
         xncells = 0;
         xndata = 0;
         xr = r;
@@ -657,7 +662,7 @@ class Applier : public AbstractApplier<Vectormap, Funct, Cell, Args...> {
         assert(i != 0 && xncells > 0);
         invoke2(vm, (i - xncells), xncells, xr,
                 tilesize, nblocks, ctasize, scratchpadsize,
-                dummy, S());
+                ParamIdxSeq());
         xncells = 0;
         xndata = 0;
         xr = r;
@@ -668,7 +673,7 @@ class Applier : public AbstractApplier<Vectormap, Funct, Cell, Args...> {
     assert(xncells > 0);
     invoke2(vm, (vm->npairs_ - xncells), xncells, xr,
             tilesize, nblocks, ctasize, scratchpadsize,
-            dummy, S());
+            ParamIdxSeq());
   }
 };
 
@@ -678,16 +683,28 @@ struct Vectormap_CUDA_Packed
   using BV = _BT;
   using BA = _BT_ATTR;
 
+  using Body = _BT;
+  using BodyAttr = _BT_ATTR;
+  
   using CellPair = std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>;
+  using Vectormap = Vectormap_CUDA_Packed<_DIM, _FP, _BT, _BT_ATTR>; // self
 
+  // Pairs of bodies to which the user function is applied
   std::vector<CellPair> cellpairs_;
   std::mutex pairs_mutex_;
   size_t npairs_;
-
+  
   Cell_Data<BV>* dvcells_;
   Cell_Data<BV>* hvcells_;
   Cell_Data<BA>* dacells_;
   Cell_Data<BA>* hacells_;
+
+  // funct_id_ is used to check if the same Funct is used for all cell pairs.
+  // In the current implementation, it is assumed that a single function and
+  // the same optional arguments (= Args...) are used to all cell pairs.
+  std::mutex applier_mutex_;
+  intptr_t funct_id_;
+  AbstractApplier<Vectormap> *applier_;
   
   void start() {
     //printf(";; start\n"); fflush(0);
@@ -700,21 +717,38 @@ struct Vectormap_CUDA_Packed
       , hvcells_(nullptr)
       , dacells_(nullptr)
       , hacells_(nullptr)
+      , funct_id_(0)
+      , applier_(nullptr)
   { }
 
   /* (Two argument mapping with left packing.) */
 
-  template <class Funct, class Cell, class... Args>
+  template <class Cell, class Funct, class... Args>
   void map2(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args... args) {
-    using BV = typename Cell::Body;
-    using BA = typename Cell::BodyAttr;
+    using BV = Body;
+    using BA = BodyAttr;
+
+    static_assert(std::is_same<typename Cell::Body, Body>::value, "inconsistent Cell and Body types");
+    static_assert(std::is_same<typename Cell::BodyAttr, BodyAttr>::value, "inconsistent Cell and BodyAttr types");
 
     const Cell &c0 = prod.first().cell();
     const Cell &c1 = prod.second().cell();
     assert(c0.IsLeaf() && c1.IsLeaf());
 
     if (c0.nb() == 0 || c1.nb() == 0) return;
-    
+
+    // Create Applier with Funct and Args...
+    if (applier_ == nullptr) {
+      applier_mutex_.lock();
+      if (applier_ == nullptr) {
+        applier_ = new Applier<Vectormap, Funct, Args...>(f, args...);
+        funct_id_ = Type2Int<Funct>::value();
+      }
+      applier_mutex_.unlock();
+    }
+
+    TAPAS_ASSERT(funct_id_ == Type2Int<Funct>::value());
+
     /* (Cast to drop const, below). */
     Cell_Data<BV> d0;
     Cell_Data<BV> d1;
@@ -746,21 +780,26 @@ struct Vectormap_CUDA_Packed
   static const constexpr int N0 = (16 * 1024);
 
   /* Starts launching a kernel on collected cells. */
-
-  template <class Funct, class Cell, class... Args>
-  void on_collected(Funct f, Cell &dummy, Args... args) {
-    AbstractApplier<Vectormap_CUDA_Packed, Funct, Cell, Args...> *app
-        = new Applier<Vectormap_CUDA_Packed, Funct, Cell, Args...>(f, args...);
-    app->apply(this, dummy);
-    delete app;
+  
+  void on_collected() {
+    applier_->apply(this);
   }
 
-  template <class Funct, class Cell, class... Args>
-  void finish(Funct f, Cell &dummy, Args... args) {
+  void finish() {
     //printf(";; Vectormap_CUDA_Packed::finish\n"); fflush(0);
-    on_collected(f, dummy, args...);
+    on_collected();
     vectormap_check_error("Vectormap_CUDA_Packed::end", __FILE__, __LINE__);
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    
+    if (applier_ != nullptr) {
+      applier_mutex_.lock();
+      if (applier_ != nullptr) {
+        delete applier_;
+        applier_ = nullptr;
+        funct_id_ = 0;
+      }
+      applier_mutex_.unlock();
+    }
   }
 };
 
