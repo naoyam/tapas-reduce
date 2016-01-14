@@ -62,7 +62,8 @@ struct TESLA {
 #define TAPAS_CEILING(X,Y) (((X) + (Y) - 1) / (Y))
 #define TAPAS_FLOOR(X,Y) ((X) / (Y))
 
-static void vectormap_check_error(const char *msg, const char *file, const int line) {
+namespace {
+inline void vectormap_check_error(const char *msg, const char *file, const int line) {
   cudaError_t ce = cudaGetLastError();
   if (ce != cudaSuccess) {
     fprintf(stderr,
@@ -73,6 +74,7 @@ static void vectormap_check_error(const char *msg, const char *file, const int l
     assert(ce == cudaSuccess);
   }
 }
+} // anon namespace
 
 #if 0
 template <class Funct, typename BV, class... Args>
@@ -262,7 +264,7 @@ struct Vectormap_CUDA_Simple {
     ~um_allocator() throw() {}
   };
 
-  void vectormap_setup(int cta, int nstreams) {
+  void setup(int cta, int nstreams) {
     assert(nstreams <= TAPAS_CUDA_MAX_NSTREAMS);
 
     tesla_dev_.cta_size = cta;
@@ -324,16 +326,16 @@ struct Vectormap_CUDA_Simple {
     }
   }
   
-  void vectormap_release() {
+  void release() {
     for (int i = 0; i < tesla_dev_.n_streams; i++) {
       CUDA_SAFE_CALL(cudaStreamDestroy(tesla_dev_.streams[i]));
     }
   }
 
-  static void vectormap_start() {}
+  void start() {}
 
   template <class Funct, class... Args>
-  void vectormap_finish(Funct f, Args... args) {
+  void finish(Funct f, Args... args) {
     vectormap_check_error("vectormap_end", __FILE__, __LINE__);
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
   }
@@ -481,9 +483,6 @@ struct Vectormap_CUDA_Packed
 
   using CellPair = std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>;
 
-  /* STATIC MEMBER FIELDS. (It is a trick.  See:
-     http://stackoverflow.com/questions/11709859/) */
-
   std::vector<CellPair> cellpairs_;
   std::mutex pairs_mutex_;
   size_t npairs_;
@@ -493,8 +492,8 @@ struct Vectormap_CUDA_Packed
   Cell_Data<BA>* dacells_;
   Cell_Data<BA>* hacells_;
   
-  void vectormap_start() {
-    //printf(";; vectormap_start\n"); fflush(0);
+  void start() {
+    //printf(";; start\n"); fflush(0);
     cellpairs_.clear();
   }
 
@@ -509,7 +508,7 @@ struct Vectormap_CUDA_Packed
   /* (Two argument mapping with left packing.) */
 
   template <class Funct, class Cell, class... Args>
-  void vector_map2(Funct f, ProductIterator<BodyIterator<Cell>> prod,
+  void map2(Funct f, ProductIterator<BodyIterator<Cell>> prod,
                           Args... args) {
     using BV = typename Cell::Body;
     using BA = typename Cell::BodyAttr;
@@ -549,10 +548,10 @@ struct Vectormap_CUDA_Packed
   /* Launches a kernel on Tesla. */
 
   template <class Funct, class Cell, class... Args>
-  void vectormap_invoke(int start, int nc, Cell_Data<BV> &r,
-                        int tilesize,
-                        size_t nblocks, int ctasize, int scratchpadsize,
-                        Cell &dummy, Funct f, Args... args) {
+  void invoke(int start, int nc, Cell_Data<BV> &r,
+              int tilesize,
+              size_t nblocks, int ctasize, int scratchpadsize,
+              Cell &dummy, Funct f, Args... args) {
     using BV = typename Cell::Body;
     using BA = typename Cell::BodyAttr;
 
@@ -590,7 +589,7 @@ struct Vectormap_CUDA_Packed
   /* Starts launching a kernel on collected cells. */
 
   template <class Funct, class Cell, class... Args>
-  void vectormap_on_collected(Funct f, Cell &dummy, Args... args) {
+  void on_collected(Funct f, Cell &dummy, Args... args) {
     using BV = typename Cell::Body;
     using BA = typename Cell::BodyAttr;
 
@@ -673,9 +672,9 @@ struct Vectormap_CUDA_Packed
       Cell_Data<BV> &r = std::get<2>(c);
       if (xr.data != r.data) {
         assert(i != 0 && xncells > 0);
-        vectormap_invoke((i - xncells), xncells, xr,
-                         tilesize, nblocks, ctasize, scratchpadsize,
-                         dummy, f, args...);
+        invoke((i - xncells), xncells, xr,
+               tilesize, nblocks, ctasize, scratchpadsize,
+               dummy, f, args...);
         xncells = 0;
         xndata = 0;
         xr = r;
@@ -686,9 +685,9 @@ struct Vectormap_CUDA_Packed
       if (nb > nblocks) {
         //std::cerr << "i = " << i << ", xncells = " << xncells << std::endl;
         assert(i != 0 && xncells > 0);
-        vectormap_invoke((i - xncells), xncells, xr,
-                         tilesize, nblocks, ctasize, scratchpadsize,
-                         dummy, f, args...);
+        invoke((i - xncells), xncells, xr,
+               tilesize, nblocks, ctasize, scratchpadsize,
+               dummy, f, args...);
         xncells = 0;
         xndata = 0;
         xr = r;
@@ -697,16 +696,16 @@ struct Vectormap_CUDA_Packed
       xndata += (TAPAS_CEILING(l.size, 32) * 32);
     }
     assert(xncells > 0);
-    vectormap_invoke((npairs_ - xncells), xncells, xr,
-                     tilesize, nblocks, ctasize, scratchpadsize,
-                     dummy, f, args...);
+    invoke((npairs_ - xncells), xncells, xr,
+           tilesize, nblocks, ctasize, scratchpadsize,
+           dummy, f, args...);
   }
 
   template <class Funct, class Cell, class... Args>
-  void vectormap_finish(Funct f, Cell &dummy, Args... args) {
-    //printf(";; vectormap_finish\n"); fflush(0);
-    vectormap_on_collected(f, dummy, args...);
-    vectormap_check_error("vectormap_end", __FILE__, __LINE__);
+  void finish(Funct f, Cell &dummy, Args... args) {
+    //printf(";; Vectormap_CUDA_Packed::finish\n"); fflush(0);
+    on_collected(f, dummy, args...);
+    vectormap_check_error("Vectormap_CUDA_Packed::end", __FILE__, __LINE__);
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
   }
 };

@@ -235,20 +235,20 @@ struct GPUMapper {
      with ProductIterator<BodyIterator<T>>). */
   template <class Funct, class...Args>
   inline void Map(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args...args) {
-    vmap_.vector_map2(f, prod, args...);
+    vmap_.map2(f, prod, args...);
   }
 
   inline void Setup() {
-    vmap_.vectormap_setup(64,31);
+    vmap_.setup(64,31);
   }
   
   inline void Start() {
-    vmap_.vectormap_start();
+    vmap_.start();
   }
 
   template <class Funct, class...Args>
   inline void Finish(Funct f, Cell &c, Args...args) {
-    vmap_.vectormap_finish(f, c, args...);
+    vmap_.finish(f, c, args...);
   }
 
   /**
