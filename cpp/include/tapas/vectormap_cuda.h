@@ -478,11 +478,10 @@ struct Cell_Data {
 };
 
 // Launches a kernel on Tesla.
-// Used by Vectormap_CUDA_Pakced.
+// Used by Vectormap_CUDA_Pakced and Applier.
 template <class Caller, class Funct, class Cell, class... Args>
 void invoke(Caller *caller, int start, int nc, Cell_Data<typename Cell::Body> &r,
-            int tilesize,
-            size_t nblocks, int ctasize, int scratchpadsize,
+            int tilesize, size_t nblocks, int ctasize, int scratchpadsize,
             Cell &dummy, Funct f, Args... args) {
   using BV = typename Cell::Body;
   using BA = typename Cell::BodyAttr;
@@ -514,23 +513,44 @@ void invoke(Caller *caller, int start, int nc, Cell_Data<typename Cell::Body> &r
        tilesize, f, args...);
 }
 
+// Utility routine to support delayed dispatch of function template with variadic parameters.
+template<int ...>
+struct seq { };
 
-#if 0 // kakikake
-// Abstract base class of Applier.
-// Subclasses take a particular function type (ex. P2P) and variadic arguments.
-template<class Cell>
-class AbstractApplier {
- public:
-  virtual void apply(Cell &dummy) = 0;
+template<int N, int ...S>
+struct gens : gens<N-1, N-1, S...> { };
+
+template<int...S>
+struct gens<0, S...> {
+  typedef seq<S...> type;
 };
 
-template<class Funct, class Cell, class...Args>
-class Applier : AbstractApplier<Cell> {
+// Abstract base class of Applier.
+// Subclasses take a particular function type (ex. P2P) and variadic arguments.
+template<class Vectormap, class Funct, class Cell, class...Args>
+class AbstractApplier {
+ public:
+  virtual void apply(Vectormap *vm, Cell &dummy) = 0;
+};
+
+// When tapas::Map <Body x Body> 
+template<class Vectormap, class Funct, class Cell, class...Args>
+class Applier : public AbstractApplier<Vectormap, Funct, Cell, Args...> {
   Funct f_;
   std::tuple<Args...> args_;
   std::mutex mutex_;
-  
+  using S = typename gens<sizeof...(Args)>::type;
+
  public:
+
+  // Call ::invoke() function with args... 
+  template<int ...ParamIdx>
+  inline void invoke2(Vectormap *caller, int start, int nc, Cell_Data<typename Cell::Body> &r,
+                      int tilesize, size_t nblocks, int ctasize, int scratchpadsize,
+                      Cell &dummy, seq<ParamIdx...>) {
+    invoke(caller, start, nc, r, tilesize, nblocks, ctasize, scratchpadsize, dummy, f_, std::get<ParamIdx>(args_)...);
+  }
+  
   Applier(Funct f, Args... args) : f_(f), args_(args...) { }
   
   // tesla_dev
@@ -538,15 +558,119 @@ class Applier : AbstractApplier<Cell> {
   
   // cellpairs
   // dvcells_, dacells_, hvcells_, hacells_, npairs_  
-  virtual void apply(Cell &dummy, std::vector<CellPair> &cellpairs,
-                     Cell_Data<BV>* dvcells,
-                     Cell_Data<BV>* hvcells,
-                     Cell_Data<BA>* dacells,
-                     Cell_Data<BA>* hacells,
-                     size_t npairs) override {
+  virtual void apply(Vectormap *vm, Cell &dummy) override {
+    using BV = typename Cell::Body;
+    using BA = typename Cell::BodyAttr;
+
+    TESLA &tesla_dev = vm->tesla_dev();
+
+    if (vm->cellpairs_.size() == 0) {
+      return;
+    }
+    static std::mutex mutex2;
+    static struct cudaFuncAttributes tesla_attr2;
+    if (tesla_attr2.binaryVersion == 0) {
+      mutex2.lock();
+      CUDA_SAFE_CALL(cudaFuncGetAttributes(
+          &tesla_attr2,
+          &vectormap_cuda_pack_kernel2<Funct, BV, BA, Cell_Data, Args...>));
+      mutex2.unlock();
+      if (0) {
+        /*GOMI*/
+        printf((";; vectormap_cuda_pack_kernel2:"
+                " binaryVersion=%d, cacheModeCA=%d, constSizeBytes=%zd,"
+                " localSizeBytes=%zd, maxThreadsPerBlock=%d, numRegs=%d,"
+                " ptxVersion=%d, sharedSizeBytes=%zd\n"),
+               tesla_attr2.binaryVersion, tesla_attr2.cacheModeCA,
+               tesla_attr2.constSizeBytes, tesla_attr2.localSizeBytes,
+               tesla_attr2.maxThreadsPerBlock, tesla_attr2.numRegs,
+               tesla_attr2.ptxVersion, tesla_attr2.sharedSizeBytes);
+        fflush(0);
+      }
+    }
+    assert(tesla_attr2.binaryVersion != 0);
+
+    //printf(";; pairs=%ld\n", cellpairs_.size());
+
+    // cta = cooperative thread array = thread block
+    int cta0 = (TAPAS_CEILING(tesla_dev.cta_size, 32) * 32);
+    int ctasize = std::min(cta0, tesla_attr2.maxThreadsPerBlock);
+    assert(ctasize == tesla_dev.cta_size);
+
+    int tile0 = (tesla_dev.scratchpad_size / sizeof(typename Cell::BodyType));
+    int tile1 = (TAPAS_FLOOR(tile0, 32) * 32);
+    int tilesize = std::min(ctasize, tile1);
+    assert(tilesize > 0);
+
+    int scratchpadsize = (sizeof(typename Cell::BodyType) * tilesize);
+    size_t nblocks = TAPAS_CEILING(Vectormap::N0, ctasize);
+
+    if (vm->npairs_ < vm->cellpairs_.size()) {
+      CUDA_SAFE_CALL( cudaFree(vm->dvcells_) );
+      CUDA_SAFE_CALL( cudaFree(vm->dacells_) );
+      CUDA_SAFE_CALL( cudaFree(vm->hvcells_) );
+      CUDA_SAFE_CALL( cudaFree(vm->hacells_) );
+
+      vm->npairs_ = vm->cellpairs_.size();
+      CUDA_SAFE_CALL( cudaMalloc(&vm->dvcells_, (sizeof(Cell_Data<BV>) * vm->npairs_)) );
+      CUDA_SAFE_CALL( cudaMalloc(&vm->dacells_, (sizeof(Cell_Data<BA>) * vm->npairs_)) );
+      CUDA_SAFE_CALL( cudaMallocHost(&vm->hvcells_, (sizeof(Cell_Data<BV>) * vm->npairs_)) );
+      CUDA_SAFE_CALL( cudaMallocHost(&vm->hacells_, (sizeof(Cell_Data<BA>) * vm->npairs_)) );
+    }
+
+    std::sort(vm->cellpairs_.begin(), vm->cellpairs_.end(),
+              cellcompare_r<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>());
+    for (size_t i = 0; i < vm->npairs_; i++) {
+      std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = vm->cellpairs_[i];
+      vm->hvcells_[i] = std::get<0>(c);
+    }
+    CUDA_SAFE_CALL(cudaMemcpy(vm->dvcells_, vm->hvcells_, (sizeof(Cell_Data<BV>) * vm->npairs_),
+                              cudaMemcpyHostToDevice));
+    for (size_t i = 0; i < vm->npairs_; i++) {
+      std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = vm->cellpairs_[i];
+      vm->hacells_[i] = std::get<1>(c);
+    }
+    CUDA_SAFE_CALL(cudaMemcpy(vm->dacells_, vm->hacells_, (sizeof(Cell_Data<BA>) * vm->npairs_),
+                              cudaMemcpyHostToDevice));
+
+    Cell_Data<BV> xr = std::get<2>(vm->cellpairs_[0]);
+    int xncells = 0;
+    int xndata = 0;
+
+    for (size_t i = 0; i < vm->npairs_; i++) {
+      std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = vm->cellpairs_[i];
+      Cell_Data<BV> &r = std::get<2>(c);
+      if (xr.data != r.data) {
+        assert(i != 0 && xncells > 0);
+        invoke2(vm, (i - xncells), xncells, xr,
+                tilesize, nblocks, ctasize, scratchpadsize,
+                dummy, S());
+        xncells = 0;
+        xndata = 0;
+        xr = r;
+      }
+      Cell_Data<BV> &l = std::get<0>(c);
+      size_t nb = TAPAS_CEILING((xndata + l.size), ctasize);
+      //std::cerr << "nb = " << nb << ", nblocks = " << nblocks << std::endl;
+      if (nb > nblocks) {
+        //std::cerr << "i = " << i << ", xncells = " << xncells << std::endl;
+        assert(i != 0 && xncells > 0);
+        invoke2(vm, (i - xncells), xncells, xr,
+                tilesize, nblocks, ctasize, scratchpadsize,
+                dummy, S());
+        xncells = 0;
+        xndata = 0;
+        xr = r;
+      }
+      xncells++;
+      xndata += (TAPAS_CEILING(l.size, 32) * 32);
+    }
+    assert(xncells > 0);
+    invoke2(vm, (vm->npairs_ - xncells), xncells, xr,
+            tilesize, nblocks, ctasize, scratchpadsize,
+            dummy, S());
   }
 };
-#endif
 
 template<int _DIM, class _FP, class _BT, class _BT_ATTR>
 struct Vectormap_CUDA_Packed
@@ -625,115 +749,10 @@ struct Vectormap_CUDA_Packed
 
   template <class Funct, class Cell, class... Args>
   void on_collected(Funct f, Cell &dummy, Args... args) {
-    using BV = typename Cell::Body;
-    using BA = typename Cell::BodyAttr;
-
-    TESLA &tesla_dev = this->tesla_dev();
-
-    if (cellpairs_.size() == 0) {
-      return;
-    }
-    static std::mutex mutex2;
-    static struct cudaFuncAttributes tesla_attr2;
-    if (tesla_attr2.binaryVersion == 0) {
-      mutex2.lock();
-      CUDA_SAFE_CALL(cudaFuncGetAttributes(
-          &tesla_attr2,
-          &vectormap_cuda_pack_kernel2<Funct, BV, BA, Cell_Data, Args...>));
-      mutex2.unlock();
-      if (0) {
-        /*GOMI*/
-        printf((";; vectormap_cuda_pack_kernel2:"
-                " binaryVersion=%d, cacheModeCA=%d, constSizeBytes=%zd,"
-                " localSizeBytes=%zd, maxThreadsPerBlock=%d, numRegs=%d,"
-                " ptxVersion=%d, sharedSizeBytes=%zd\n"),
-               tesla_attr2.binaryVersion, tesla_attr2.cacheModeCA,
-               tesla_attr2.constSizeBytes, tesla_attr2.localSizeBytes,
-               tesla_attr2.maxThreadsPerBlock, tesla_attr2.numRegs,
-               tesla_attr2.ptxVersion, tesla_attr2.sharedSizeBytes);
-        fflush(0);
-      }
-    }
-    assert(tesla_attr2.binaryVersion != 0);
-
-    //printf(";; pairs=%ld\n", cellpairs_.size());
-
-    // cta = cooperative thread array = thread block
-    int cta0 = (TAPAS_CEILING(tesla_dev.cta_size, 32) * 32);
-    int ctasize = std::min(cta0, tesla_attr2.maxThreadsPerBlock);
-    assert(ctasize == tesla_dev.cta_size);
-
-    int tile0 = (tesla_dev.scratchpad_size / sizeof(typename Cell::BodyType));
-    int tile1 = (TAPAS_FLOOR(tile0, 32) * 32);
-    int tilesize = std::min(ctasize, tile1);
-    assert(tilesize > 0);
-
-    int scratchpadsize = (sizeof(typename Cell::BodyType) * tilesize);
-    size_t nblocks = TAPAS_CEILING(N0, ctasize);
-
-    if (npairs_ < cellpairs_.size()) {
-      CUDA_SAFE_CALL( cudaFree(dvcells_) );
-      CUDA_SAFE_CALL( cudaFree(dacells_) );
-      CUDA_SAFE_CALL( cudaFree(hvcells_) );
-      CUDA_SAFE_CALL( cudaFree(hacells_) );
-
-      npairs_ = cellpairs_.size();
-      CUDA_SAFE_CALL( cudaMalloc(&dvcells_, (sizeof(Cell_Data<BV>) * npairs_)) );
-      CUDA_SAFE_CALL( cudaMalloc(&dacells_, (sizeof(Cell_Data<BA>) * npairs_)) );
-      CUDA_SAFE_CALL( cudaMallocHost(&hvcells_, (sizeof(Cell_Data<BV>) * npairs_)) );
-      CUDA_SAFE_CALL( cudaMallocHost(&hacells_, (sizeof(Cell_Data<BA>) * npairs_)) );
-    }
-
-    std::sort(cellpairs_.begin(), cellpairs_.end(),
-              cellcompare_r<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>());
-    for (size_t i = 0; i < npairs_; i++) {
-      std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = cellpairs_[i];
-      hvcells_[i] = std::get<0>(c);
-    }
-    CUDA_SAFE_CALL(cudaMemcpy(dvcells_, hvcells_, (sizeof(Cell_Data<BV>) * npairs_),
-                              cudaMemcpyHostToDevice));
-    for (size_t i = 0; i < npairs_; i++) {
-      std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = cellpairs_[i];
-      hacells_[i] = std::get<1>(c);
-    }
-    CUDA_SAFE_CALL(cudaMemcpy(dacells_, hacells_, (sizeof(Cell_Data<BA>) * npairs_),
-                              cudaMemcpyHostToDevice));
-
-    Cell_Data<BV> xr = std::get<2>(cellpairs_[0]);
-    int xncells = 0;
-    int xndata = 0;
-    for (size_t i = 0; i < npairs_; i++) {
-      std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = cellpairs_[i];
-      Cell_Data<BV> &r = std::get<2>(c);
-      if (xr.data != r.data) {
-        assert(i != 0 && xncells > 0);
-        invoke(this, (i - xncells), xncells, xr,
-               tilesize, nblocks, ctasize, scratchpadsize,
-               dummy, f, args...);
-        xncells = 0;
-        xndata = 0;
-        xr = r;
-      }
-      Cell_Data<BV> &l = std::get<0>(c);
-      size_t nb = TAPAS_CEILING((xndata + l.size), ctasize);
-      //std::cerr << "nb = " << nb << ", nblocks = " << nblocks << std::endl;
-      if (nb > nblocks) {
-        //std::cerr << "i = " << i << ", xncells = " << xncells << std::endl;
-        assert(i != 0 && xncells > 0);
-        invoke(this, (i - xncells), xncells, xr,
-               tilesize, nblocks, ctasize, scratchpadsize,
-               dummy, f, args...);
-        xncells = 0;
-        xndata = 0;
-        xr = r;
-      }
-      xncells++;
-      xndata += (TAPAS_CEILING(l.size, 32) * 32);
-    }
-    assert(xncells > 0);
-    invoke(this, (npairs_ - xncells), xncells, xr,
-           tilesize, nblocks, ctasize, scratchpadsize,
-           dummy, f, args...);
+    AbstractApplier<Vectormap_CUDA_Packed, Funct, Cell, Args...> *app
+        = new Applier<Vectormap_CUDA_Packed, Funct, Cell, Args...>(f, args...);
+    app->apply(this, dummy);
+    delete app;
   }
 
   template <class Funct, class Cell, class... Args>
