@@ -275,9 +275,6 @@ struct Vectormap_CUDA_Simple {
     tesla_dev_.cta_size = cta;
     tesla_dev_.n_streams = nstreams;
 
-    /*AHO*/ /* USE PROPER WAY TO KNOW OF USE OF MPI. */
-    std::cerr << "Vectormap_CUDA_Simple::vectormap_setup" << std::endl;
-
 #ifdef USE_MPI
 
     int rank;
