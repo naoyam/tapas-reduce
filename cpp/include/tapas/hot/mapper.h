@@ -203,9 +203,12 @@ struct CPUMapper {
 template<class Cell, class Body, class LET>
 struct GPUMapper {
 
+  using Data = typename Cell::Data;
   using Vectormap = tapas::Vectormap_CUDA_Packed<Cell::Dim, typename Cell::FP, typename Cell::Body, typename Cell::BodyAttr>;
 
   Vectormap vmap_;
+
+  std::chrono::high_resolution_clock::time_point map2_all_beg_, map2_all_end_;
 
   /**
    * @brief Map function f over product of two iterators
@@ -240,12 +243,13 @@ struct GPUMapper {
   inline void Setup() {
     vmap_.setup(64,31);
   }
-  
+
+  // GPUMapper::Start for 2-param Map()
   inline void Start() {
     vmap_.start();
   }
 
-  // GPUMapper::Finish
+  // GPUMapper::Finish for 2-param Map()
   inline void Finish() {
     vmap_.finish();
   }
@@ -266,35 +270,82 @@ struct GPUMapper {
     } 
     tg.wait();
   }
+
+  /**
+   * @brief Initialization of 2-param Map()
+   *
+   * - Setup CUDA device and variables
+   * - Construct & exchange LET
+   */ 
+  template <class Funct, class...Args>
+  void Map2Init(Funct f, Cell&c1, Cell&c2, Args...args) {
+    auto &data = c1.data();
+    map2_all_beg_ = std::chrono::high_resolution_clock::now();
+
+    // -- Perform LET exchange if more than 1 MPI process
+    if (c1.data().mpi_size_ > 1) {
+#ifdef TAPAS_DEBUG
+      char t[] = "TAPAS_IN_LET=1";
+      putenv(t); // to avoid warning "convertion from const char* to char*"
+#endif
+      LET::Exchange(c1, f, args...);
+        
+#ifdef TAPAS_DEBUG
+      unsetenv("TAPAS_IN_LET");
+#endif
+    } else {
+      // mpi_size_ == 0
+      data.time_let_all = data.time_let_traverse
+                        = data.time_let_req
+                        = data.time_let_response
+                        = data.time_let_register
+                        = 0;
+    }
+
+    // -- initialize GPU
+    Start();
+
+    // -- check
+    if (c1.GetOptMutual()) {
+      std::cerr << "[To Fix] Error: mutual is not supported in CUDA implementation" << std::endl;
+      //exit(-1);
+    }
+    data.time_map2_let = data.time_let_all;
+  }
+
+  /**
+   * @brief Finalization of 2-param Map()
+   *
+   * - Execute CUDA kernel on the interaction list
+   * - Collect time information
+   */ 
+  template <class Funct, class...Args>
+  void Map2Finish(Funct, Cell &c1, Cell &c2, Args...) {
+    auto &data = c1.data();
+    Finish(); // Execute CUDA kernel
+
+    // collect runtime information
+    map2_all_end_  = std::chrono::high_resolution_clock::now();
+    auto d = map2_all_end_ - map2_all_beg_;
+    
+    data.time_map2_dev = vmap_.time_device_call_;
+    data.time_map2_all = std::chrono::duration_cast<std::chrono::microseconds>(d).count() * 1e-6;
+  }
   
   // GPUMapper::Map
   // cell x cell
   template <class Funct, class...Args>
   inline void Map(Funct f, Cell &c1, Cell &c2, Args... args) {
+    static std::chrono::high_resolution_clock::time_point t1, t2;
+    
     if (c1.IsRoot() && c2.IsRoot()) {
-      if (c1.data().mpi_size_ > 1) {
-#ifdef TAPAS_DEBUG
-        char t[] = "TAPAS_IN_LET=1";
-        putenv(t); // to avoid warning "convertion from const char* to char*"
-#endif
-        LET::Exchange(c1, f, args...);
-#ifdef TAPAS_DEBUG
-        unsetenv("TAPAS_IN_LET");
-#endif
-
-        if (c1.GetOptMutual()) {
-          std::cerr << "Error: mutual is not supported in CUDA implementation" << std::endl;
-          exit(-1);
-        }
-
-        Start(); // initialize GPU
-      }
+      Map2Init(f, c1, c2, args...);
     }
-
+    
     f(c1, c2, args...);
     
     if (c1.IsRoot() && c2.IsRoot()) {
-      Finish(); // Finish computation on GPU
+      Map2Finish(f, c1, c2, args...);
     }
   }
 

@@ -156,6 +156,35 @@ void Report(const Data &data, std::ostream &os = std::cout) {
           << std::endl;
     }
   }
+
+  V<double> map2_all, map2_let, map2_dev;
+  tapas::mpi::Gather(data.time_map2_all, map2_all, 0, comm);
+  tapas::mpi::Gather(data.time_map2_let, map2_let, 0, comm);
+#ifdef __CUDACC__
+  tapas::mpi::Gather(data.time_map2_dev, map2_dev, 0, comm);
+#endif
+  
+  if (rank == 0) {
+    std::string fname = report_prefix + "map2" + report_suffix + ".csv";
+    std::ofstream ofs(fname.c_str(), std::ios::out | std::ios::trunc);
+    ofs << std::setw(5) << std::scientific << std::right << "rank"
+        << std::setw(WS) << std::scientific << std::right << "all"
+        << std::setw(WS) << std::scientific << std::right << "let"
+        << std::setw(WS) << std::scientific << std::right << "device_call"
+        << std::endl;
+    for (int i = 0; i < size; i++) {
+      ofs << std::setw(5) << std::scientific << std::right << i
+          << std::setw(WS) << std::scientific << std::right << map2_all[i]
+          << std::setw(WS) << std::scientific << std::right << map2_let[i]
+#ifdef __CUDACC__
+          << std::setw(WS) << std::scientific << std::right << map2_dev[i]
+#else
+          << std::setw(WS) << std::scientific << std::right << 0
+#endif
+          << std::endl;
+    }
+  }
+
 }
 
 }

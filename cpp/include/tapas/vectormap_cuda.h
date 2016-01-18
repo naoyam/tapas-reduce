@@ -699,7 +699,7 @@ struct Vectormap_CUDA_Packed
   std::vector<CellPair> cellpairs_;
   std::mutex pairs_mutex_;
   size_t npairs_;
-  
+
   Cell_Data<BV>* dvcells_;
   Cell_Data<BV>* hvcells_;
   Cell_Data<BA>* dacells_;
@@ -714,6 +714,8 @@ struct Vectormap_CUDA_Packed
 
   cudaFuncAttributes func_attrs_;
 
+  double time_device_call_;
+  
   void start() {
     //printf(";; start\n"); fflush(0);
     cellpairs_.clear();
@@ -732,6 +734,7 @@ struct Vectormap_CUDA_Packed
       , applier_mutex_()
       , funct_id_(0)
       , applier_(nullptr)
+      , time_device_call_(0)
   { }
 
   /* (Two argument mapping with left packing.) */
@@ -764,7 +767,7 @@ struct Vectormap_CUDA_Packed
       }
       applier_mutex_.unlock();
     }
-
+    
     TAPAS_ASSERT(funct_id_ == Type2Int<Funct>::value());
 
     /* (Cast to drop const, below). */
@@ -800,9 +803,15 @@ struct Vectormap_CUDA_Packed
   /* Starts launching a kernel on collected cells. */
   
   void on_collected() {
+    auto t1 = std::chrono::high_resolution_clock::now();
+    
     applier_->apply(this);
-  }
 
+    auto t2 = std::chrono::high_resolution_clock::now();
+    
+    time_device_call_ = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() * 1e-6;
+  }
+  
   void finish() {
     //printf(";; Vectormap_CUDA_Packed::finish\n"); fflush(0);
     on_collected();
