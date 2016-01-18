@@ -540,12 +540,14 @@ class AbstractApplier {
   virtual void apply(Vectormap *vm) = 0;
 };
 
-// When tapas::Map <Body x Body> 
+// When tapas::Map <Body x Body>
 template<class Vectormap, class Funct, class...Args>
 class Applier : public AbstractApplier<Vectormap> {
   Funct f_;
   std::tuple<Args...> args_;
   std::mutex mutex_;
+  cudaFuncAttributes func_attrs_;
+  
   using ParamIdxSeq = typename gens<sizeof...(Args)>::type; // used to hold args... for invoke
 
  public:
@@ -560,14 +562,35 @@ class Applier : public AbstractApplier<Vectormap> {
                       seq<ParamIdx...>) {
     invoke(caller, start, nc, r, tilesize, nblocks, ctasize, scratchpadsize, f_, std::get<ParamIdx>(args_)...);
   }
-  
-  Applier(Funct f, Args... args) : f_(f), args_(args...) { }
-  
-  // tesla_dev
-  // tesla_attr2
-  
-  // cellpairs
-  // dvcells_, dacells_, hvcells_, hacells_, npairs_  
+
+  // ctor. not thread safe.
+  Applier(Funct f, Args... args) : f_(f), args_(args...), func_attrs_() {
+    using BV = Body;
+    using BA = BodyAttr;
+    if (func_attrs_.binaryVersion == 0) {
+      CUDA_SAFE_CALL(cudaFuncGetAttributes(
+          &func_attrs_,
+          &vectormap_cuda_pack_kernel2<Funct, BV, BA, Cell_Data, Args...>));
+
+#ifdef TAPAS_DEBUG
+      fprintf(stderr,
+              ";; vectormap_cuda_pack_kernel2:"
+              " binaryVersion=%d, cacheModeCA=%d, constSizeBytes=%zd,"
+              " localSizeBytes=%zd, maxThreadsPerBlock=%d, numRegs=%d,"
+              " ptxVersion=%d, sharedSizeBytes=%zd\n",
+              func_attrs_.binaryVersion,      func_attrs_.cacheModeCA,
+              func_attrs_.constSizeBytes,     func_attrs_.localSizeBytes,
+              func_attrs_.maxThreadsPerBlock, func_attrs_.numRegs,
+              func_attrs_.ptxVersion,         func_attrs_.sharedSizeBytes);
+#endif
+    }
+
+    TAPAS_ASSERT(func_attrs_.binaryVersion != 0);
+  }
+
+  /**
+   * @brief Invoke CUDA kernel with the function (of type Funct) to the cellpairs list.
+   */
   virtual void apply(Vectormap *vm) override {
     using BV = Body;
     using BA = BodyAttr;
@@ -577,34 +600,12 @@ class Applier : public AbstractApplier<Vectormap> {
     if (vm->cellpairs_.size() == 0) {
       return;
     }
-    static std::mutex mutex2;
-    static struct cudaFuncAttributes tesla_attr2;
-    if (tesla_attr2.binaryVersion == 0) {
-      mutex2.lock();
-      CUDA_SAFE_CALL(cudaFuncGetAttributes(
-          &tesla_attr2,
-          &vectormap_cuda_pack_kernel2<Funct, BV, BA, Cell_Data, Args...>));
-      mutex2.unlock();
-      if (0) {
-        /*GOMI*/
-        printf((";; vectormap_cuda_pack_kernel2:"
-                " binaryVersion=%d, cacheModeCA=%d, constSizeBytes=%zd,"
-                " localSizeBytes=%zd, maxThreadsPerBlock=%d, numRegs=%d,"
-                " ptxVersion=%d, sharedSizeBytes=%zd\n"),
-               tesla_attr2.binaryVersion, tesla_attr2.cacheModeCA,
-               tesla_attr2.constSizeBytes, tesla_attr2.localSizeBytes,
-               tesla_attr2.maxThreadsPerBlock, tesla_attr2.numRegs,
-               tesla_attr2.ptxVersion, tesla_attr2.sharedSizeBytes);
-        fflush(0);
-      }
-    }
-    assert(tesla_attr2.binaryVersion != 0);
 
     //printf(";; pairs=%ld\n", cellpairs_.size());
 
     // cta = cooperative thread array = thread block
     int cta0 = (TAPAS_CEILING(tesla_dev.cta_size, 32) * 32);
-    int ctasize = std::min(cta0, tesla_attr2.maxThreadsPerBlock);
+    int ctasize = std::min(cta0, func_attrs_.maxThreadsPerBlock);
     assert(ctasize == tesla_dev.cta_size);
 
     int tile0 = (tesla_dev.scratchpad_size / sizeof(Body));
@@ -710,18 +711,25 @@ struct Vectormap_CUDA_Packed
   std::mutex applier_mutex_;
   intptr_t funct_id_;
   AbstractApplier<Vectormap> *applier_;
-  
+
+  cudaFuncAttributes func_attrs_;
+
   void start() {
     //printf(";; start\n"); fflush(0);
     cellpairs_.clear();
   }
 
+  /**
+   * @brief ctor.
+   * not thread safe
+   */
   Vectormap_CUDA_Packed()
       : npairs_(0)
       , dvcells_(nullptr)
       , hvcells_(nullptr)
       , dacells_(nullptr)
       , hacells_(nullptr)
+      , applier_mutex_()
       , funct_id_(0)
       , applier_(nullptr)
   { }
@@ -748,6 +756,11 @@ struct Vectormap_CUDA_Packed
       if (applier_ == nullptr) {
         applier_ = new Applier<Vectormap, Funct, Args...>(f, args...);
         funct_id_ = Type2Int<Funct>::value();
+
+        // Memo [Jan 18, 2016]
+        // func_id_ is not used as of now. This check integer is for when there are multiple kernels
+        // for bodies x bodies product map.
+        // An interaction list is created for each function (stored in a unordered_map of which keys are integers).
       }
       applier_mutex_.unlock();
     }
