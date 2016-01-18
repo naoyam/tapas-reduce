@@ -132,6 +132,10 @@ void vectormap_cuda_plain_kernel2(BV* v0, BV* v1, BA* a0,
 
 __device__
 static double atomicAdd(double* address, double val) {
+  // Should we use uint64_t ?
+  static_assert(sizeof(unsigned long long int) == sizeof(double),   "sizeof(unsigned long long int) == sizeof(double)");
+  static_assert(sizeof(unsigned long long int) == sizeof(uint64_t), "sizeof(unsigned long long int) == sizeof(uint64_t)");
+  
   unsigned long long int* address1 = (unsigned long long int*)address;
   unsigned long long int chk;
   unsigned long long int old;
@@ -145,7 +149,11 @@ static double atomicAdd(double* address, double val) {
 }
 
 __device__
-static double atomicAdd(float* address, float val) {
+static float atomicAdd(float* address, float val) {
+  // Should we use uint32_t ?
+  static_assert(sizeof(int) == sizeof(float), "sizeof(int) == sizeof(float)");
+  static_assert(sizeof(uint32_t) == sizeof(float), "sizeof(int) == sizeof(float)");
+  
   int* address1 = (int*)address;
   int chk;
   int old;
