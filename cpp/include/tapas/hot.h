@@ -129,41 +129,6 @@ struct HelperNode {
   index_t np;           //!< Number of particles in a node
 };
 
-template<class T1, class T2>
-static void Dump(const T1 &bodies, const T2 &keys, std::ostream & strm) {
-#if 0
-  // Tentatively disabled for BH. b.X[] is ExaFMM-specific member variables.
-  for (size_t i = 0; i < bodies.size(); i++) {
-    auto &b = bodies[i];
-    strm << std::scientific << std::showpos << b.X[0] << " "
-         << std::scientific << std::showpos << b.X[1] << " "
-         << std::scientific << std::showpos << b.X[2] << " "
-         << std::fixed << std::setw(10) << keys[i]
-         << std::endl;
-  }
-#else
-  // hack to avoid 'unused parameter' warnings
-  (void) bodies;
-  (void) keys;
-  (void) strm;
-#endif
-}
-
-template<class T1, class T2>
-static void DumpToFile(const T1 &bodies,
-                       const T2 &keys,
-                       const std::string &fname,
-                       bool append=false) {
-  std::ios_base::openmode mode = std::ios_base::out;
-  if (append) mode |= std::ios_base::app;
-  std::ofstream ofs;
-  ofs.open(fname.c_str(), mode);
-
-  assert(ofs.good());
-  Dump(bodies, keys, ofs);
-  ofs.close();
-}
-
 template <class TSP>
 std::vector<HelperNode<TSP>>
 CreateInitialNodes(const typename TSP::Body *p, index_t np,
