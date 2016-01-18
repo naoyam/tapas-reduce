@@ -409,6 +409,17 @@ int main(int argc, char ** argv) {
   MPI_Comm_rank(MPI_COMM_WORLD, &args.mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &args.mpi_size);
 #endif
+
+  // Dummy CUDA call to initialize the runtime
+  // (for performance measurement)
+#ifdef __CUDACC__
+  {
+    std::cout << "Initializing CUDA..." << std::endl;
+    int *p = nullptr;
+    cudaMalloc(&p, sizeof(int));
+    cudaFree(p);
+  }
+#endif
   
   Bodies bodies, bodies2, bodies3, jbodies;
   Cells cells, jcells;
