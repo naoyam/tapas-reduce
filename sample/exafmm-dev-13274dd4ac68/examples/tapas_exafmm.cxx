@@ -420,6 +420,9 @@ int main(int argc, char ** argv) {
     cudaFree(p);
   }
 #endif
+
+  // ad-hoc code for MassiveThreads when used with mvapich.
+  myth_init();
   
   Bodies bodies, bodies2, bodies3, jbodies;
   Cells cells, jcells;
