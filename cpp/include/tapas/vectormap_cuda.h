@@ -471,7 +471,7 @@ struct Vectormap_CUDA_Simple {
       vectormap_cuda_plain(f, c0, c1, args...);
     } else {
       vectormap_cuda_plain(f, c0, c1, args...);
-      vectormap_cuda_plain(f, c1, c0, args...);
+      //vectormap_cuda_plain(f, c1, c0, args...); // mutual is not supported 
     }
   }
 
@@ -774,15 +774,15 @@ struct Vectormap_CUDA_Packed
     Cell_Data<BV> d0;
     Cell_Data<BV> d1;
     Cell_Data<BA> a0;
-    Cell_Data<BA> a1;
+    //Cell_Data<BA> a1;
     d0.size = c0.nb();
     d0.data = (BV*)&(c0.body(0));
     a0.size = c0.nb();
     a0.data = (BA*)&(c0.body_attr(0));
     d1.size = c1.nb();
     d1.data = (BV*)&(c1.body(0));
-    a1.size = c1.nb();
-    a1.data = (BA*)&(c1.body_attr(0));
+    //a1.size = c1.nb();
+    //a1.data = (BA*)&(c1.body_attr(0));
     
     if (c0 == c1) {
       pairs_mutex_.lock();
@@ -791,7 +791,7 @@ struct Vectormap_CUDA_Packed
     } else {
       pairs_mutex_.lock();
       cellpairs_.push_back(std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>(d0, a0, d1));
-      cellpairs_.push_back(std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>(d1, a1, d0));
+      //cellpairs_.push_back(std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>(d1, a1, d0)); // mutual is not supported in CUDA version
       pairs_mutex_.unlock();
     }
   }

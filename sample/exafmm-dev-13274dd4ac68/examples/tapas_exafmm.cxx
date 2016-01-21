@@ -438,6 +438,14 @@ int main(int argc, char ** argv) {
     std::cerr << "Use --useRopt 0 option." << std::endl;
     exit(1);
   }
+
+#ifdef __CUDACC__
+  if (args.mutual) {
+    std::cerr << "Mutual is not supported for CUDA implementation in this version." << std::endl;
+    exit(-1);
+  }
+#endif
+  
   //UpDownPass upDownPass(args.theta, args.useRmax, args.useRopt);
   Verify verify;
   (void) verify;
