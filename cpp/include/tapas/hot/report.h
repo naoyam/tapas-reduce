@@ -155,6 +155,7 @@ void Report(const Data &data, std::ostream &os = std::cout) {
           << std::setw(WS) << std::scientific << std::right << let_reg[i]
           << std::endl;
     }
+    ofs.close();
   }
 
   V<double> map2_all, map2_let, map2_dev;
@@ -183,8 +184,9 @@ void Report(const Data &data, std::ostream &os = std::cout) {
 #endif
           << std::endl;
     }
+    ofs.close();
   }
-
+  
 }
 
 }
