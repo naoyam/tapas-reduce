@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <chrono>
 
 namespace tapas {
 
@@ -213,8 +214,9 @@ void vectormap_cuda_pack_kernel2(CELLDATA<BV>* v, CELLDATA<BA>* a,
   }
 
   if (cell != -1) {
+    // Really necessary?
     assert(item < a[cell].size);
-    BA &a0 = a[cell].data[item];
+    BA &a0 = a[cell].data[item]; // FIXME: Dependency to ExaFMM !!!
     atomicAdd(&(a0[0]), q0[0]);
     atomicAdd(&(a0[1]), q0[1]);
     atomicAdd(&(a0[2]), q0[2]);
@@ -500,7 +502,8 @@ void invoke(Caller *caller, int start, int nc, Cell_Data<Body> &r,
     printf("kernel(nblocks=%ld ctasize=%d scratchpadsize=%d tilesize=%d\n",
            nblocks, ctasize, scratchpadsize, tilesize);
     printf("invoke(start=%d ncells=%d)\n", start, nc);
-    for (int i = 0; i < nc; i++) {
+
+    for (int i = 0; 0 && i < nc; i++) {
       Cell_Data<BV> &lc = std::get<0>(caller->cellpairs_[start + i]);
       Cell_Data<BA> &ac = std::get<1>(caller->cellpairs_[start + i]);
       Cell_Data<BV> &rc = std::get<2>(caller->cellpairs_[start + i]);
@@ -594,6 +597,11 @@ class Applier : public AbstractApplier<Vectormap> {
   virtual void apply(Vectormap *vm) override {
     using BV = Body;
     using BA = BodyAttr;
+    using namespace std::chrono;
+
+    using CellTuple = std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>;
+
+    auto t0 = high_resolution_clock::now();
 
     TESLA &tesla_dev = vm->tesla_dev();
 
@@ -601,7 +609,7 @@ class Applier : public AbstractApplier<Vectormap> {
       return;
     }
 
-    //printf(";; pairs=%ld\n", cellpairs_.size());
+    printf(";; pairs=%ld\n", vm->cellpairs_.size());
 
     // cta = cooperative thread array = thread block
     int cta0 = (TAPAS_CEILING(tesla_dev.cta_size, 32) * 32);
@@ -616,12 +624,17 @@ class Applier : public AbstractApplier<Vectormap> {
     int scratchpadsize = (sizeof(Body) * tilesize);
     size_t nblocks = TAPAS_CEILING(Vectormap::N0, ctasize);
 
+    // Re-use pre-allocated memory region, or re-allocate if neceessary
     if (vm->npairs_ < vm->cellpairs_.size()) {
       CUDA_SAFE_CALL( cudaFree(vm->dvcells_) );
       CUDA_SAFE_CALL( cudaFree(vm->dacells_) );
       CUDA_SAFE_CALL( cudaFree(vm->hvcells_) );
       CUDA_SAFE_CALL( cudaFree(vm->hacells_) );
 
+      // dvcells : Device bodies' Values memory
+      // dacells : Device bodies' Attrs memory
+      // hvcells : Host boddies' Values memory
+      // hacells : Host bodies' Attrs  memory
       vm->npairs_ = vm->cellpairs_.size();
       CUDA_SAFE_CALL( cudaMalloc(&vm->dvcells_, (sizeof(Cell_Data<BV>) * vm->npairs_)) );
       CUDA_SAFE_CALL( cudaMalloc(&vm->dacells_, (sizeof(Cell_Data<BA>) * vm->npairs_)) );
@@ -629,27 +642,33 @@ class Applier : public AbstractApplier<Vectormap> {
       CUDA_SAFE_CALL( cudaMallocHost(&vm->hacells_, (sizeof(Cell_Data<BA>) * vm->npairs_)) );
     }
 
-    std::sort(vm->cellpairs_.begin(), vm->cellpairs_.end(),
-              cellcompare_r<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>());
+    auto t1 = high_resolution_clock::now();
+    
+    auto comp = cellcompare_r<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>();
+
+    std::sort(vm->cellpairs_.begin(), vm->cellpairs_.end(), comp);
     for (size_t i = 0; i < vm->npairs_; i++) {
       std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = vm->cellpairs_[i];
       vm->hvcells_[i] = std::get<0>(c);
     }
     CUDA_SAFE_CALL(cudaMemcpy(vm->dvcells_, vm->hvcells_, (sizeof(Cell_Data<BV>) * vm->npairs_),
                               cudaMemcpyHostToDevice));
+    
     for (size_t i = 0; i < vm->npairs_; i++) {
       std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = vm->cellpairs_[i];
       vm->hacells_[i] = std::get<1>(c);
     }
     CUDA_SAFE_CALL(cudaMemcpy(vm->dacells_, vm->hacells_, (sizeof(Cell_Data<BA>) * vm->npairs_),
                               cudaMemcpyHostToDevice));
-
+    
+    auto t2 = high_resolution_clock::now();
+    
     Cell_Data<BV> xr = std::get<2>(vm->cellpairs_[0]);
     int xncells = 0;
     int xndata = 0;
-
+    
     for (size_t i = 0; i < vm->npairs_; i++) {
-      std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>> &c = vm->cellpairs_[i];
+      CellTuple &c = vm->cellpairs_[i];
       Cell_Data<BV> &r = std::get<2>(c);
       if (xr.data != r.data) {
         assert(i != 0 && xncells > 0);
@@ -680,6 +699,19 @@ class Applier : public AbstractApplier<Vectormap> {
     invoke2(vm, (vm->npairs_ - xncells), xncells, xr,
             tilesize, nblocks, ctasize, scratchpadsize,
             ParamIdxSeq());
+    
+    auto t3 = high_resolution_clock::now();
+
+    // Report time (In a ad-hoc way using std::cout. Needs refactoring)
+    double time_total = duration_cast<microseconds>(t3-t0).count() * 1e-6;
+    double time_mcopy = duration_cast<microseconds>(t2-t1).count() * 1e-6;
+    double time_launch = duration_cast<microseconds>(t3-t2).count() * 1e-6;
+    double time_other = time_total - time_mcopy - time_launch;
+  
+    std::cout << "CUDA map2 memcopy    : " << std::scientific << time_mcopy  << " s" << std::endl;
+    std::cout << "CUDA map2 launch     : " << std::scientific << time_launch << " s" << std::endl;
+    std::cout << "CUDA map2 other      : " << std::scientific << time_other  << " s" << std::endl;
+    std::cout << "CUDA map2 total      : " << std::scientific << time_total  << " s" << std::endl;
   }
 };
 
