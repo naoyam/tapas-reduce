@@ -19,7 +19,8 @@
 #include "args.h"
 #include "dataset.h"
 #include "logger.h"
-#include "up_down_pass.h"
+#include "kernel.h"
+//#include "up_down_pass.h"
 #include "verify.h"
 
 #include "tapas_exafmm.h"
@@ -422,7 +423,7 @@ int main(int argc, char ** argv) {
 #endif
 
   // ad-hoc code for MassiveThreads when used with mvapich.
-  myth_init();
+  FMM_Threading::init();
   
   Bodies bodies, bodies2, bodies3, jbodies;
   Cells cells, jcells;

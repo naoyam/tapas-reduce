@@ -21,6 +21,10 @@ class MassiveThreads {
   static const constexpr bool Concurrent = false;
   static const constexpr bool Preemptive = false;
   
+  static void init() {
+    myth_init();
+  }
+  
   class Task {
    private:
     tid_t tid_;

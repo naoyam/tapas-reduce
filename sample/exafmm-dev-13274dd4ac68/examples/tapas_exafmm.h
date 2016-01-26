@@ -42,20 +42,26 @@ const constexpr size_t kBodyCoordOffset = MemberOffset(&Body::X);
 #warning "MTHREADS is defined. Do you mean \"MTHREAD\"?"
 #endif
 
-#ifndef MTHREAD
-#warning "tapas_exafmm: building non-threaded code"
-#endif
+// Select threading component: serial/MassiveThreads/TBB
+#if defined(MTHREAD)
 
-// Select threading component: serial or MassiveThreads
-#ifdef MTHREAD
 #include "tapas/threading/massivethreads.h"
-using Threading = tapas::threading::MassiveThreads;
-#endif /* MTHREAD */
+using FMM_Threading = tapas::threading::MassiveThreads;
+
+#elif defined(TBB)
+
+#include "tapas/threading/tbb.h"
+using FMM_Threading = tapas::threading::IntelTBB;
+
+#else
+
+#include "tapas/threading/serial.h"
+using FMM_Threading = tapas::threading::Serial;
+
+#endif
 
 struct FMM_Params : public tapas::HOT<3, real_t, Body, kBodyCoordOffset, kvec4, CellAttr> {
-#ifdef MTHREAD
-  using Threading = tapas::threading::MassiveThreads;
-#endif
+  using Threading = FMM_Threading;
 };
 
 using TapasFMM = tapas::Tapas2<FMM_Params>;

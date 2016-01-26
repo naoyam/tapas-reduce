@@ -71,7 +71,11 @@ LFLAGS += -DCOUNT # Count number calls to P2P and M2L (slows down execution)
 ### Thread model flags
 ifneq (,$(MTHREAD))
 	LFLAGS	+= -DMTHREAD -lmyth-native -I$(MYTH_DIR)/include -L$(MYTH_DIR)/lib # MassiveThreads is available from http://github.com/massivethreads/massivethreads
-endif	
+endif
+
+ifneq (,$(TBB))
+	LFLAGS	+= -DTBB -ltbb -I$(TBB_DIR)/include -L$(TBB_DIR)/lib
+endif
 #LFLAGS	+= -DCILK -lcilkrts # Cilk is included in the Intel C/C++ Compiler
 #LFLAGS	+= -DTBB -ltbb # TBB is available from http://threadingbuildingblocks.org/download.php
 #LFLAGS	+= -lmyth-native -L$(HOME)/local/lib # MassiveThreads is available from http://code.google.com/p/massivethreads/
