@@ -29,33 +29,23 @@ def main():
     samples = opts.samples or 1
 
     if opts.size is None or re.match(r'^m(edium)?$', opts.size, re.I):
-        size = {'mt_strong'      : 100000,
-                'flatmpi_strong' : 100000,
-                'hybrid_strong'  : 100000,
-                'hybrid_weak'    : 100000,
-                'p2p'            : 1000}
+        NB1 = 100000
+        NB2 = 1000
     elif re.match(r'^l(arge)?$', opts.size, re.I):
-        size = {'mt_strong'      : 1000000,
-                'flatmpi_strong' : 1000000,
-                'hybrid_strong'  : 1000000,
-                'hybrid_weak'    : 1000000,
-                'p2p'            : 10000}
+        NB1 = 1000000
+        NB2 = 10000
     elif re.match(r'^s(mall)?$', opts.size, re.I):
-        size = {'mt_strong'      : 10000,
-                'flatmpi_strong' : 10000,
-                'hybrid_strong'  : 10000,
-                'hybrid_weak'    : 10000,
-                'p2p'            : 100}
-        
+        NB1 = 10000
+        NB2 = 100
 
     ncrit = opts.ncrit or 64
     samples = opts.samples or 5
 
-    mt_strong(size['mt_strong'], ncrit, samples)
-    flatmpi_strong(size['flatmpi_strong'], ncrit, samples)
-    hybrid_strong(size['hybrid_strong'], ncrit, samples)
-    hybrid_weak(size['hybrid_weak'], ncrit, samples)
-    p2p(size['p2p'], samples)
+    single_mt_strong(NB1, ncrit, samples)
+    multi_st_strong(NB1, ncrit, samples)
+    multi_mt_strong(NB1, ncrit, samples)
+    multi_mt_weak(NB1, ncrit, samples)
+    p2p(NB2, samples)
 
     
 #---------------------------------------------------------
@@ -244,7 +234,7 @@ def p2p(NB, NumSamples):
 #
 #-------------------------------------------------------------------------------
 
-def mt_strong(NB, Ncrit, NumSamples):
+def single_mt_strong(NB, Ncrit, NumSamples):
     NumThreads = [1,2,3,4,5,6,7,8,9,10,11,12]
 
     check_call("git checkout master", shell=True, cwd=DIR)
@@ -353,7 +343,7 @@ def mt_strong(NB, Ncrit, NumSamples):
 #
 #-------------------------------------------------------------------------------
 
-def flatmpi_strong(NB, Ncrit, NumSamples):
+def multi_st_strong(NB, Ncrit, NumSamples):
     MaxNumProc = 12
     NumProcs = range(1, MaxNumProc + 1)
 
@@ -532,7 +522,7 @@ def flatmpi_strong(NB, Ncrit, NumSamples):
 #
 #-------------------------------------------------------------------------------
 
-def hybrid_strong(NB, Ncrit, NumSamples):
+def multi_mt_strong(NB, Ncrit, NumSamples):
     if not "PBS_NODEFILE" in os.environ:
         print "ERROR: PBS_NODEFILE is not defined"
         return
@@ -727,7 +717,7 @@ def hybrid_strong(NB, Ncrit, NumSamples):
 #
 #-------------------------------------------------------------------------------
 
-def hybrid_weak(NBpp, Ncrit, NumSamples):
+def multi_mt_weak(NBpp, Ncrit, NumSamples):
     if not "PBS_NODEFILE" in os.environ:
         print "ERROR: PBS_NODEFILE is not defined"
         return
