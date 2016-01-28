@@ -141,10 +141,10 @@ void Report(const Data &data, std::ostream &os = std::cout) {
     std::ofstream ofs(fname.c_str(), std::ios::out | std::ios::trunc);
     ofs << std::setw(5) << std::scientific << std::right << "rank"
         << std::setw(WS) << std::scientific << std::right << "LET-All"
-        << std::setw(WS) << std::scientific << std::right << "LET-Traversal"
-        << std::setw(WS) << std::scientific << std::right << "LET-Request"
-        << std::setw(WS) << std::scientific << std::right << "LET-Response"
-        << std::setw(WS) << std::scientific << std::right << "LET-Register"
+        << std::setw(WS) << std::scientific << std::right << "LET-Trav"
+        << std::setw(WS) << std::scientific << std::right << "LET-Req"
+        << std::setw(WS) << std::scientific << std::right << "LET-Res"
+        << std::setw(WS) << std::scientific << std::right << "LET-Reg"
         << std::endl;
     for (int i = 0; i < size; i++) {
       ofs << std::setw(5) << std::scientific << std::right << i
