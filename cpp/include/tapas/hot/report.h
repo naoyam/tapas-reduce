@@ -140,11 +140,11 @@ void Report(const Data &data, std::ostream &os = std::cout) {
     std::string fname = report_prefix + "let_construction" + report_suffix + ".csv";
     std::ofstream ofs(fname.c_str(), std::ios::out | std::ios::trunc);
     ofs << std::setw(5) << std::scientific << std::right << "rank"
-        << std::setw(WS) << std::scientific << std::right << "all"
-        << std::setw(WS) << std::scientific << std::right << "Traversal"
-        << std::setw(WS) << std::scientific << std::right << "Request"
-        << std::setw(WS) << std::scientific << std::right << "Response"
-        << std::setw(WS) << std::scientific << std::right << "Register"
+        << std::setw(WS) << std::scientific << std::right << "LET-All"
+        << std::setw(WS) << std::scientific << std::right << "LET-Traversal"
+        << std::setw(WS) << std::scientific << std::right << "LET-Request"
+        << std::setw(WS) << std::scientific << std::right << "LET-Response"
+        << std::setw(WS) << std::scientific << std::right << "LET-Register"
         << std::endl;
     for (int i = 0; i < size; i++) {
       ofs << std::setw(5) << std::scientific << std::right << i
