@@ -79,30 +79,29 @@ struct SharedData {
   double time_map2_dev;  // CUDA kernel runtime
 #endif
 
-  SharedData() :
-      mpi_rank_(0),
-      mpi_size_(1),
-      mpi_comm_(MPI_COMM_WORLD),
-      max_depth_(0),
-      opt_mutual_(false)
-      nb_total(0),
-      nb_before(0),
-      nb_after(0),
-      nleaves(0),
-      ncells(0),
-      time_tree_all(0),
-      time_tree_sample(0),
-      time_tree_exchange(0),
-      time_tree_growlocal(0),
-      time_tree_growglobal(0),
-      time_let_all      (0),
-      time_let_traverse (0),
-      time_let_req      (0),
-      time_let_response (0),
-      time_let_register (0),
-    (0),
-    time_map2_all(0),
-    time_map2_let(0)
+  SharedData()
+      : mpi_rank_(0)
+      , mpi_size_(1)
+      , mpi_comm_(MPI_COMM_WORLD)
+      , max_depth_(0)
+      , opt_mutual_(false)
+      , nb_total(0)
+      , nb_before(0)
+      , nb_after(0)
+      , nleaves(0)
+      , ncells(0)
+      , time_tree_all(0)
+      , time_tree_sample(0)
+      , time_tree_exchange(0)
+      , time_tree_growlocal(0)
+      , time_tree_growglobal(0)
+      , time_let_all      (0)
+      , time_let_traverse (0)
+      , time_let_req      (0)
+      , time_let_response (0)
+      , time_let_register (0)
+      , time_map2_all(0)
+      , time_map2_let(0)
   { }
   SharedData(const SharedData<TSP, SFC>& rhs) = delete; // no copy
   SharedData(SharedData<TSP, SFC>&& rhs) = delete; // no move
