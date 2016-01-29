@@ -408,10 +408,6 @@ void dumpLeaves(TapasFMM::Cell &root) {
 int main(int argc, char ** argv) {
   Args args(argc, argv);
   
-#ifdef TBB
-  task_scheduler_init init(args.threads);
-#endif
-  
 #ifdef USE_MPI
   MPI_Init(&argc, &argv);
 
@@ -419,6 +415,15 @@ int main(int argc, char ** argv) {
   MPI_Comm_size(MPI_COMM_WORLD, &args.mpi_size);
 #endif
 
+#ifdef TBB
+  if (TBB_INTERFACE_VERSION != TBB_runtime_interface_version()) {
+    std::cerr << "Compile-time and run-time TBB versions do not match." << std::endl;
+    abort();
+  }
+  std::cout << "Initializing TBB: threads = " << args.threads << std::endl;
+  task_scheduler_init init(args.threads);
+#endif
+  
   // Dummy CUDA call to initialize the runtime
   // (for performance measurement)
 #ifdef __CUDACC__
@@ -434,7 +439,7 @@ int main(int argc, char ** argv) {
 #ifdef MTHREADS
   FMM_Threading::init();
 #endif
-
+  
   Bodies bodies, bodies2, bodies3, jbodies;
   Cells cells, jcells;
   Dataset data;
