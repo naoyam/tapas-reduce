@@ -420,7 +420,8 @@ int main(int argc, char ** argv) {
     std::cerr << "Compile-time and run-time TBB versions do not match." << std::endl;
     abort();
   }
-  std::cout << "Initializing TBB: threads = " << args.threads << std::endl;
+  std::cout << "TBB: version = " << TBB_runtime_interface_version() << std::endl;
+  std::cout << "TBB: Initializing threads = " << args.threads << std::endl;
   task_scheduler_init init(args.threads);
 #endif
   
