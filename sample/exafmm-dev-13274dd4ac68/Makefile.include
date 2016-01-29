@@ -74,7 +74,7 @@ ifneq (,$(MTHREAD))
 endif
 
 ifneq (,$(TBB))
-	LFLAGS	+= -DTBB -ltbb -I$(TBB_DIR)/include -L$(TBB_DIR)/lib -L$(TBB_DIR)/build/*_release/
+	LFLAGS	+= -DTBB -ltbb -I$(TBB_DIR)/include -L$(TBB_DIR)/lib/intel64 -L$(TBB_DIR)/build/*_release/
 endif
 #LFLAGS	+= -DCILK -lcilkrts # Cilk is included in the Intel C/C++ Compiler
 #LFLAGS	+= -DTBB -ltbb # TBB is available from http://threadingbuildingblocks.org/download.php
