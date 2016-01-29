@@ -27,6 +27,10 @@
 #include "LaplaceSphericalCPU_tapas.h"
 #include "LaplaceP2PCPU_tapas.h"
 
+#ifdef TBB
+# include <tbb/task_scheduler_init.h>
+#endif
+
 namespace {
 uint64_t numM2L = 0;
 uint64_t numP2P = 0;
@@ -404,6 +408,10 @@ void dumpLeaves(TapasFMM::Cell &root) {
 int main(int argc, char ** argv) {
   Args args(argc, argv);
   
+#ifdef TBB
+  task_scheduler_init init(args.threads);
+#endif
+  
 #ifdef USE_MPI
   MPI_Init(&argc, &argv);
 
@@ -423,8 +431,10 @@ int main(int argc, char ** argv) {
 #endif
 
   // ad-hoc code for MassiveThreads when used with mvapich.
+#ifdef MTHREADS
   FMM_Threading::init();
-  
+#endif
+
   Bodies bodies, bodies2, bodies3, jbodies;
   Cells cells, jcells;
   Dataset data;
@@ -452,8 +462,6 @@ int main(int argc, char ** argv) {
   (void) verify;
 
   Region tr;
-
-  num_threads(args.threads);
 
   logger::startTimer("Dataset generation");
   bodies = data.initBodies(args.numBodies, args.distribution, args.mpi_rank, args.mpi_size);
