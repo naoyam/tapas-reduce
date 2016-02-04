@@ -1,12 +1,17 @@
 #ifndef TAPAS_HOT_MAPPER_H_
 #define TAPAS_HOT_MAPPER_H_
 
+#include <chrono>
+
 #include "tapas/iterator.h"
 #include "tapas/hot/let.h"
 
 namespace tapas {
 namespace hot {
 
+using std::chrono::duration_cast;
+using std::chrono::milliseconds;
+using clock = std::chrono::system_clock;
 
 /**
  * @brief Helper subroutine called from Mapper::Map
@@ -114,7 +119,13 @@ struct CPUMapper {
   // cell x cell
   template <class Funct, class...Args>
   void Map(Funct f, Cell &c1, Cell &c2, Args... args) {
+    using Time = decltype(clock::now());
+    Time net_bt, net_et;
+    
+    // All Map() function traverse starts from (root, root) for LET construction and GPU init/finalize
     if (c1.IsRoot() && c2.IsRoot()) {
+      auto bt = clock::now();
+      
       if (c1.data().mpi_size_ > 1) {
 #ifdef TAPAS_DEBUG
         char t[] = "TAPAS_IN_LET=1";
@@ -124,12 +135,18 @@ struct CPUMapper {
 #ifdef TAPAS_DEBUG
         unsetenv("TAPAS_IN_LET");
 #endif
+        net_bt = clock::now();
       }
+      auto et = clock::now();
+      c1.data().time_map2_let = duration_cast<milliseconds>(et - bt).count() * 1e-3;
     }
 
+    // Actual Map() operation
     f(c1, c2, args...);
     
     if (c1.IsRoot() && c2.IsRoot()) {
+      net_et = clock::now();
+      c1.data().time_map2_net = duration_cast<milliseconds>(net_et - net_bt).count() * 1e-3;
     }
   }
 

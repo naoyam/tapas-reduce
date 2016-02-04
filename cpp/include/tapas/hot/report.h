@@ -102,15 +102,20 @@ void Report(const Data &data, std::ostream &os = std::cout) {
   }
 
   // Map2 breakdown
-#ifdef __CUDACC__
   {
-    RankCSV csv {"all", "let","device_call" };
+    RankCSV csv {"all", "net", "let", "net_traverse"
+#ifdef __CUDACC__
+          , "device_call"
+#endif
+          };
     csv.At("all") = data.time_map2_all;
+    csv.At("net") = data.time_map2_net;
     csv.At("let") = data.time_map2_let;
+#ifdef __CUDACC__
     csv.At("device_call") = data.time_map2_dev;
+#endif
     csv.Dump(report_prefix + "map2" + report_suffix + ".csv");
   }
-#endif
 }
 
 } // namespace hot

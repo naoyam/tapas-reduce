@@ -75,6 +75,7 @@ struct SharedData {
 
   double time_map2_all;
   double time_map2_let;     // Map2/LET (should be equivalent to time_let_all)
+  double time_map2_net;
 #ifdef __CUDACC__
   double time_map2_dev;  // CUDA kernel runtime
 #endif
