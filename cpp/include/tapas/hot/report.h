@@ -103,13 +103,13 @@ void Report(const Data &data, std::ostream &os = std::cout) {
 
   // Map2 breakdown
   {
-    RankCSV csv {"all", "net", "let", "net_traverse"
+    RankCSV csv {"all", "let", "net_traverse"
 #ifdef __CUDACC__
           , "device_call"
 #endif
           };
     csv.At("all") = data.time_map2_all;
-    csv.At("net") = data.time_map2_net;
+    csv.At("net_traverse") = data.time_map2_net;
     csv.At("let") = data.time_map2_let;
 #ifdef __CUDACC__
     csv.At("device_call") = data.time_map2_dev;
