@@ -3,6 +3,7 @@
 
 #include "types.h" // exafmm/include/types.h
 #include "tapas/debug_util.h"
+#include "tapas/util.h"
 
 #include "tapas.h"
 

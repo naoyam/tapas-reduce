@@ -1,5 +1,7 @@
-#include <thread>
+#include <chrono>
 #include <mutex>
+#include <thread>
+
 #include <unistd.h> // usleep
 
 #ifdef USE_MPI
@@ -108,7 +110,7 @@ struct FMM_DTT {
     asn(dX, Ci.center() - Cj.center());
     real_t R2 = norm(dX);
     vec3 Xperiodic = 0; // dummy; periodic not ported
-
+    
     real_t Ri = 0;
     real_t Rj = 0;
 
@@ -489,8 +491,11 @@ int main(int argc, char ** argv) {
     logger::printTitle("FMM Parameters");
     args.print(logger::stringLength, P);
   }
+
+  double time_upw = 0, time_dtt = 0, time_dwn = 0;
   
   for (int t=0; t<args.repeat; t++) {
+    auto total_bt = std::chrono::system_clock::now();
     logger::printTitle("FMM Profiling");
     logger::startTimer("Total FMM");
     logger::startPAPI();
@@ -504,26 +509,39 @@ int main(int argc, char ** argv) {
     int rank = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #endif
-    logger::startTimer("Upward pass");
-    tapas::UpwardMap(FMM_Upward, *root, args.theta);
-    logger::stopTimer("Upward pass");
+
+    // Upward (P2M + M2M)
+    {
+      logger::startTimer("Upward pass");
+      auto bt = std::chrono::system_clock::now();
+      
+      tapas::UpwardMap(FMM_Upward, *root, args.theta);
+      
+      auto et = std::chrono::system_clock::now();
+      logger::stopTimer("Upward pass");
+
+      time_upw = std::chrono::duration_cast<std::chrono::milliseconds>(et - bt).count() / 1000.0;
+    }
     
 #ifdef TAPAS_DEBUG
     dumpM(*root);
 #endif
 
 #ifdef USE_MPI
-    //std::cerr << "rank " << rank << " finished upward." << std::endl;
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
 
-    logger::startTimer("Traverse");
-    
-    numM2L = 0; numP2P = 0;
-    
-    tapas::Map(FMM_DTT(), tapas::Product(*root, *root), args.mutual, args.nspawn, args.theta);
-    
-    logger::stopTimer("Traverse");
+    {
+      logger::startTimer("Traverse");
+      auto bt = std::chrono::system_clock::now();
+      numM2L = 0; numP2P = 0;
+      
+      tapas::Map(FMM_DTT(), tapas::Product(*root, *root), args.mutual, args.nspawn, args.theta);
+      
+      auto et = std::chrono::system_clock::now();
+      logger::stopTimer("Traverse");
+      time_dtt = std::chrono::duration_cast<std::chrono::milliseconds>(et - bt).count() / 1000.0;
+    }
     
     TAPAS_LOG_DEBUG() << "Dual Tree Traversal done\n";
     jbodies = bodies;
@@ -532,9 +550,16 @@ int main(int argc, char ** argv) {
     dumpL(*root);
 #endif
 
-    logger::startTimer("Downward pass");
-    tapas::DownwardMap(FMM_Downward, *root);
-    logger::stopTimer("Downward pass");
+    {
+      logger::startTimer("Downward pass");
+      auto bt = std::chrono::system_clock::now();
+      
+      tapas::DownwardMap(FMM_Downward, *root);
+      
+      auto et = std::chrono::system_clock::now();
+      logger::stopTimer("Downward pass");
+      time_dwn = std::chrono::duration_cast<std::chrono::milliseconds>(et - bt).count() / 1000.0;
+    }
     
     TAPAS_LOG_DEBUG() << "L2P done\n";
 
@@ -545,10 +570,19 @@ int main(int argc, char ** argv) {
     CopyBackResult(bodies, root);
     //CopyBackResult(bodies, root->body_attrs(), args.numBodies);
 
+    auto total_et = std::chrono::system_clock::now();
     logger::printTitle("Total runtime");
     logger::stopPAPI();
     logger::stopTimer("Total FMM");
     logger::resetTimer("Total FMM");
+
+    double time_total = std::chrono::duration_cast<std::chrono::milliseconds>(total_et - total_bt).count() / 1000.0;
+    tapas::util::RankCSV csv {"total", "upward", "traverse", "downward"};
+    csv.At("total") = time_total;
+    csv.At("upward") = time_upw;
+    csv.At("traverse") = time_dtt;
+    csv.At("downward") = time_dwn;
+    csv.Dump("main.csv");
     
 #if WRITE_TIME
     logger::writeTime();
