@@ -103,11 +103,14 @@ struct SharedData {
       , time_let_register (0)
       , time_map2_all(0)
       , time_map2_let(0)
+      , time_map2_net(0)
+#ifdef __CUDACC__
+      , time_map2_dev(0)
+#endif
   { }
   SharedData(const SharedData<TSP, SFC>& rhs) = delete; // no copy
   SharedData(SharedData<TSP, SFC>&& rhs) = delete; // no move
 };
-
 
 
 } // namespace hot

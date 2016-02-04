@@ -135,10 +135,11 @@ struct CPUMapper {
 #ifdef TAPAS_DEBUG
         unsetenv("TAPAS_IN_LET");
 #endif
-        net_bt = clock::now();
       }
       auto et = clock::now();
       c1.data().time_map2_let = duration_cast<milliseconds>(et - bt).count() * 1e-3;
+      
+      net_bt = clock::now();
     }
 
     // Actual Map() operation
