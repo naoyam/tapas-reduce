@@ -33,10 +33,25 @@
 # include <tbb/task_scheduler_init.h>
 #endif
 
+#ifdef COUNT /* Count kernel invocations */
+# warning "COUNT is defined. This may significantly slows down execution"
+
 namespace {
 uint64_t numM2L = 0;
 uint64_t numP2P = 0;
 }
+
+inline void IncP2P() { numP2P++; }
+inline void IncM2L() { numM2L++; }
+inline void ResetCount() { numP2P = 0; numM2L = 0; }
+
+#else
+
+inline void IncP2P() { }
+inline void IncM2L() { }
+inline void ResetCount() { }
+
+#endif
 
 template <int DIM, class FP> inline
 tapas::Vec<DIM, FP> &asn(tapas::Vec<DIM, FP> &dst, const vec<DIM, FP> &src) {
@@ -99,17 +114,17 @@ struct FMM_DTT {
   template<class Cell>
   inline void operator()(Cell &Ci, Cell &Cj, int mutual, int nspawn, real_t theta) {
     
-    if (Ci.key() == 0 && Cj.key() == 0) { // ad-hoc 
-      numP2P = 0;
-      numM2L = 0;
+    if (Ci.key() == 0 && Cj.key() == 0) { // ad-hoc
+      ResetCount();
     }
+    
     // TODO:
     //if (Ci.nb() == 0 || Cj.nb() == 0) return;
 
     vec3 dX;
     asn(dX, Ci.center() - Cj.center());
     real_t R2 = norm(dX);
-    vec3 Xperiodic = 0; // dummy; periodic not ported
+    vec3 Xperiodic = 0; // dummy; periodic is not ported
     
     real_t Ri = 0;
     real_t Rj = 0;
@@ -122,12 +137,11 @@ struct FMM_DTT {
     Rj = (Rj / 2 * 1.00001) / theta;
     
     if (R2 > (Ri + Rj) * (Ri + Rj)) {                   // If distance is far enough
-      numM2L++;
+      IncM2L();
       M2L(Ci, Cj, Xperiodic, mutual);                   //  M2L kernel
     } else if (Ci.IsLeaf() && Cj.IsLeaf()) {            // Else if both cells are bodies
+      IncP2P();
       tapas::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic, mutual);
-
-      numP2P++;
     } else {                                                    // Else if cells are close but not bodies
       tapas_splitCell(Ci, Cj, Ri, Rj, mutual, nspawn, theta);   //  Split cell and call function recursively for child
     }                                                           // End if for multipole acceptance
@@ -534,7 +548,7 @@ int main(int argc, char ** argv) {
     {
       logger::startTimer("Traverse");
       auto bt = std::chrono::system_clock::now();
-      numM2L = 0; numP2P = 0;
+      ResetCount();
       
       tapas::Map(FMM_DTT(), tapas::Product(*root, *root), args.mutual, args.nspawn, args.theta);
       
@@ -598,10 +612,12 @@ int main(int argc, char ** argv) {
     logger::printPAPI();
     logger::stopDAG();
 
+#ifdef COUNT
     if (args.mpi_rank == 0) {
       std::cout << "P2P calls" << " : " << numP2P << std::endl;
       std::cout << "M2L calls" << " : " << numM2L << std::endl;
     }
+#endif
     
     bodies = bodies3;
     data.initTarget(bodies);
