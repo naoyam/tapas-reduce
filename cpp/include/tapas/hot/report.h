@@ -111,7 +111,6 @@ void Report(const Data &data, std::ostream &os = std::cout) {
     csv.At("all") = data.time_map2_all;
     csv.At("let") = data.time_map2_let;
     csv.At("net_traverse") = data.time_map2_net;
-    std::cout << "****************** time_map2_net = " << data.time_map2_net << std::endl;
 #ifdef __CUDACC__
     csv.At("device_call") = data.time_map2_dev;
 #endif
