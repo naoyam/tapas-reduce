@@ -113,10 +113,12 @@ static inline void FMM_Downward(TapasFMM::Cell &c) {
 struct FMM_DTT {
   template<class Cell>
   inline void operator()(Cell &Ci, Cell &Cj, int mutual, int nspawn, real_t theta) {
-    
+
+#ifdef COUNT
     if (Ci.key() == 0 && Cj.key() == 0) { // ad-hoc
       ResetCount();
     }
+#endif
     
     // TODO:
     //if (Ci.nb() == 0 || Cj.nb() == 0) return;
