@@ -23,6 +23,11 @@ else
 	LOG = -DTAPAS_LOG_LEVEL=0
 endif
 
+ifneq (,$(COUNT))
+	CXX += -DCOUNT
+	MPICXX += -DCOUNT
+endif
+
 # Test for tree construction
 tree: tree.o $(OBJECTS)
 	$(CXX) $? $(LFLAGS)

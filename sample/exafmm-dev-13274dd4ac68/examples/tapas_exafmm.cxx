@@ -591,11 +591,19 @@ int main(int argc, char ** argv) {
     logger::resetTimer("Total FMM");
 
     double time_total = std::chrono::duration_cast<std::chrono::milliseconds>(total_et - total_bt).count() / 1000.0;
-    tapas::util::RankCSV csv {"total", "upward", "traverse", "downward"};
+    tapas::util::RankCSV csv {"total", "upward", "traverse", "downward"
+#ifdef COUNT
+          , "numP2P", "numM2L"
+#endif
+          };
     csv.At("total") = time_total;
     csv.At("upward") = time_upw;
     csv.At("traverse") = time_dtt;
     csv.At("downward") = time_dwn;
+#ifdef COUNT
+    csv.At("numP2P") = numP2P;
+    csv.At("numM2L") = numM2L;
+#endif
     csv.Dump("main.csv");
     
 #if WRITE_TIME
