@@ -606,7 +606,19 @@ int main(int argc, char ** argv) {
     csv.At("numP2P") = numP2P;
     csv.At("numM2L") = numM2L;
 #endif
-    csv.Dump("main.csv");
+    
+    std::string report_prefix;
+    std::string report_suffix;
+    
+    if (getenv("TAPAS_REPORT_PREFIX")) {
+      report_prefix = getenv("TAPAS_REPORT_PREFIX");
+    }
+    
+    if (getenv("TAPAS_REPORT_SUFFIX")) {
+      report_suffix = getenv("TAPAS_REPORT_SUFFIX");
+    }
+
+    csv.Dump(report_prefix + "main" + report_suffix + ".csv");
     
 #if WRITE_TIME
     logger::writeTime();
