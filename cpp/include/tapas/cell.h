@@ -21,6 +21,7 @@ class BasicCell {
   typedef typename TSP::Body BT;
   typedef typename TSP::BodyAttr BT_ATTR;
   typedef typename TSP::CellAttr ATTR;
+  typedef TSP TSP;
  protected:
     ATTR attr_; // can be omitted when ATTR=NONE
     Region<TSP> region_;

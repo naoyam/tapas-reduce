@@ -425,6 +425,59 @@ struct GPUMapper {
 
 #endif /* __CUDACC__ */
 
+/* (Specializes on bodies). */
+
+template<class CELL, class BODY, class LET, class Funct, class...Args>
+static void ProductMapImpl(CPUMapper<CELL, BODY, LET> &mapper,
+                           typename CELL::BodyIterator iter1,
+                           int beg1, int end1,
+                           typename CELL::BodyIterator iter2,
+                           int beg2, int end2,
+                           Funct f, Args... args) {
+  TAPAS_ASSERT(beg1 < end1 && beg2 < end2);
+  using BodyIterator = typename CELL::BodyIterator;
+
+  bool am = iter1.AllowMutualInteraction(iter2);
+
+  CELL &c1 = iter1.cell();
+  CELL &c2 = iter2.cell();
+  auto data = c1.data_ptr();
+  auto &bodies = data->local_bodies_;
+  auto &attrs = data->local_body_attrs_;
+
+  if (am) {
+    for (int i = beg1; i < end1; i++) {
+      //BodyIterator b1 = iter1 + i;
+      for (int j = beg2; j <= i; j++) {
+        //BodyIterator b2 = iter2 + j;
+        if (1) {
+#ifdef TAPAS_COMPILER_INTEL
+# pragma forceinline
+#endif
+          //mapper.Map(f, b1, b2, args...);
+          //f(*b1, b1.attr(), *b2, b2.attr(), args...);
+          f(bodies[c1.bid() + i], attrs[c1.bid() + i],
+            bodies[c2.bid() + j], attrs[c2.bid() + j], args...);
+        }
+      }
+    }
+  } else {
+    for (int i = beg1; i < end1; i++) {
+      //BodyIterator b1 = iter1 + i;
+      for (int j = beg2; j < end2; j++) {
+        //BodyIterator b2 = iter2 + j;
+#ifdef TAPAS_COMPILER_INTEL
+# pragma forceinline
+#endif
+        //mapper.Map(f, b1, b2, args...);
+        //f(*b1, b1.attr(), *b2, b2.attr(), args...);
+        f(bodies[c1.bid() + i], attrs[c1.bid() + i],
+          bodies[c2.bid() + j], attrs[c2.bid() + j], args...);
+      }
+    }
+  }
+}
+
 } // namespace hot
 } // namespace tapas
 
