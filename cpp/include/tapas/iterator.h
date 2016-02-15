@@ -106,7 +106,7 @@ class CellIterator {
   typedef typename CELL::attr_type attr_type;
   using KeyType = typename CellType::KeyType;
 
-  static const constexpr int kThreadSpawnThreshold = 2;
+  static const constexpr int kThreadSpawnThreshold = 7;
   
   CELL &operator*() {
     return c_;
