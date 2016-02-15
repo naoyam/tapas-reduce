@@ -37,6 +37,7 @@ endif
 # Profiling flags (gprof)
 ifneq (,$(ENABLE_PROFILING))
 	CXX += -pg -g
+	MPICXX += -pg -g
 endif
 
 ### choose C++ compiler
