@@ -361,6 +361,14 @@ class Cell: public tapas::BasicCell<TSP> {
     return nb_;
   }
 
+  /**
+   * \brief check if the cell is large enough to spawn tasks recursively
+   */
+  inline bool SpawnTask() const {
+    // Todo
+    return depth() < 4;
+  }
+
   static Region<TSP>  CalcRegion(KeyType, const Region<TSP>& r);
   static tapas::Vec<Dim, FP> CalcCenter(KeyType, const Region<TSP>& r);
 

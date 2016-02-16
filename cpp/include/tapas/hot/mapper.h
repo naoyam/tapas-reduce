@@ -52,8 +52,10 @@ static void ProductMapImpl(Mapper &mapper,
   }
 #endif
     
-  if ((end1 - beg1 == 1)
+  if (!iter1.SpawnTask()
+      || (end1 - beg1 == 1)
       || (end1 - beg1 <= kT1 && end2 - beg2 <= kT2)) {
+    // Not to spawn tasks, run in serial
     // The two ranges (beg1,end1) and (beg2,end2) are fine enough to apply f in a serial manner.
 
     // Create a function object to be given to the Container's Map function.
@@ -78,6 +80,8 @@ static void ProductMapImpl(Mapper &mapper,
       }
     }
   } else if (end2 - beg2 == 1) {
+    // Source side (iter2) can be split and paralleilzed.
+    // target side cannot paralleize due to accumulation
     int mid1 = (end1 + beg1) / 2;
     typename Th::TaskGroup tg;
     tg.createTask([&]() { ProductMapImpl(mapper, iter1, beg1, mid1, iter2, beg2, end2, f, args...); });

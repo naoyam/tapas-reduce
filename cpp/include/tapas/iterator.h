@@ -84,6 +84,11 @@ class BodyIterator {
       return idx_ < x.idx_;
     }
   }
+
+  // TODO
+  inline bool SpawnTask() const {
+    return c_.local_nb() >= 1000; // hard-coded
+  }
   
   inline bool operator!=(const BodyIterator &x) const {
     return !operator==(x);
@@ -165,6 +170,12 @@ class CellIterator {
   bool AllowMutualInteraction(const CellIterator &x) const {
     return c_.GetOptMutual() && c_ == x.c_;
   }
+  
+  // TODO
+  inline bool SpawnTask() const {
+    const constexpr int lvspawn = 5;
+    return c_.depth() <= lvspawn;
+  }
 }; // class CellIterator
 
 template <class Cell>
@@ -231,10 +242,6 @@ class SubCellIterator {
     return ck;
   }
 
-  inline Cell& Parent() {
-    return c_;
-  }
-  
   // prefix increment operator
   inline SubCellIterator<CellType> &operator++() {
     idx_ = std::min(size(), idx_ + 1);
@@ -270,6 +277,10 @@ class SubCellIterator {
   }
   bool AllowMutualInteraction(const SubCellIterator &x) const {
     return c_.GetOptMutual() && c_ == x.c_;
+  }
+  // TODO
+  inline bool SpawnTask() const {
+    return c_.depth() <= 4;
   }
 }; // class SubCellIterator
 

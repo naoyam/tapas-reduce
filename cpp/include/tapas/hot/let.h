@@ -375,6 +375,8 @@ struct LET {
       return *this;
     }
 
+    constexpr bool SpawnTask() const { return false; }
+
     Mapper &mapper() { return mapper_; }
     const Mapper &mapper() const { return c_->mapper(); }
 
@@ -556,6 +558,10 @@ struct LET {
     Vec center() {
       Touched();
       return Cell<TSP>::CalcCenter(key_, data_.region_);
+    }
+
+    int depth() const {
+      return SFC::GetDepth(key_);
     }
 
     /**
