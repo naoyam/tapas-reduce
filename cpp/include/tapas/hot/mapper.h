@@ -1,6 +1,8 @@
 #ifndef TAPAS_HOT_MAPPER_H_
 #define TAPAS_HOT_MAPPER_H_
 
+#include <iostream>
+#include <cxxabi.h>
 #include <chrono>
 
 #include "tapas/iterator.h"
@@ -30,15 +32,35 @@ static void ProductMapImpl(Mapper &mapper,
   const constexpr int kT2 = T2_Iter::kThreadSpawnThreshold;
 
   bool am = iter1.AllowMutualInteraction(iter2);
-  
-  if (end1 - beg1 <= kT1 || end2 - beg2 <= kT2) {
+
+#if 0
+  {
+    int status;
+    char * t1_demangled = abi::__cxa_demangle(typeid(T1_Iter).name(),0,0,&status);
+    char * t2_demangled = abi::__cxa_demangle(typeid(T2_Iter).name(),0,0,&status);
+    if (strncmp("tapas::iterator::BodyIterator", t1_demangled, strlen("tapas::iterator::BodyIterator")) != 0 ||
+        strncmp("tapas::iterator::BodyIterator", t2_demangled, strlen("tapas::iterator::BodyIterator")) != 0) {
+      std::cout << "T1_Iter=" << (t1_demangled+17) << " "
+                << "T2_Iter=" << (t2_demangled+17) << " "
+                << "iter1.size()=" << iter1.size() << "[" << beg1 << "-" << end1 << "]" << "(th=" << T1_Iter::kThreadSpawnThreshold << ") "
+                << "iter2.size()=" << iter2.size() << "[" << beg2 << "-" << end2 << "]" << "(th=" << T1_Iter::kThreadSpawnThreshold << ") "
+                << ((end1 - beg1 <= kT1 && end2 - beg2 <= kT2) ? "Serial" : "Split")
+                << std::endl;
+    }
+    free(t1_demangled);
+    free(t2_demangled);
+  }
+#endif
+    
+  if ((end1 - beg1 == 1)
+      || (end1 - beg1 <= kT1 && end2 - beg2 <= kT2)) {
     // The two ranges (beg1,end1) and (beg2,end2) are fine enough to apply f in a serial manner.
 
     // Create a function object to be given to the Container's Map function.
     //typedef std::function<void(C1&, C2&)> Callback;
     //Callback gn = [&args...](C1 &c1, C2 &c2) { f()(c1, c2, args...); };
-    for(int i = beg1; i < end1; i++) {
-      for(int j = beg2; j < end2; j++) {
+    for (int i = beg1; i < end1; i++) {
+      for (int j = beg2; j < end2; j++) {
         T1_Iter lhs = iter1 + i;
         T2_Iter rhs = iter2 + j;
         // if i and j are mutually interactive, f(i,j) is evaluated only once.
@@ -55,6 +77,12 @@ static void ProductMapImpl(Mapper &mapper,
         }
       }
     }
+  } else if (end2 - beg2 == 1) {
+    int mid1 = (end1 + beg1) / 2;
+    typename Th::TaskGroup tg;
+    tg.createTask([&]() { ProductMapImpl(mapper, iter1, beg1, mid1, iter2, beg2, end2, f, args...); });
+    tg.createTask([&]() { ProductMapImpl(mapper, iter1, mid1, end1, iter2, beg2, end2, f, args...); });
+    tg.wait();
   } else {
     int mid1 = (end1 + beg1) / 2;
     int mid2 = (end2 + beg2) / 2;
