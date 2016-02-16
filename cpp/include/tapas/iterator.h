@@ -87,7 +87,7 @@ class BodyIterator {
 
   // TODO
   inline bool SpawnTask() const {
-    return c_.local_nb() >= 1; // hard-coded
+    return c_.local_nb() >= 1000; // hard-coded
   }
   
   inline bool operator!=(const BodyIterator &x) const {
