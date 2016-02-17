@@ -987,7 +987,7 @@ struct LET {
       }
     }
 
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
     BarrierExec([&](int rank, int) {
         std::cout << "rank " << rank << "  Local cells are filtered out" << std::endl;
         std::cout << "rank " << rank << "  req_keys_attr.size() = " << req_keys_attr.size() << std::endl;
@@ -1029,7 +1029,7 @@ struct LET {
     tapas::mpi::Alltoallv2<KeyType>(keys_body_send, body_dest,
                                     keys_body_recv, body_src, MPI_COMM_WORLD);
     
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
     {
       assert(keys_body_recv.size() == body_src.size());
       tapas::debug::DebugStream e("body_keys_recv");
@@ -1039,7 +1039,7 @@ struct LET {
     }
 #endif
 
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
     BarrierExec([&](int rank, int) {
         std::cout << "rank " << rank << "  req_keys_attr.size() = " << req_keys_attr.size() << std::endl;
         std::cout << "rank " << rank << "  req_keys_body.size() = " << req_keys_body.size() << std::endl;
@@ -1158,7 +1158,7 @@ struct LET {
     tapas::mpi::Alltoallv(leaf_nb_sendbuf,   leaf_sendcnt, res_nb,        leaf_recvcnt, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv(body_sendbuf,      body_sendcnt, res_bodies,    body_recvcnt, MPI_COMM_WORLD);
 
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
     tapas::debug::BarrierExec([&](int, int) {
         std::cout << "ht.size() = " << ht.size() << std::endl;
         std::cout << "req_attr_keys.size() = " << req_attr_keys.size() << std::endl;
@@ -1248,7 +1248,7 @@ struct LET {
   static void Exchange(CellType &root, UserFunct f, Args...args) {
     double beg = MPI_Wtime();
     
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
     ShowHistogram(root.data());
 #endif
 
@@ -1277,7 +1277,7 @@ struct LET {
     // Register
     Register(root.data_, res_cell_attr_keys, res_cell_attrs, res_leaf_keys, res_nb);
   
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
     DebugDumpCells(root.data());
 #endif
 
@@ -1286,7 +1286,7 @@ struct LET {
   }
 
   static void DebugDumpCells(Data &data) {
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
     // Debug
     // Dump all received cells to a file
     {

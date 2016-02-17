@@ -647,7 +647,7 @@ Partitioner<TSP>::Partition(typename TSP::Body *b, index_t nb) {
     Refine(root, hn, b, 0, 0);
 
     // Dump all (local) cells to a file
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
     {
       tapas::debug::DebugStream e("cells");
     
@@ -713,9 +713,6 @@ void Partitioner<TSP>::Refine(Cell<TSP> *c,
             c->bodies_, c->body_attrs_);
         c->ht().insert(std::make_pair(child_key, child_cell));
         TAPAS_LOG_DEBUG() << "Particles: \n";
-#ifdef TAPAS_DEBUG    
-        //tapas::debug::PrintBodies<Dim, typename TSP::FP, typename TSP::BT>(b+cur_offset, child_bn, std::cerr);
-#endif    
         Refine(child_cell, hn, b, cur_depth+1, child_key);
 
         // Go to the next child

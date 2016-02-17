@@ -117,7 +117,7 @@ class SamplingOctree {
     const KeyType K = SFC::AppendDepth(0, L);
     const int W = pow(B, L); // number of cells in level L
 
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
     std::cerr << "mpi_size = " << mpi_size << std::endl;
     std::cerr << "B = " << B << std::endl;
     std::cerr << "L = " << L << std::endl;

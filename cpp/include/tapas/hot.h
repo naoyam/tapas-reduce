@@ -843,6 +843,7 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) {
   Cell *c = Lookup(child_key);
 
 #ifdef TAPAS_DEBUG
+  // assert c != nullptr
   if (c == nullptr) {
     std::stringstream ss;
     ss << "In MPI rank " << data_->mpi_rank_ << ": " 
@@ -1157,7 +1158,7 @@ class Partitioner {
       res_body.insert(std::make_pair(src_pid, k));
     }
 
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
     BarrierExec([&res_attr, &res_body](int rank, int) {
         std::cerr << "Rank " << rank << " SelectResponseCells: keys_attr.size() = " << res_attr.size() << std::endl;
         std::cerr << "Rank " << rank << " SelectResponseCells: keys.body.size() = " << res_body.size() << std::endl;
@@ -1288,7 +1289,7 @@ Partitioner<TSP>::Partition(typename TSP::Body *b, index_t num_bodies) {
   // Build Global trees
   GlobalTree<TSP>::Build(*data);
 
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
   {
     tapas::debug::DebugStream e("cells");
     
@@ -1386,7 +1387,7 @@ extern volatile double dummy_value;
 
 } // namespace tapas
 
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
 template<class TSP>
 std::ostream& operator<<(std::ostream& os, tapas::hot::Cell<TSP> &cell) {
   using CellType = tapas::hot::Cell<TSP>;

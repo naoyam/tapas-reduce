@@ -17,6 +17,11 @@ ifeq ($(MODE),debug)
 	DEBUG = -DTAPAS_DEBUG=1 -g -gdwarf-2
 	LOG = -DTAPAS_LOG_LEVEL=1
 	LFLAGS += -DASSERT # Turns on asserttions (otherwise define an empty macro function)
+else ifeq ($(MODE),debug2)
+	OPT = -O0
+	DEBUG = -DTAPAS_DEBUG=1 -DTAPAS_DEBUG_DUMP -g -gdwarf-2
+	LOG = -DTAPAS_LOG_LEVEL=1
+	LFLAGS += -DASSERT # Turns on asserttions (otherwise define an empty macro function)
 else
 	OPT = -O3 # -O3 is also OK, but when gprof is used, gprof command misunderstand names of functions called as 'frame_dummy'
 	DEBUG = -DTAPAS_DEBUG=0 -DNDEBUG

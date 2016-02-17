@@ -76,7 +76,7 @@ static inline void FMM_Upward(TapasFMM::Cell &c, real_t /* theta */) {
   c.attr().M = 0;
   c.attr().L = 0;
   
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
   {
     tapas::debug::DebugStream e("FMM_Upward");
     e.out() << TapasFMM::TSP::SFC::Simplify(c.key()) << " (1) " << c.IsLeaf() << " ";
@@ -492,7 +492,7 @@ int main(int argc, char ** argv) {
   logger::stopTimer("Dataset generation");
 
   // Dump all bodies data for debugging
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
   {
     tapas::debug::DebugStream err("bodies");
     for (auto &b : bodies) {
@@ -539,7 +539,7 @@ int main(int argc, char ** argv) {
       time_upw = std::chrono::duration_cast<std::chrono::milliseconds>(et - bt).count() / 1000.0;
     }
     
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
     dumpM(*root);
 #endif
 
@@ -562,7 +562,7 @@ int main(int argc, char ** argv) {
     TAPAS_LOG_DEBUG() << "Dual Tree Traversal done\n";
     jbodies = bodies;
 
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
     dumpL(*root);
 #endif
 
@@ -579,7 +579,7 @@ int main(int argc, char ** argv) {
     
     TAPAS_LOG_DEBUG() << "L2P done\n";
 
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_DUMP
     dumpBodies(*root);
 #endif
     
