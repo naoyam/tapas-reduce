@@ -30,8 +30,8 @@ else ifneq (,$(findstring g++, $(CXX)))
 	MPICXX += -std=c++11 -Wall -Wextra -O2 -funroll-loops -fdiagnostics-color=auto -fno-openmp -lrt
 else ifneq (,$(findstring icpc, $(CXX)))
 # for ICC, we don't use -static option (as well as -fast which implicitly includes it) because it causes a linking error.
-	CXX    += -std=c++11 -Wall -Wextra -funroll-loops -xHOST -O3 -no-prec-div -fp-model fast=2 -fno-openmp -lrt
-	MPICXX += -std=c++11 -Wall -Wextra -funroll-loops -xHOST -O3 -no-prec-div -fp-model fast=2 -fno-openmp -lrt
+	CXX    += -std=c++11 -Wall -Wextra -funroll-loops -xHOST -O3 -no-prec-div -fp-model fast=2 -fno-openmp -lrt -no-inline-max-per-routine -no-inline-max-per-compile
+	MPICXX += -std=c++11 -Wall -Wextra -funroll-loops -xHOST -O3 -no-prec-div -fp-model fast=2 -fno-openmp -lrt -no-inline-max-per-routine -no-inline-max-per-compile
 endif
 
 # Profiling flags (gprof)
