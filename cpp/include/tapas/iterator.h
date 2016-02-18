@@ -126,13 +126,8 @@ class CellIterator {
     return c_;
   }
   
-  bool IsLocal() const {
-#ifdef USE_MPI
-    KeyType k = key();
-    return c_.data().ht_.count(k) > 0;
-#else
-    return true;
-#endif
+  inline bool IsLocal() const {
+    return c_.IsLocal();
   }
 
   KeyType key() const {
