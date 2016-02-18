@@ -555,19 +555,19 @@ struct LET {
     /**
      * \fn Vec ProxyCell::center()
      */
-    Vec center() {
+    inline Vec center() {
       Touched();
       return Cell<TSP>::CalcCenter(key_, data_.region_);
     }
-
-    int depth() const {
+    
+    inline int depth() const {
       return SFC::GetDepth(key_);
     }
 
     /**
      * \fn FP ProxyCell::width(FP d) const
      */
-    FP width(FP d) const {
+    inline FP width(FP d) const {
       Touched();
       return Cell<TSP>::CalcRegion(key_, data_.region_).width(d);
     }
@@ -575,17 +575,18 @@ struct LET {
     /**
      * \fn bool ProxyCell::IsLeaf() const
      */
-    bool IsLeaf() const {
+    inline bool IsLeaf() const {
       Touched();
       if (is_local_) return cell_->IsLeaf();
       else           return data_.max_depth_ <= SFC::GetDepth(key_);
     }
 
-    bool IsLocal() const {
-      return data_.ht_.count(key_) > 0;
+    inline bool IsLocal() const {
+      return is_local_;
+      //return data_.ht_.count(key_) > 0;
     }
 
-    size_t nb() {
+    inline size_t nb() {
       Touched();
       if (is_local_) {
         return cell_->nb();
@@ -595,13 +596,13 @@ struct LET {
         return 0;
       }
     }
-
-    SubCellIterator<ProxyCell> subcells() {
+    
+    inline SubCellIterator<ProxyCell> subcells() {
       Split();
       return SubCellIterator<ProxyCell>(*this);
     }
 
-    ProxyCell &subcell(int) {
+    inline ProxyCell &subcell(int) {
       return *this; 
     }
 
