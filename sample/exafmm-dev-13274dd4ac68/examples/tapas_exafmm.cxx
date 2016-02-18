@@ -140,6 +140,7 @@ struct FMM_DTT {
     
     if (R2 > (Ri + Rj) * (Ri + Rj)) {                   // If distance is far enough
       IncM2L();
+      // tapas::Apply(M2L, Ci, Cj, Xperiodic, mutual); // \todo
       M2L(Ci, Cj, Xperiodic, mutual);                   //  M2L kernel
     } else if (Ci.IsLeaf() && Cj.IsLeaf()) {            // Else if both cells are bodies
       IncP2P();

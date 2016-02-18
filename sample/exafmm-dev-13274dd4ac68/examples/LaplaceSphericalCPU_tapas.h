@@ -205,6 +205,9 @@ template<class Cell>
 void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
   complex_t Ynmi[P*P], Ynmj[P*P];
   //vec3 dX = Ci.attr().X - Cj.attr().X - Xperiodic;
+  auto attr_i = Ci.attr();
+  auto attr_j = Cj.attr();
+
   vec3 dX;
   asn(dX, Ci.center() - Cj.center());
   dX -= Xperiodic;
@@ -213,9 +216,6 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
   cart2sph(rho, alpha, beta, dX);
   evalLocal(rho, alpha, beta, Ynmi);
   if (mutual) evalLocal(rho, alpha+M_PI, beta, Ynmj);
-
-  auto attr_i = Ci.attr();
-  auto attr_j = Cj.attr();
 
   for (int j=0; j<P; j++) {
 #if MASS
@@ -239,18 +239,18 @@ void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
         for (int m=-n; m<0; m++) {
           int nms  = n * (n + 1) / 2 - m;
           int jnkm = (j + n) * (j + n) + j + n + m - k;
-          Li += std::conj(Cj.attr().M[nms]) * Cnm * Ynmi[jnkm];
-          //std::cerr << "M: " << Cj.attr().M[nms] << std::conj(Cj.attr().M[nms]) << std::endl;
+          Li += std::conj(attr_j.M[nms]) * Cnm * Ynmi[jnkm];
+          //std::cerr << "M: " << attr_j.M[nms] << std::conj(attr_j.M[nms]) << std::endl;
           //std::cerr << "Y: " << Ynmi[jnkm] << std::endl;
-          if (mutual) Lj += std::conj(Ci.attr().M[nms]) * Cnm * Ynmj[jnkm];
+          if (mutual) Lj += std::conj(attr_i.M[nms]) * Cnm * Ynmj[jnkm];
         }
         for (int m=0; m<=n; m++) {
           int nms  = n * (n + 1) / 2 + m;
           int jnkm = (j + n) * (j + n) + j + n + m - k;
           real_t Cnm2 = Cnm * ODDEVEN((k-m)*(k<m)+m);
-          Li += Cj.attr().M[nms] * Cnm2 * Ynmi[jnkm];
-          //std::cerr << "M: " << Cj.attr().M[nms] << std::conj(Cj.attr().M[nms]) << std::endl;
-          if (mutual) Lj += Ci.attr().M[nms] * Cnm2 * Ynmj[jnkm];
+          Li += attr_j.M[nms] * Cnm2 * Ynmi[jnkm];
+          //std::cerr << "M: " << attr_j.M[nms] << std::conj(attr_j.M[nms]) << std::endl;
+          if (mutual) Lj += attr_i.M[nms] * Cnm2 * Ynmj[jnkm];
         }
       }
 
