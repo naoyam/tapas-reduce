@@ -116,8 +116,8 @@ inline void Map(Funct f, iter::BodyIterator<CellType> iter, Args...args) {
 }
 
 template<class Funct, class T, class...Args>
-void PostOrderMap(Funct f, T &x, Args...args) {
-  std::function<void(T&)> lambda = [=](T& x) { f(x, args...); };
+inline void PostOrderMap(Funct f, T &x, Args...args) {
+  auto lambda = [=](T& x) { f(x, args...); };
   T::PostOrderMap(x, lambda);
 }
 
@@ -128,7 +128,7 @@ inline void UpwardMap(Funct f, T &x, Args...args) {
 
 template<class Funct, class T, class...Args>
 void PreOrderMap(Funct f, T &x, Args...args) {
-  std::function<void(T&)> lambda = [=] (T& x) { f(x, args...); };
+  auto lambda = [=] (T& x) { f(x, args...); };
   T::PreOrderMap(x, lambda);
 }
 
