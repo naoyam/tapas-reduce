@@ -108,6 +108,7 @@ static void ProductMapImpl(Mapper &mapper,
   }
 }
 
+#if 0
 /**
  * \brief Overloaded version of ProductMapImpl for bodies x bodies.
  */
@@ -161,6 +162,7 @@ static void ProductMapImpl(CPUMapper<CELL, BODY, LET> &mapper,
     }
   }
 }
+#endif
 
 template<class Cell, class Body, class LET>
 struct CPUMapper {
@@ -512,7 +514,6 @@ struct GPUMapper {
 }; // class GPUMapper
 
 #endif /* __CUDACC__ */
-
 
 } // namespace hot
 } // namespace tapas
