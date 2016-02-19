@@ -109,6 +109,10 @@ static void ProductMapImpl(Mapper &mapper,
 }
 
 #if 0
+//
+// FIXME: faster but wrong code: bodies are not in a single array, becuase there are bodies from remote processes
+//
+
 /**
  * \brief Overloaded version of ProductMapImpl for bodies x bodies.
  */
