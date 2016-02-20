@@ -33,24 +33,27 @@
 # include <tbb/task_scheduler_init.h>
 #endif
 
-#ifdef COUNT /* Count kernel invocations */
-# warning "COUNT is defined. This may significantly slows down execution"
 
-namespace {
+
+#ifdef COUNT /* Count kernel invocations */
+
+# warning "COUNT is defined. This may significantly slows down execution"
 uint64_t numM2L = 0;
 uint64_t numP2P = 0;
-}
-
-inline void IncP2P() { numP2P++; }
-inline void IncM2L() { numM2L++; }
 inline void ResetCount() { numP2P = 0; numM2L = 0; }
 
 #else
 
-inline void IncP2P() { }
-inline void IncM2L() { }
 inline void ResetCount() { }
 
+#endif /* ifdef COUNT */
+
+#ifdef USE_RDTSC
+# ifdef TAPAS_COMPILER_INTEL
+#  define RDTSC() __rdtsc()
+# endif
+#else
+# define RDTSC() 0
 #endif
 
 template <int DIM, class FP> inline
@@ -139,11 +142,9 @@ struct FMM_DTT {
     Rj = (Rj / 2 * 1.00001) / theta;
     
     if (R2 > (Ri + Rj) * (Ri + Rj)) {                   // If distance is far enough
-      IncM2L();
       // tapas::Apply(M2L, Ci, Cj, Xperiodic, mutual); // \todo
       M2L(Ci, Cj, Xperiodic, mutual);                   //  M2L kernel
     } else if (Ci.IsLeaf() && Cj.IsLeaf()) {            // Else if both cells are bodies
-      IncP2P();
       tapas::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic, mutual);
     } else {                                                    // Else if cells are close but not bodies
       tapas_splitCell(Ci, Cj, Ri, Rj, mutual, nspawn, theta);   //  Split cell and call function recursively for child

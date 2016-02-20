@@ -17,6 +17,21 @@
 #include <mpi.h>
 #endif
 
+extern uint64_t numM2L;
+extern uint64_t numP2P;
+
+#ifdef COUNT
+# define INC_M2L do { numM2L++; } while(0)
+# else
+# define INC_M2L
+#endif
+
+#ifdef USE_SCOREP
+# include <scorep/SCOREP_User.h>
+#else
+# define SCOREP_USER_REGION(_1, _2) // place holder
+#endif
+
 namespace {
 
 const complex_t I(0.,1.);                                       // Imaginary
@@ -126,19 +141,6 @@ void evalLocal(real_t rho, real_t alpha, real_t beta, complex_t * Ynm) {
 }
 
 
-// memo
-// test code (not compiles)
-// ---------------------------------------------
-#if 0
-
-void P2M(TapasFMM::Cell &C) {
-  VecP init = {0.0};
-  C.attr().M = tapas::Reduce(C.bodies(), init, P2M_impl);
-}
-
-// ---------------------------------------------
-#endif
-
 void P2M(TapasFMM::Cell &C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
   
@@ -203,6 +205,9 @@ void M2M(TapasFMM::Cell & C) {
 
 template<class Cell>
 void M2L(Cell &Ci, Cell &Cj, vec3 Xperiodic, bool mutual) {
+  SCOREP_USER_REGION("M2L", SCOREP_USER_REGION_TYPE_FUNCTION);
+  INC_M2L;
+  
   complex_t Ynmi[P*P], Ynmj[P*P];
   //vec3 dX = Ci.attr().X - Cj.attr().X - Xperiodic;
   auto attr_i = Ci.attr();

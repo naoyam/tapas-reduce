@@ -40,6 +40,11 @@ ifneq (,$(ENABLE_PROFILING))
 	MPICXX += -pg -g
 endif
 
+ifneq (,$(ENABLE_SCOREP))
+  CXX += -DUSE_SCOREP
+  MPICXX += -DUSE_SCOREP
+endif
+
 ### choose C++ compiler
 #CXX	= mpicxx -ggdb3 -Wall -Wextra -O3 -msse4a -ffast-math -funroll-loops -fopenmp -std=c++11 # GCC
 #CXX	= CC -Wall -xHOST -O3 -funroll-loops -finline-functions -ansi-alias -openmp # Intel
@@ -59,7 +64,7 @@ LFLAGS += -I../include -I../../../cpp/include -I$(HOME)/local/include
 #CXX	+= -I$$(echo $$CPATH | sed 's/:/ -I/g') # BG compilers need this
 #LFLAGS	+= -L$$(echo $$LIBRARY_PATH | sed 's/:/ -L/g') # BG compilers need this
 LFLAGS += -D$(BASIS) # Specify basis of multipole/local expansion
-LFLAGS += -DEXPANSION=4 # Specify expansion order
+LFLAGS += -DEXPANSION=10 # Specify expansion order
 # SIMD causes compilation errors on umekoji
 #LFLAGS	+= -DUSE_SIMD # Use SSE/AVX/MIC intrinsics
 #LFLAGS	+= -DUSE_WEIGHT # Use weights for partitioning
