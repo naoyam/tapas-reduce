@@ -387,9 +387,7 @@ class Cell: public tapas::BasicCell<TSP> {
 
   bool GetOptMutual() const { return data_->opt_mutual_; }
   bool SetOptMutual(bool b) {
-    bool prev = data_->opt_mutual_;
-    data_->opt_mutual_ = b;
-    return prev;
+    return data_->SetOptMutual(b);
   }
 
   MPI_Comm GetOptMPIComm() const {

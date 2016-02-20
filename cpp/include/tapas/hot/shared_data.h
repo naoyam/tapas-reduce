@@ -110,6 +110,13 @@ struct SharedData {
   { }
   SharedData(const SharedData<TSP, SFC>& rhs) = delete; // no copy
   SharedData(SharedData<TSP, SFC>&& rhs) = delete; // no move
+
+  bool SetOptMutual(bool b) {
+    bool old = opt_mutual_;
+    mapper_.opt_mutual_ = b;
+    opt_mutual_ = b;
+    return old;
+  }
 };
 
 

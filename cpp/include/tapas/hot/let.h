@@ -698,13 +698,17 @@ struct LET {
     std::vector<ProxyBody*> bodies_;
     std::vector<ProxyBodyAttr*> body_attrs_;
     attr_type attr_;
-    Mapper mapper_;
+    Mapper mapper_; // FIXME: create Mapper for every ProxyCell is not efficient.
   }; // end of class ProxyCell
 
   /**
    * @brief A dummy class of Mapper
    */
   struct ProxyMapper {
+    bool opt_mutual_;
+
+    ProxyMapper() : opt_mutual_(false) { }
+    
     // body
     // template<class Funct, class...Args>
     // inline void Map(Funct, ProxyBodyIterator &&, Args...) {

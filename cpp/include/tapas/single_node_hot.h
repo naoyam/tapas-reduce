@@ -236,9 +236,11 @@ class Cell: public tapas::BasicCell<TSP> {
   }
 
   bool SetOptMutual(bool b) {
-    bool prev = data_->opt_mutual_;
-    data_->opt_mutual_ = b;
-    return prev;
+    TAPAS_ASSERT(mapper.opt_mutual_ == data_->opt_mutual_);
+    bool old = data_->opt_mutual_;
+    mapper_.opt_mutual_ = b;
+    data_->opt_mutual_;
+    return old;
   }
   
  protected:

@@ -70,6 +70,10 @@ static void ProductMapImpl(Mapper &mapper,
 
 template<class Cell, class Body, class _NONE>
 struct CPUMapper {
+  bool opt_mutual_;
+
+  CPUMapper() : opt_mutual_(false) { }
+  
   /**
    * @brief Map function f over product of two iterators
    */
