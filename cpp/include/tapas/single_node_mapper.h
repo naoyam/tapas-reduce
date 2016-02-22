@@ -78,7 +78,7 @@ struct CPUMapper {
    * @brief Map function f over product of two iterators
    */
   template <class Funct, class T1_Iter, class T2_Iter, class... Args>
-  void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
+  void MapP2(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
     if (prod.size() > 0) {
       ProductMapImpl(*this,
                      prod.t1_, 0, prod.t1_.size(),
@@ -88,7 +88,7 @@ struct CPUMapper {
   }
 
   template <class Funct, class T1_Iter, class ...Args>
-  void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
+  void MapP1(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
     if (prod.size() > 0) {
       ProductMapImpl(*this,
                      prod.t1_, 0, prod.t1_.size(),

@@ -85,7 +85,7 @@ void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
   using CellType = typename T1_Iter::CellType;
   if (prod.size() > 0) {
     CellType &c = *(prod.t1_);
-    c.mapper().Map(f, prod, args...);
+    c.mapper().MapP2(f, prod, args...);
   }
 }
 
@@ -99,7 +99,7 @@ inline void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
   
   if (prod.size() > 0) {
     CellType &c = prod.t1_.cell();
-    c.mapper().Map(f, prod, args...);
+    c.mapper().MapP1(f, prod, args...);
   }
 }
 
