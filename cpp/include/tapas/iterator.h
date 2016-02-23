@@ -187,8 +187,12 @@ class SubCellIterator {
 #ifdef TAPAS_SUBCELL_THREAD_SPAWN_THRESHOLD
   static const constexpr int kThreadSpawnThreshold = TAPAS_SUBCELL_THREAD_SPAWN_THRESHOLD;
 #else
-  static const constexpr int kThreadSpawnThreshold = 4;
+  static const constexpr int kThreadSpawnThreshold = 2;
 #endif
+  // TODO
+  inline bool SpawnTask() const {
+    return c_.depth() <= 5;
+  }
   
   inline SubCellIterator(CellType &c): c_(c), idx_(0) {}
   inline SubCellIterator(const SubCellIterator& rhs) : c_(rhs.c_),idx_(rhs.idx_) {}
@@ -272,10 +276,6 @@ class SubCellIterator {
   }
   bool AllowMutualInteraction(const SubCellIterator &x) const {
     return c_.GetOptMutual() && c_ == x.c_;
-  }
-  // TODO
-  inline bool SpawnTask() const {
-    return c_.depth() <= 4;
   }
 }; // class SubCellIterator
 
