@@ -512,7 +512,13 @@ struct LET {
 
     inline Mapper &mapper() { return mapper_; }
     inline const Mapper &mapper() const { return mapper_; }
+    
+    inline size_t local_nb() const {
+      return 1;
+    }
 
+    static const constexpr bool Inspector = true;
+    
     /**
      * bool ProxyCell::operator==(const ProxyCell &rhs) const
      */
@@ -705,16 +711,10 @@ struct LET {
    * @brief A dummy class of Mapper
    */
   struct ProxyMapper {
-    bool opt_mutual_;
+    const bool opt_mutual_;
 
     ProxyMapper() : opt_mutual_(false) { }
-    
-    // body
-    // template<class Funct, class...Args>
-    // inline void Map(Funct, ProxyBodyIterator &&, Args...) {
-    //   //f(p);
-    // }
-    
+        
     // body
     template<class Funct, class...Args>
     inline void Map(Funct, ProxyBodyIterator &, Args...) {
@@ -941,21 +941,7 @@ struct LET {
     // Construct request lists of necessary cells
     req_keys_attr.insert(root.key());
     
-#ifdef OLD_LET_TRAVERSE
-    (void) f;
-    
-#if 0 // 2015/10/28 性能評価のため一時的に粒子までトラバースするように変更
-    for (size_t bi = 0; bi < root.local_nb(); bi++) {
-      BodyType &b = root.local_body(bi);
-      TraverseLET_old<TSP, KeySet>(b, root.key(), root.key(), root.data(), req_keys_attr, req_keys_body);
-    }
-#else
-    TraverseLET_old_slow<TSP, KeySet>(root.key(), root.key(), root.data(), req_keys_attr, req_keys_body);
-#endif
-    
-#else
     Traverse(root.key(), root.key(), root.data(), req_keys_attr, req_keys_body, f, args...);
-#endif
 
     double end = MPI_Wtime();
     root.data().time_let_traverse = end - beg;

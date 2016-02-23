@@ -202,41 +202,6 @@ class Cell: public tapas::BasicCell<TSP> {
   //========================================================
  public:
 
-  static Cell *CreateLocalCell(KeyType k, Data* data) {
-    auto reg = CalcRegion(k, data->region_);
-
-    // Check if I'm a leaf
-    bool is_leaf = find(data->leaf_keys_.begin(), data->leaf_keys_.end(), k)
-                   != data->leaf_keys_.end();
-
-    int body_num, body_beg;
-
-    if (is_leaf) {
-      index_t beg, end;
-      SFC::FindRangeByKey(data->local_body_keys_, k, beg, end);
-      body_num = end - beg;
-      body_beg = beg;
-    } else {
-      body_num = 0;
-      body_beg = 0;
-    }
-
-    Cell *c = new Cell(reg, body_beg, body_num);
-    c->key_ = k;
-    c->is_leaf_ = is_leaf;
-    c->is_local_ = true;
-    c->is_local_subtree_ = false;
-    c->data_ = data;
-    c->bid_ = body_beg;
-    c->nb_ = body_num;
-    bzero(&c->attr_, sizeof(c->attr_));
-
-    TAPAS_ASSERT(body_num >= 0);
-    TAPAS_ASSERT(body_beg >= 0);
-    
-    return c;
-  }
-
   static Cell *CreateRemoteCell(KeyType k, int nb, Data *data) {
     auto reg = CalcRegion(k, data->region_);
     
@@ -342,15 +307,19 @@ class Cell: public tapas::BasicCell<TSP> {
   const BodyAttrType *local_body_attrs() const;
   
   /**
-   * \brief Get number of local particles.
-   * This function is mainly for debugging or checking result.
+   * \brief Get number of local particles that belongs to the cell (directly or indirectly)
+   * This function is mainly for debugging or checking result and internal use.
    * It is not recommended to use local_nb() for your main computation.
    * because it exposes the underlying implementation details of Tapas runtime.
+   * In addition, if the cell spans over multiple processes, lcoal_nb() counts only local bodies
+   * and does not return the "true" number.
    */ 
   inline size_t local_nb() const {
-    return (size_t) data_->local_bodies_.size();
+    return (size_t) local_nb_;
   }
 
+  static const constexpr bool Inspector = false;
+  
   inline size_t nb() const {
 #ifdef TAPAS_DEBUG
     if (!this->IsLeaf()) {
@@ -416,6 +385,7 @@ class Cell: public tapas::BasicCell<TSP> {
   Data* data_;
   
   int nb_; //!< number of bodies in the local process (not bodies under this cell).
+  int local_nb_;
   
   bool is_local_; //!< if it's a local cell or LET cell.
   bool is_local_subtree_; //!< If all of its descendants are local.

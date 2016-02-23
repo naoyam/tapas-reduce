@@ -310,13 +310,17 @@ class SamplingOctree {
     proc_first_keys_.push_back(SFC::GetNext(0));
 
     GenerateCell((KeyType)0, std::begin(body_keys_), std::end(body_keys_));
-    
-    proc_first_keys_.pop_back();
 
+    TAPAS_ASSERT(data_->ht_[0].local_nb() == body_keys_.size());
+    proc_first_keys_.pop_back();
+    
     double end = MPI_Wtime();
     data_->time_tree_growlocal = end - beg;
   }
 
+  /**
+   * Generate a cell object of Key k if it is within the range of local bodies
+   */ 
   void GenerateCell(KeyType k,
                     typename std::vector<KeyType>::const_iterator pbeg, // beg of a subset of bkeys
                     typename std::vector<KeyType>::const_iterator pend // end of a subset of bkeys
@@ -326,16 +330,16 @@ class SamplingOctree {
     
     int rank = data_->mpi_rank_;
       
-    // range of bodies that belong to the cell k.
+    // find the range of bodies that belong to the cell k by binary searching.
     auto range_beg = std::lower_bound(pbeg, pend, k);
     auto range_end = std::lower_bound(pbeg, pend, k2);
-
     int nb = range_end - range_beg;
-    // Checks if the cell is included in the process or strides over two processes.
-    // If the cell strides, it's never a leaf and must be split, even if nb <= ncrit.
+    
+    // Checks if the cell is (completely) included in the process or strides over two processes.
+    // If the cell strides over multiple processes, it's never a leaf and must be split, even if nb <= ncrit.
     bool included = SFC::Includes(proc_first_keys_[rank], proc_first_keys_[rank+1], k);
 
-    // if (nb <= ncrit) and this process owns the cell (i.e. no other process owns any descendants of the cell),
+    // if (nb <= ncrit) and this process owns the cell (i.e. included == true, no other process owns any descendants of the cell),
     // the cell is a leaf.
     bool is_leaf = (nb <= ncrit_) && included;
     int body_beg = is_leaf ? range_beg - bbeg : 0;
@@ -347,11 +351,12 @@ class SamplingOctree {
     c->is_leaf_ = is_leaf;
     c->is_local_ = true;
     c->is_local_subtree_ = false;
+    c->nb_ = nb;
+    c->local_nb_ = nb;
     c->data_ = data_;
     c->bid_ = body_beg;
-    c->nb_ = nb;
     bzero(&c->attr_, sizeof(c->attr_));
-
+    
     TAPAS_ASSERT(nb >= 0);
     TAPAS_ASSERT(body_beg >= 0);
 

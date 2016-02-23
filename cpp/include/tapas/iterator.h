@@ -177,6 +177,7 @@ template <class Cell>
 class SubCellIterator {
   Cell &c_;
   int idx_;
+  const int local_nb_; // <! Const copy of c_.local_nb().
  public:
   using CellType = Cell;
   using value_type = CellType;
@@ -189,18 +190,17 @@ class SubCellIterator {
 #else
   static const constexpr int kThreadSpawnThreshold = 2;
 #endif
-  // TODO
   inline bool SpawnTask() const {
-    return c_.depth() <= 5;
+    if (!Cell::Inspector) {
+      return local_nb_ >= 500;
+    } else {
+      return c_.depth() >= 5;
+    }
   }
   
-  inline SubCellIterator(CellType &c): c_(c), idx_(0) {}
-  inline SubCellIterator(const SubCellIterator& rhs) : c_(rhs.c_),idx_(rhs.idx_) {}
-  inline SubCellIterator& operator=(const SubCellIterator& rhs) {
-    this->c_ = rhs.c_;
-    this->idx_ = rhs.idx_;
-    return *this;
-  }
+  inline SubCellIterator(CellType &c): c_(c), idx_(0), local_nb_(c_.local_nb()) {}
+  inline SubCellIterator(const SubCellIterator& rhs) : c_(rhs.c_),idx_(rhs.idx_), local_nb_(rhs.local_nb_) {}
+  inline SubCellIterator& operator=(const SubCellIterator& rhs) = delete;
   
   inline int size() const {
     if (c_.IsLeaf()) {
