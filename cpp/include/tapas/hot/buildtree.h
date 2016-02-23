@@ -163,7 +163,10 @@ class SamplingOctree {
 
     return beg_keys;
   }
-
+  
+  /**
+   * \brief Get sampling rate configuration
+   */
   static double SamplingRate() {
     double R = 0.01;
     
@@ -176,7 +179,7 @@ class SamplingOctree {
     }
     
     TAPAS_ASSERT(0.0 < R && R < 1.0);
-
+    
     return R;
   }
 
@@ -271,7 +274,7 @@ class SamplingOctree {
     data_->nb_total = nb_total;
     
     Sample();
-      
+    
     Exchange();
 
     GrowLocal();
@@ -299,6 +302,9 @@ class SamplingOctree {
     data_->time_tree_all = end - beg;
   }
 
+  /**
+   * \brief Grow the local tree, from local bodies, leaves to the root cell
+   */ 
   void GrowLocal() {
     double beg = MPI_Wtime();
     proc_first_keys_.push_back(SFC::GetNext(0));
