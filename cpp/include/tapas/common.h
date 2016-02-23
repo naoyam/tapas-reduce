@@ -215,4 +215,13 @@ void SortByKeys(C1 &keys, C2 &vals) {
 
 #endif
   
+#ifdef USE_SCOREP
+# include <scorep/SCOREP_User.h>
+#else
+# define SCOREP_USER_REGION(_1, _2) // place holder
+# define SCOREP_USER_REGION_DEFINE(_1)
+# define SCOREP_USER_REGION_BEGIN(_1, _2, _3)
+# define SCOREP_USER_REGION_END(_1)
+#endif
+
 #endif /* TAPAS_COMMON_ */

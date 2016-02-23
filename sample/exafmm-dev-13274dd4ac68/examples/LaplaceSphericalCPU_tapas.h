@@ -26,12 +26,6 @@ extern uint64_t numP2P;
 # define INC_M2L
 #endif
 
-#ifdef USE_SCOREP
-# include <scorep/SCOREP_User.h>
-#else
-# define SCOREP_USER_REGION(_1, _2) // place holder
-#endif
-
 namespace {
 
 const complex_t I(0.,1.);                                       // Imaginary

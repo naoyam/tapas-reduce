@@ -818,6 +818,8 @@ struct LET {
   static void Traverse(KeyType trg_key, KeyType src_key, Data &data,
                        KeySet &list_attr, KeySet &list_body,
                        UserFunct f, Args...args) {
+    SCOREP_USER_REGION("LET-Traverse", SCOREP_USER_REGION_TYPE_FUNCTION);
+    
     // Traverse traverses the hypothetical global tree and constructs a list of
     // necessary cells required by the local process.
     auto &ht = data.ht_; // hash table
@@ -930,6 +932,7 @@ struct LET {
   static void DoTraverse(CellType &root,
                          KeySet &req_keys_attr, KeySet &req_keys_body,
                          UserFunct f, Args...args) {
+    SCOREP_USER_REGION("LET-Traverse", SCOREP_USER_REGION_TYPE_FUNCTION);
     double beg = MPI_Wtime();
     
     req_keys_attr.clear(); // cells of which attributes are to be transfered from remotes to local
@@ -1077,6 +1080,7 @@ struct LET {
                        std::vector<KeyType> &req_attr_keys, std::vector<int> &attr_src_ranks,
                        std::vector<KeyType> &req_leaf_keys, std::vector<int> &leaf_src_ranks,
                        std::vector<CellAttrType> &res_cell_attrs, std::vector<BodyType> &res_bodies, std::vector<index_t> &res_nb){
+    SCOREP_USER_REGION("LET-Response", SCOREP_USER_REGION_TYPE_FUNCTION);
     double beg = MPI_Wtime();
 
     // req_attr_keys : list of cell keys of which cell attributes are requested
@@ -1198,6 +1202,7 @@ struct LET {
                        const std::vector<CellAttrType> &res_cell_attrs,
                        const std::vector<KeyType> &res_leaf_keys,
                        const std::vector<index_t> &res_nb) {
+    SCOREP_USER_REGION("LET-Register", SCOREP_USER_REGION_TYPE_FUNCTION);
     double beg = MPI_Wtime();
     
     // Register received LET cells to local ht_let_ hash table.
@@ -1254,6 +1259,7 @@ struct LET {
    */
   template<class UserFunct, class...Args>
   static void Exchange(CellType &root, UserFunct f, Args...args) {
+    SCOREP_USER_REGION("LET-All", SCOREP_USER_REGION_TYPE_FUNCTION);
     double beg = MPI_Wtime();
     
 #ifdef TAPAS_DEBUG_DUMP

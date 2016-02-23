@@ -235,11 +235,14 @@ struct CPUMapper {
   // cell x cell
   template <class Funct, class...Args>
   void Map(Funct f, Cell &c1, Cell &c2, Args... args) {
+    SCOREP_USER_REGION_DEFINE(trav_handle)
     using Time = decltype(clock::now());
     Time net_bt, net_et;
     
-    // All Map() function traverse starts from (root, root) for LET construction and GPU init/finalize
     if (c1.IsRoot() && c2.IsRoot()) {
+      // Pre-traverse procedure
+      // All Map() function traverse starts from (root, root)
+      // for LET construction and GPU init/finalize
       auto bt = clock::now();
       
       if (c1.data().mpi_size_ > 1) {
@@ -252,6 +255,9 @@ struct CPUMapper {
         unsetenv("TAPAS_IN_LET");
 #endif
       }
+
+      SCOREP_USER_REGION_BEGIN(trav_handle, "NetTraverse", SCOREP_USER_REGION_TYPE_COMMON);
+      
       auto et = clock::now();
       c1.data().time_map2_let = duration_cast<milliseconds>(et - bt).count() * 1e-3;
       
@@ -262,8 +268,10 @@ struct CPUMapper {
     f(c1, c2, args...);
     
     if (c1.IsRoot() && c2.IsRoot()) {
+      // Post-traverse procedure
       net_et = clock::now();
       c1.data().time_map2_net = duration_cast<milliseconds>(net_et - net_bt).count() * 1e-3;
+      SCOREP_USER_REGION_END(trav_handle);
     }
   }
 
