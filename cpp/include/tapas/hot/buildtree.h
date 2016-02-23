@@ -113,7 +113,7 @@ class SamplingOctree {
     // close to a certain particle.
 
     const int B = 1 << kDim;
-    const int L  = log(mpi_size) / log(B) + 2; // logB(Np) = log(Np) / log(B)
+    const int L  = (int)(log((double)mpi_size) / log((double)B) + 2); // logB(Np) = log(Np) / log(B)
     const KeyType K = SFC::AppendDepth(0, L);
     const int W = pow(B, L); // number of cells in level L
 
