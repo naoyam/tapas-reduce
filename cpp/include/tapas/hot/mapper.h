@@ -37,7 +37,7 @@ static void ProductMapImpl(Mapper &mapper,
 
   TAPAS_ASSERT(end1 > beg1 && end2 > beg2);
 
-#if 1
+#if 0
   std::string T1_str, T2_str;
   {
     int status;
@@ -92,7 +92,8 @@ static void ProductMapImpl(Mapper &mapper,
     // Source side (iter2) can be split and paralleilzed.
     // target side cannot paralleize due to accumulation
     int mid1 = (end1 + beg1) / 2;
-    
+
+#if 0
     if (T1_str.find("BodyIterator") == std::string::npos && T2_str.find("BodyIterator") == std::string::npos) {
       std::cout << "T1_str=" << T1_str << ", "
                 << "T2_str=" << T2_str << ", "
@@ -102,6 +103,7 @@ static void ProductMapImpl(Mapper &mapper,
                 << "mutual=" << mapper.opt_mutual_ << ", "
                 << std::endl;
     }
+#endif
         
     typename Th::TaskGroup tg;
     tg.createTask([&]() { ProductMapImpl(mapper, iter1, beg1, mid1, iter2, beg2, end2, f, args...); });
