@@ -60,7 +60,7 @@ static void ProductMapImpl(Mapper &mapper,
     free(t2_demangled);
   }
 #endif
-    
+  
   if (!iter1.SpawnTask()
       || (end1 - beg1 == 1)
       || (end1 - beg1 <= kT1 && end2 - beg2 <= kT2)) {

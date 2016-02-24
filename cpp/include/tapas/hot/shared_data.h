@@ -51,6 +51,7 @@ struct SharedData {
   
   std::vector<KeyType> proc_first_keys_; //!< first SFC key of each process
 
+  int opt_task_spawn_threshold_;
   bool opt_mutual_;
 
   // log and time measurements (mainly of the local process)
@@ -85,6 +86,7 @@ struct SharedData {
       , mpi_size_(1)
       , mpi_comm_(MPI_COMM_WORLD)
       , max_depth_(0)
+      , opt_task_spawn_threshold_(1000)
       , opt_mutual_(false)
       , nb_total(0)
       , nb_before(0)
@@ -107,7 +109,9 @@ struct SharedData {
 #ifdef __CUDACC__
       , time_map2_dev(0)
 #endif
-  { }
+  {
+    ReadEnv();
+  }
   SharedData(const SharedData<TSP, SFC>& rhs) = delete; // no copy
   SharedData(SharedData<TSP, SFC>&& rhs) = delete; // no move
 
@@ -116,6 +120,20 @@ struct SharedData {
     mapper_.opt_mutual_ = b;
     opt_mutual_ = b;
     return old;
+  }
+
+  /**
+   * \brief Read some of the parameters from environmental variables
+   */
+  void ReadEnv() {
+    const char *var = nullptr;
+    if (var = getenv("TAPAS_TASK_SPAWN_THRESHOLD")) {
+      opt_task_spawn_threshold_ = atoi(var);
+      if (opt_task_spawn_threshold_ <= 0) {
+        std::cout << "TAPAS_TASK_SPAWN_THRESHOLD must be > 0" << std::endl;
+        exit(-1);
+      }
+    }
   }
 };
 

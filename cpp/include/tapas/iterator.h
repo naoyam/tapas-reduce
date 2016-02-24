@@ -177,8 +177,9 @@ template <class Cell>
 class SubCellIterator {
   Cell &c_;
   int idx_;
-  const int local_nb_; // <! Const copy of c_.local_nb().
-  const int depth_;    // <! Const copy of c_.depth().
+  const int local_nb_; //<! Const copy of c_.local_nb().
+  const int task_spawn_threshold_; //<! Spawn task 
+  const bool task_spawn_;
  public:
   using CellType = Cell;
   using value_type = CellType;
@@ -190,13 +191,19 @@ class SubCellIterator {
       : c_(c)
       , idx_(0)
       , local_nb_(c_.local_nb())
-      , depth_(c_.depth())
-  {}
+      , task_spawn_threshold_(c.data().opt_task_spawn_threshold_)
+      , task_spawn_(Cell::Inspector ? c_.depth() <= 5 : local_nb_ >= task_spawn_threshold_) // TODO: tuning
+  {
+    //if (!Cell::Inspector) {
+    //std::cout << ":: depth=" << c_.depth() << " local_nb=" << local_nb_ << " spawn=" << (task_spawn_ ? "yes" : "no") << std::endl;
+    //}
+  }
   inline SubCellIterator(const SubCellIterator& rhs)
       : c_(rhs.c_)
-      , idx_(rhs.idx_)
+      ,idx_(rhs.idx_)
       , local_nb_(rhs.local_nb_)
-      , depth_(c_.depth())
+      , task_spawn_threshold_(rhs.task_spawn_threshold_)
+      , task_spawn_(task_spawn_)
   {}
   inline SubCellIterator& operator=(const SubCellIterator& rhs) = delete;
   
@@ -206,7 +213,7 @@ class SubCellIterator {
   static const constexpr int kThreadSpawnThreshold = 2;
 #endif
   inline bool SpawnTask() const {
-    return depth_ < 5;
+    return task_spawn_;
   }
   
   inline int size() const {
