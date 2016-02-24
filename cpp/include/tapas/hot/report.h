@@ -10,6 +10,12 @@
 #include "tapas/hot.h"
 #include "tapas/util.h"
 
+#ifdef MTHREAD
+extern "C" {
+  void myth_emit_log(FILE*);
+}
+#endif
+
 namespace tapas {
 namespace hot {
 
@@ -116,6 +122,27 @@ void Report(const Data &data, std::ostream &os = std::cout) {
 #endif
     csv.Dump(report_prefix + "map2" + report_suffix + ".csv");
   }
+
+#ifdef MTHREAD
+#if defined(MYTH_CREATE_PROF)                   \
+  || defined(MYTH_CREATE_PROF_DETAIL)           \
+  || defined(MYTH_ENTRY_POINT_PROF)             \
+  || defined(MYTH_EP_PROF_DETAIL)               \
+  || defined(MYTH_JOIN_PROF)                    \
+  || defined(MYTH_JOIN_PROF_DETAIL)             \
+  || defined(MYTH_WS_PROF_DETAIL)               \
+  || defined(MYTH_SWITCH_PROF)                  \
+  || defined(MYTH_ALLOC_PROF)                   \
+  || defined(MYTH_IO_PROF_DETAIL)
+
+  std::cout << "---- myth profiling report" << std::endl;
+  tapas::debug::BarrierExec([](int rank, int) {
+      std::cout << "Rank " << rank << std::endl;
+      //myth_fini();
+      myth_emit_log(stdout);
+    });
+#endif
+#endif
 }
 
 } // namespace hot
