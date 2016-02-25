@@ -178,6 +178,7 @@ class SubCellIterator {
   Cell &c_;
   int idx_;
   const int local_nb_; // <! Const copy of c_.local_nb().
+  const int depth_;    // <! Const copy of c_.depth().
  public:
   using CellType = Cell;
   using value_type = CellType;
@@ -185,22 +186,28 @@ class SubCellIterator {
   using KeyType = typename CellType::KeyType;
   using SFC = typename CellType::SFC;
 
+  inline SubCellIterator(CellType &c)
+      : c_(c)
+      , idx_(0)
+      , local_nb_(c_.local_nb())
+      , depth_(c_.depth())
+  {}
+  inline SubCellIterator(const SubCellIterator& rhs)
+      : c_(rhs.c_)
+      , idx_(rhs.idx_)
+      , local_nb_(rhs.local_nb_)
+      , depth_(c_.depth())
+  {}
+  inline SubCellIterator& operator=(const SubCellIterator& rhs) = delete;
+  
 #ifdef TAPAS_SUBCELL_THREAD_SPAWN_THRESHOLD
   static const constexpr int kThreadSpawnThreshold = TAPAS_SUBCELL_THREAD_SPAWN_THRESHOLD;
 #else
   static const constexpr int kThreadSpawnThreshold = 2;
 #endif
   inline bool SpawnTask() const {
-    if (!Cell::Inspector) {
-      return local_nb_ >= 500;
-    } else {
-      return c_.depth() >= 5;
-    }
+    return depth_ < 5;
   }
-  
-  inline SubCellIterator(CellType &c): c_(c), idx_(0), local_nb_(c_.local_nb()) {}
-  inline SubCellIterator(const SubCellIterator& rhs) : c_(rhs.c_),idx_(rhs.idx_), local_nb_(rhs.local_nb_) {}
-  inline SubCellIterator& operator=(const SubCellIterator& rhs) = delete;
   
   inline int size() const {
     if (c_.IsLeaf()) {
