@@ -13,6 +13,10 @@
 #include "vtk.h"
 #endif
 
+extern "C" {
+	void myth_emit_log(FILE*);
+}
+
 int main(int argc, char ** argv) {
   Args args(argc, argv);
   BaseMPI baseMPI;
@@ -189,6 +193,25 @@ int main(int argc, char ** argv) {
   if (baseMPI.mpirank == 0) {
     vtk.plot();
   }
+
 #endif
+	
+#if defined(MYTH_CREATE_PROF)                   \
+  || defined(MYTH_CREATE_PROF_DETAIL)           \
+  || defined(MYTH_ENTRY_POINT_PROF)             \
+  || defined(MYTH_EP_PROF_DETAIL)               \
+  || defined(MYTH_JOIN_PROF)                    \
+  || defined(MYTH_JOIN_PROF_DETAIL)             \
+  || defined(MYTH_WS_PROF_DETAIL)               \
+  || defined(MYTH_SWITCH_PROF)                  \
+  || defined(MYTH_ALLOC_PROF)                   \
+  || defined(MYTH_IO_PROF_DETAIL)
+
+	void myth_emit_log(FILE*);
+	
+	printf("---- myth profiling report\n");
+	myth_emit_log(stdout);
+#endif
+	
   return 0;
 }
