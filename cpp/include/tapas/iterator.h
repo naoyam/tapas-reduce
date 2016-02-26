@@ -177,9 +177,6 @@ template <class Cell>
 class SubCellIterator {
   Cell &c_;
   int idx_;
-  const int local_nb_; //<! Const copy of c_.local_nb().
-  const int task_spawn_threshold_; //<! Spawn task 
-  const bool task_spawn_;
  public:
   using CellType = Cell;
   using value_type = CellType;
@@ -190,17 +187,11 @@ class SubCellIterator {
   inline SubCellIterator(CellType &c)
       : c_(c)
       , idx_(0)
-      , local_nb_(c_.local_nb())
-      , task_spawn_threshold_(c.data().opt_task_spawn_threshold_)
-      , task_spawn_(Cell::Inspector ? c_.depth() <= 5 : local_nb_ >= task_spawn_threshold_) // TODO: tuning
   {
   }
   inline SubCellIterator(const SubCellIterator& rhs)
       : c_(rhs.c_)
       , idx_(rhs.idx_)
-      , local_nb_(rhs.local_nb_)
-      , task_spawn_threshold_(rhs.task_spawn_threshold_)
-      , task_spawn_(task_spawn_)
   {}
   inline SubCellIterator& operator=(const SubCellIterator& rhs) = delete;
   
@@ -210,7 +201,7 @@ class SubCellIterator {
   static const constexpr int kThreadSpawnThreshold = 2;
 #endif
   inline bool SpawnTask() const {
-    return task_spawn_;
+    return c_.local_nb() >= 1000;
   }
   
   inline int size() const {
