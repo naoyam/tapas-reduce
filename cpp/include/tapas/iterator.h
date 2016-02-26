@@ -194,13 +194,10 @@ class SubCellIterator {
       , task_spawn_threshold_(c.data().opt_task_spawn_threshold_)
       , task_spawn_(Cell::Inspector ? c_.depth() <= 5 : local_nb_ >= task_spawn_threshold_) // TODO: tuning
   {
-    //if (!Cell::Inspector) {
-    //std::cout << ":: depth=" << c_.depth() << " local_nb=" << local_nb_ << " spawn=" << (task_spawn_ ? "yes" : "no") << std::endl;
-    //}
   }
   inline SubCellIterator(const SubCellIterator& rhs)
       : c_(rhs.c_)
-      ,idx_(rhs.idx_)
+      , idx_(rhs.idx_)
       , local_nb_(rhs.local_nb_)
       , task_spawn_threshold_(rhs.task_spawn_threshold_)
       , task_spawn_(task_spawn_)
