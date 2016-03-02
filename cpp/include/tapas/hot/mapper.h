@@ -116,13 +116,15 @@ static void ProductMapImpl(Mapper &mapper,
     {
       typename Th::TaskGroup tg;
       tg.createTask([&]() { ProductMapImpl(mapper, iter1, beg1, mid1, iter2, beg2, mid2, f, args...); });
-      tg.createTask([&]() { ProductMapImpl(mapper, iter1, mid1, end1, iter2, mid2, end2, f, args...); });
+      //tg.createTask([&]() { ProductMapImpl(mapper, iter1, mid1, end1, iter2, mid2, end2, f, args...); });
+      ProductMapImpl(mapper, iter1, mid1, end1, iter2, mid2, end2, f, args...);
       tg.wait();
     }
     {
       typename Th::TaskGroup tg;
       tg.createTask([&]() {ProductMapImpl(mapper, iter1, beg1, mid1, iter2, mid2, end2, f, args...);});
-      tg.createTask([&]() {ProductMapImpl(mapper, iter1, mid1, end1, iter2, beg2, mid2, f, args...);});
+      //tg.createTask([&]() {ProductMapImpl(mapper, iter1, mid1, end1, iter2, beg2, mid2, f, args...);});
+      ProductMapImpl(mapper, iter1, mid1, end1, iter2, beg2, mid2, f, args...);
       tg.wait();
     }
   }
