@@ -89,20 +89,21 @@ int main(int argc, char ** argv) {
     {
 #pragma omp section
       {
-	treeMPI.commBodies();
-	treeMPI.commCells();
+				treeMPI.commBodies();
+				treeMPI.commCells();
       }
 #pragma omp section
       {
-	traversal.initWeight(cells);
+				traversal.initWeight(cells);
 #if IneJ
-	traversal.dualTreeTraversal(cells, jcells, cycle, false);
+				traversal.dualTreeTraversal(cells, jcells, cycle, false);
 #else
-	traversal.dualTreeTraversal(cells, cells, cycle, args.mutual);
-	jbodies = bodies;
+				traversal.dualTreeTraversal(cells, cells, cycle, args.mutual);
+				jbodies = bodies;
 #endif
       }
     }
+		
     if (args.graft) {
       treeMPI.linkLET();
       gbodies = treeMPI.root2body();
@@ -111,8 +112,8 @@ int main(int argc, char ** argv) {
       traversal.dualTreeTraversal(cells, jcells, cycle, false);
     } else {
       for (int irank=0; irank<baseMPI.mpisize; irank++) {
-	treeMPI.getLET(jcells, (baseMPI.mpirank+irank)%baseMPI.mpisize);
-	traversal.dualTreeTraversal(cells, jcells, cycle, false);
+				treeMPI.getLET(jcells, (baseMPI.mpirank+irank)%baseMPI.mpisize);
+				traversal.dualTreeTraversal(cells, jcells, cycle, false);
       }
     }
 #else
