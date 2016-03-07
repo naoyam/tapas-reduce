@@ -135,11 +135,6 @@ static void ProductMapImpl(Mapper &mapper,
   }
 }
 
-#if 0
-//
-// FIXME: faster but wrong code: bodies are not in a single array, becuase there are bodies from remote processes
-//
-
 /**
  * \brief Overloaded version of ProductMapImpl for bodies x bodies.
  */
@@ -158,8 +153,12 @@ static void ProductMapImpl(CPUMapper<CELL, BODY, LET> &mapper,
   CELL &c1 = iter1.cell();
   CELL &c2 = iter2.cell();
   auto data = c1.data_ptr();
-  auto &bodies = data->local_bodies_;
-  auto &attrs = data->local_body_attrs_;
+  auto *bodies1 = &c1.body(0);
+  auto *bodies2 = &c2.body(0);
+  auto *attrs1 = &c1.body_attr(0);
+  auto *attrs2 = &c2.body_attr(0);
+  //auto &bodies = &data->local_bodies_;
+  //auto &attrs = data->local_body_attrs_;
 
   if (am) {
     for (int i = beg1; i < end1; i++) {
@@ -172,8 +171,8 @@ static void ProductMapImpl(CPUMapper<CELL, BODY, LET> &mapper,
 #endif
           //mapper.Map(f, b1, b2, args...);
           //f(*b1, b1.attr(), *b2, b2.attr(), args...);
-          f(bodies[c1.bid() + i], attrs[c1.bid() + i],
-            bodies[c2.bid() + j], attrs[c2.bid() + j], args...);
+          //f(bodies[c1.bid() + i], attrs[c1.bid() + i], bodies[c2.bid() + j], attrs[c2.bid() + j], args...);
+          f(bodies1[i], attrs1[i], bodies2[j], attrs2[j], args...);
         }
       }
     }
@@ -187,13 +186,12 @@ static void ProductMapImpl(CPUMapper<CELL, BODY, LET> &mapper,
 #endif
         //mapper.Map(f, b1, b2, args...);
         //f(*b1, b1.attr(), *b2, b2.attr(), args...);
-        f(bodies[c1.bid() + i], attrs[c1.bid() + i],
-          bodies[c2.bid() + j], attrs[c2.bid() + j], args...);
+        f(bodies1[i], attrs1[i], bodies2[j], attrs2[j], args...);
+        //f(bodies[c1.bid() + i], attrs[c1.bid() + i], bodies[c2.bid() + j], attrs[c2.bid() + j], args...);
       }
     }
   }
 }
-#endif
 
 template<class Cell, class Body, class LET>
 struct CPUMapper {
