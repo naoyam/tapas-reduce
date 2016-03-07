@@ -26,7 +26,7 @@ CXXFLAGS := -std=c++11 -Wall -Wextra -fno-elide-constructors
 ifneq (,$(findstring clang++,$(CXX)))
 	CXXFLAGS += -funroll-loops -fcolor-diagnostics -Wno-sign-compare
 else ifneq (, $(findstring g++, $(CXX)))
-	CXXFLAGS += -funroll-loops -Wno-sign-compare -fdiagnostics-color=auto -Wno-unknown-pragmas
+	CXXFLAGS += -funroll-loops -Wno-sign-compare -fdiagnostics-color=auto -Wno-unknown-pragmas -Wno-unused-function
 else ifneq (, $(findstring icpc, $(CXX)))
 endif
 

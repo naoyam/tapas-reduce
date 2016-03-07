@@ -146,7 +146,7 @@ static void ProductMapImpl(CPUMapper<CELL, BODY, LET> &mapper,
                            int beg2, int end2,
                            Funct f, Args... args) {
   TAPAS_ASSERT(beg1 < end1 && beg2 < end2);
-  using BodyIterator = typename CELL::BodyIterator;
+  //using BodyIterator = typename CELL::BodyIterator;
 
   bool am = iter1.AllowMutualInteraction(iter2);
 

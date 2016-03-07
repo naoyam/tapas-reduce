@@ -8,11 +8,39 @@ atexit() {
     [[ -n "${TMPFILE-}" ]] && rm -f "$TMPFILE"
 }
 
+# To trap an error caused by "set -e"
+onerror()
+{
+    status=$?
+    script=$0
+    line=$1
+    shift
+
+    args=
+    for i in "$@"; do
+        args+="\"$i\" "
+    done
+
+    echo ""
+    echo "------------------------------------------------------------"
+    echo "Error occured on $script [Line $line]: Status $status"
+    echo ""
+    echo "PID: $$"
+    echo "User: $USER"
+    echo "Current directory: $PWD"
+    echo "Command line: $script $args"
+    echo "------------------------------------------------------------"
+    echo ""
+}
+
 trap atexit EXIT
 trap 'trap - EXIT; atexit; exit -1' INT PIPE TERM
+trap 'onerror $LINENO "$@"' ERR
+
 
 TMPFILE=$(mktemp "/tmp/${0##*/}.tmp.XXXXXXX")
 echo TMPFILE=${TMPFILE}
+
 
 function echoRed() {
     echo -en "\e[0;31m"
@@ -236,15 +264,16 @@ for dist in ${DIST[@]}; do
         for ncrit in ${NCRIT[@]}; do
             for mutual in 0 1; do
                 rm -f $TMPFILE; sleep 1s
-                
-                echoCyan $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
-                $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
-                cat $TMPFILE
 
-                accuracyCheck $TMPFILE
+                # We no longer check serial_tapas
+                #echoCyan $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
+                #$SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
+                #cat $TMPFILE
+
+                #accuracyCheck $TMPFILE
                 
-                echo
-                echo
+                #echo
+                #echo
 
                 for np in ${NP[@]}; do
                     rm -f $TMPFILE; sleep 1s

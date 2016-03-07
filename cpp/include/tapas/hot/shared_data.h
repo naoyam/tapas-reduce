@@ -127,7 +127,7 @@ struct SharedData {
    */
   void ReadEnv() {
     const char *var = nullptr;
-    if (var = getenv("TAPAS_TASK_SPAWN_THRESHOLD")) {
+    if ((var = getenv("TAPAS_TASK_SPAWN_THRESHOLD"))) {
       opt_task_spawn_threshold_ = atoi(var);
       if (opt_task_spawn_threshold_ <= 0) {
         std::cout << "TAPAS_TASK_SPAWN_THRESHOLD must be > 0" << std::endl;

@@ -115,6 +115,12 @@ inline void Map(Funct f, iter::BodyIterator<CellType> iter, Args...args) {
   c.mapper().Map(f, iter, args...);
 }
 
+template <class Funct, class Iterator, class...Args>
+inline void Map(Funct f, Iterator iter, Args...args) {
+  auto &c = iter.cell();
+  c.mapper().Map(f, iter, args...);
+}
+
 template<class Funct, class T, class...Args>
 inline void PostOrderMap(Funct f, T &x, Args...args) {
   auto lambda = [=](T& x) { f(x, args...); };

@@ -36,13 +36,10 @@ void WriteHostName(const std::string &fname) {
 }
 
 template<class Data>
-void Report(const Data &data, std::ostream &os = std::cout) {
+void Report(const Data &data) {
   // auto comm = data.mpi_comm_;
   auto comm = MPI_COMM_WORLD;
 
-  const int W = 10; // column width
-  const int WS = 14; // column width (scientific notation)
-    
   int rank, size;
   MPI_Comm_rank(comm, &rank);
   MPI_Comm_size(comm, &size);

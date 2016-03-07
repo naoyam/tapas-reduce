@@ -38,6 +38,8 @@ std::string Format(float v) {
   return ss.str();
 }
 
+} // anon namespace
+
 struct ValueBase {
   virtual std::string get() const = 0;
   virtual ~ValueBase() { }
@@ -77,9 +79,10 @@ struct Value {
   }
 };
 
-} // anon namespace
+
 
 class CSV {
+
   static const constexpr int kDefaultWidth = 14;
   
   const size_t ncols_;
@@ -267,8 +270,6 @@ class RankCSV {
     cols2.insert(cols2.begin(), "Rank");
     csv_.reset(new CSV(cols2, 1));
 
-    int mpi_rank = 0;
-    
     this->At("Rank") = mpi_rank_;
   }
   

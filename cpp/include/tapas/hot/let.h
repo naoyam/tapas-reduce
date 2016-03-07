@@ -761,14 +761,14 @@ struct LET {
      * @brief Map function f over product of two iterators
      */
     template <class Funct, class T1_Iter, class T2_Iter, class... Args>
-    inline void MapP2(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
+    inline void MapP2(Funct /* f */, ProductIterator<T1_Iter, T2_Iter> /*prod*/, Args.../*args*/) {
       // empty
     }
     /**
      * @brief Map function f over product of two iterators
      */
     template <class Funct, class T1_Iter, class... Args>
-    inline void MapP1(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
+    inline void MapP1(Funct /*f*/, ProductIterator<T1_Iter> /*prod*/, Args.../*args*/) {
       // empty
     }
 
