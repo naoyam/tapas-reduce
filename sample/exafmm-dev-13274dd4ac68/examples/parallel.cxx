@@ -14,7 +14,9 @@
 #endif
 
 extern "C" {
-	void myth_emit_log(FILE*);
+  // for performance debugging
+  void myth_start_papi_counter(const char*);
+  void myth_stop_papi_counter(void);
 }
 
 int main(int argc, char ** argv) {
@@ -95,12 +97,14 @@ int main(int argc, char ** argv) {
 #pragma omp section
       {
 				traversal.initWeight(cells);
+				//myth_start_papi_counter("PAPI_TOT_INS");
 #if IneJ
 				traversal.dualTreeTraversal(cells, jcells, cycle, false);
 #else
 				traversal.dualTreeTraversal(cells, cells, cycle, args.mutual);
 				jbodies = bodies;
 #endif
+				//myth_stop_papi_counter();
       }
     }
 		

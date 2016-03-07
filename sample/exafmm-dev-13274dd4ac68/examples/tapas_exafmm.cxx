@@ -33,8 +33,6 @@
 # include <tbb/task_scheduler_init.h>
 #endif
 
-
-
 #ifdef COUNT /* Count kernel invocations */
 
 # warning "COUNT is defined. This may significantly slows down execution"

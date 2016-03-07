@@ -8,6 +8,13 @@
 #include "tapas/iterator.h"
 #include "tapas/hot/let.h"
 
+extern "C" {
+  // for performance debugging
+  void myth_start_papi_counter(const char*);
+  void myth_stop_papi_counter(void);
+}
+
+
 namespace tapas {
 namespace hot {
 
@@ -265,9 +272,11 @@ struct CPUMapper {
       
       net_bt = clock::now();
     }
-
-    // Actual Map() operation
+    
+    // myth_start_papi_counter("PAPI_FP_OPS");
+    // Body of traverse 
     f(c1, c2, args...);
+    // myth_stop_papi_counter();
     
     if (c1.IsRoot() && c2.IsRoot()) {
       // Post-traverse procedure
