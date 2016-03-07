@@ -23,8 +23,8 @@ CXX ?= clang++
 MPICXX ?= mpicxx -cxx=$(CXX) # mpich's mpicxx
 
 ifneq (,$(findstring clang++,$(CXX)))
-	CXX    += -std=c++11 -Wall -Wextra -O2 -funroll-loops -fcolor-diagnostics -fno-openmp -lrt
-	MPICXX += -std=c++11 -Wall -Wextra -O2 -funroll-loops -fcolor-diagnostics -fno-openmp -lrt
+	CXX    += -std=c++11 -Wall -Wextra -O2 -funroll-loops -fcolor-diagnostics -lrt
+	MPICXX += -std=c++11 -Wall -Wextra -O2 -funroll-loops -fcolor-diagnostics -lrt
 else ifneq (,$(findstring g++, $(CXX)))
 	CXX    += -std=c++11 -Wall -Wextra -O2 -funroll-loops -fdiagnostics-color=auto -fno-openmp -lrt
 	MPICXX += -std=c++11 -Wall -Wextra -O2 -funroll-loops -fdiagnostics-color=auto -fno-openmp -lrt
