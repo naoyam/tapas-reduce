@@ -346,7 +346,7 @@ struct LET {
     }
   };
 
-  class ProxyMapper;
+  struct ProxyMapper;
 
   class ProxyCell;
 
@@ -1286,6 +1286,7 @@ struct LET {
   }
 
   static void DebugDumpCells(Data &data) {
+    (void)data;
 #ifdef TAPAS_DEBUG_DUMP
     // Debug
     // Dump all received cells to a file

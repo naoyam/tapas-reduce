@@ -30,7 +30,12 @@ constexpr size_t MemberOffset(U T::*pmem) {
 //   };
 // then it's 0.
 //
+#ifdef TAPAS_COMPILER_CLANG
+// The MemberOffset functions is not constepxr in clang.
+const constexpr size_t kBodyCoordOffset = 0;
+#else
 const constexpr size_t kBodyCoordOffset = MemberOffset(&Body::X);
+#endif
 
 // Select MPI or single-process
 #ifdef USE_MPI

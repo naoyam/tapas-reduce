@@ -139,7 +139,7 @@ static void ProductMapImpl(Mapper &mapper,
  * \brief Overloaded version of ProductMapImpl for bodies x bodies.
  */
 template<class CELL, class BODY, class LET, class Funct, class...Args>
-static void ProductMapImpl(CPUMapper<CELL, BODY, LET> &mapper,
+static void ProductMapImpl(CPUMapper<CELL, BODY, LET> & /*mapper*/,
                            typename CELL::BodyIterator iter1,
                            int beg1, int end1,
                            typename CELL::BodyIterator iter2,
@@ -152,7 +152,7 @@ static void ProductMapImpl(CPUMapper<CELL, BODY, LET> &mapper,
 
   CELL &c1 = iter1.cell();
   CELL &c2 = iter2.cell();
-  auto data = c1.data_ptr();
+  //auto data = c1.data_ptr();
   auto *bodies1 = &c1.body(0);
   auto *bodies2 = &c2.body(0);
   auto *attrs1 = &c1.body_attr(0);

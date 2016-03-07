@@ -239,7 +239,7 @@ class Cell: public tapas::BasicCell<TSP> {
     TAPAS_ASSERT(mapper.opt_mutual_ == data_->opt_mutual_);
     bool old = data_->opt_mutual_;
     mapper_.opt_mutual_ = b;
-    data_->opt_mutual_;
+    data_->opt_mutual_ = b;
     return old;
   }
   

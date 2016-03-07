@@ -266,14 +266,14 @@ for dist in ${DIST[@]}; do
                 rm -f $TMPFILE; sleep 1s
 
                 # We no longer check serial_tapas
-                #echoCyan $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
-                #$SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
-                #cat $TMPFILE
+                echoCyan $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
+                $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
+                cat $TMPFILE
 
-                #accuracyCheck $TMPFILE
+                accuracyCheck $TMPFILE
                 
-                #echo
-                #echo
+                echo
+                echo
 
                 for np in ${NP[@]}; do
                     rm -f $TMPFILE; sleep 1s

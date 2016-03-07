@@ -15,7 +15,7 @@
 
 #elif defined(__GNUC__) || defined(__GNUG__)
 /* GNU GCC/G++. --------------------------------------------- */
-# define TAPAS_COPMILER_GCC
+# define TAPAS_COMPILER_GCC
 #  define GCC_VERSION (__GNUC__ * 10000             \
                       + __GNUC_MINOR__ * 100        \
                       + __GNUC_PATCHLEVEL__)
