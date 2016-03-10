@@ -311,7 +311,7 @@ class SamplingOctree {
 
     GenerateCell((KeyType)0, std::begin(body_keys_), std::end(body_keys_));
 
-    TAPAS_ASSERT(data_->ht_[0].local_nb() == body_keys_.size());
+    TAPAS_ASSERT(data_->ht_[0]->local_nb() == body_keys_.size());
     proc_first_keys_.pop_back();
     
     double end = MPI_Wtime();

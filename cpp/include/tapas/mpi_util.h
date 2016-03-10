@@ -252,7 +252,6 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
   // exclusive scan
   for (int p = 1; p < mpi_size; p++) {
     send_disp[p] = send_disp[p-1] + send_counts[p-1];
-
     recv_disp[p] = recv_disp[p-1] + recv_counts[p-1];
   }
 

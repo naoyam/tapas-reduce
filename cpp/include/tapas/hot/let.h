@@ -903,11 +903,13 @@ struct LET {
 
     const long ncells = data.ht_.size();
     const long nall   = (pow(8.0, d+1) - 1) / 7;
+#ifdef TAPAS_DEBUG
     BarrierExec([&](int,int) {
         std::cout << "Cells: " << ncells << std::endl;
         std::cout << "depth: " << d << std::endl;
         std::cout << "filling rate: " << ((double)ncells / nall) << std::endl;
       });
+#endif
 
     std::vector<int> hist(d + 1, 0);
     for (auto p : data.ht_) {
@@ -917,12 +919,14 @@ struct LET {
       }
     }
 
+#if TAPAS_DEBUG
     BarrierExec([&](int, int) {
         std::cout << "Depth histogram" << std::endl;
         for (int i = 0; i <= d; i++) {
           std::cout << i << " " << hist[i] << std::endl;
         }
       });
+#endif
   }
 
   /**
@@ -956,9 +960,10 @@ struct LET {
                       std::vector<KeyType> &keys_body_recv,
                       std::vector<int> &attr_src,
                       std::vector<int> &body_src) {
-    double beg = MPI_Wtime();
-    
     const auto &ht = data.ht_;
+    double bt_all, et_all, bt_comm, et_comm;
+
+    bt_all = MPI_Wtime();
 
     // return values
     keys_attr_recv.clear(); // keys of which attributes are requested
@@ -1020,11 +1025,18 @@ struct LET {
     // Determine the destination process of each cell request
     std::vector<int> attr_dest = Partitioner<TSP>::FindOwnerProcess(data.proc_first_keys_, keys_attr_send);
     std::vector<int> body_dest = Partitioner<TSP>::FindOwnerProcess(data.proc_first_keys_, keys_body_send);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    bt_comm = MPI_Wtime();
     
     tapas::mpi::Alltoallv2<KeyType>(keys_attr_send, attr_dest,
                                     keys_attr_recv, attr_src, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv2<KeyType>(keys_body_send, body_dest,
                                     keys_body_recv, body_src, MPI_COMM_WORLD);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    et_comm = MPI_Wtime();
+    data.time_let_req_comm = et_comm - bt_comm;
     
 #ifdef TAPAS_DEBUG_DUMP
     {
@@ -1044,8 +1056,8 @@ struct LET {
       });
 #endif
 
-    double end = MPI_Wtime();
-    data.time_let_req = end - beg;
+    et_all = MPI_Wtime();
+    data.time_let_req_all = et_all - bt_all;
   }
   
 
@@ -1066,17 +1078,25 @@ struct LET {
                        std::vector<KeyType> &req_attr_keys, std::vector<int> &attr_src_ranks,
                        std::vector<KeyType> &req_leaf_keys, std::vector<int> &leaf_src_ranks,
                        std::vector<CellAttrType> &res_cell_attrs, std::vector<BodyType> &res_bodies, std::vector<index_t> &res_nb){
+    
     SCOREP_USER_REGION("LET-Response", SCOREP_USER_REGION_TYPE_FUNCTION);
-    double beg = MPI_Wtime();
-
     // req_attr_keys : list of cell keys of which cell attributes are requested
     // req_leaf_keys : list of cell keys of which bodies are requested
     // attr_src_ranks      : source process ranks of req_attr_keys (which are response target ranks)
     // leaf_src_ranks      : source process ranks of req_leaf_keys (which are response target ranks)
 
-    
+    // Code regions:
+    //   1. Pre-comm computation
+    //   2. Communication (Alltoallv)
+    //   3. Post-comm computation
+    double bt_all, et_all;
+    double bt, et;
+
+    // ===== Pre-comm computation =====
     // Create and send responses to the src processes of requests.
-  
+
+    bt_all = MPI_Wtime();
+
     Partitioner<TSP>::SelectResponseCells(req_attr_keys, attr_src_ranks,
                                           req_leaf_keys, leaf_src_ranks,
                                           data.ht_);
@@ -1084,31 +1104,36 @@ struct LET {
     const auto &ht = data.ht_;
     int mpi_size = data.mpi_size_;
 
-    // ----- Send Cell attributes -----
-    
     // Prepare cell attributes to send to <attr_src_ranks> processes
     std::vector<KeyType> attr_keys_send = req_attr_keys; // copy (split senbuf and recvbuf)
     std::vector<int> attr_dest_ranks = attr_src_ranks;
     res_cell_attrs.clear();
     std::vector<CellAttrType> attr_sendbuf;
     Partitioner<TSP>::KeysToAttrs(attr_keys_send, attr_sendbuf, data.ht_);
+
+    data.time_let_res_comp1 = et - bt;
     
+    // ===== 2. communication =====
     // Send response keys and attributes
+    MPI_Barrier(MPI_COMM_WORLD);
+    bt = MPI_Wtime();
+
     tapas::mpi::Alltoallv2(attr_keys_send, attr_dest_ranks, req_attr_keys,  attr_src_ranks, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv2(attr_sendbuf,   attr_dest_ranks, res_cell_attrs, attr_src_ranks, MPI_COMM_WORLD);
-
     
+    MPI_Barrier(MPI_COMM_WORLD);
+    et = MPI_Wtime();
+    data.time_let_res_attr_comm = et - bt;
     
-    // ----- Send bodies  -----
-    
+    // ===== 3. Post-comm computation =====
     // Preapre all bodies to send to <leaf_src_ranks> processes
     // body_destは、いまのままalltoallvに渡すとエラーになる。
     // TODO: leaf_keys_send と body_dest と一緒にSortByKeysして（すでにされている？）、
     //       leaf_src_ranks を body_dest に書き換える必要がある（ループをまわす）
+    
     std::vector<int> leaf_dest = leaf_src_ranks;         // copy
     std::vector<KeyType> leaf_keys_sendbuf = req_leaf_keys; // copy
     res_bodies.clear();
-
 
     // First, leaf_keys_sendbuf must be ordered by thier destination processes
     // (Since we need to send bodies later, leaf_keys_sendbuf must NOT be sorted ever again.)
@@ -1150,11 +1175,18 @@ struct LET {
     // leaf_src_ranks_ranks and res_nb.
     std::vector<int> leaf_recvcnt; // we don't use this
     std::vector<int> body_recvcnt; // we don't use this
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    bt = MPI_Wtime();
     
     // Send response keys and bodies
     tapas::mpi::Alltoallv(leaf_keys_sendbuf, leaf_sendcnt, req_leaf_keys, leaf_recvcnt, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv(leaf_nb_sendbuf,   leaf_sendcnt, res_nb,        leaf_recvcnt, MPI_COMM_WORLD);
     tapas::mpi::Alltoallv(body_sendbuf,      body_sendcnt, res_bodies,    body_recvcnt, MPI_COMM_WORLD);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    et = MPI_Wtime();
+    data.time_let_res_body_comm = et - bt;
 
 #ifdef TAPAS_DEBUG_DUMP
     tapas::debug::BarrierExec([&](int, int) {
@@ -1174,9 +1206,9 @@ struct LET {
     bzero(&data.let_body_attrs_[0], data.let_body_attrs_.size() * sizeof(data.let_body_attrs_[0]));
 
     TAPAS_ASSERT(data.let_bodies_.size() == res_bodies.size());
-
-    double end = MPI_Wtime();
-    data.time_let_response = end - beg;
+    
+    et_all = MPI_Wtime();
+    data.time_let_res_all = et_all - bt_all;
   }
   
   /**

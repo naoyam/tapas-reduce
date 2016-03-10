@@ -70,8 +70,14 @@ struct SharedData {
 
   double time_let_all;      // ExchangeLET/All
   double time_let_traverse; // ExchangeLET/Traverse
-  double time_let_req;      // ExchangeLET/Request
-  double time_let_response; // ExchangeLET/Response
+  double time_let_req_all;      // ExchangeLET/Request
+  double time_let_req_comm;     // ExchangeLET/Request
+  double time_let_res_all;
+  double time_let_res_attr_comm;
+  double time_let_res_body_comm;
+  double time_let_res_comp1; // ExchangeLET/Response
+  double time_let_res_comm; // ExchangeLET/Response
+  double time_let_res_comp2; // ExchangeLET/Response
   double time_let_register; // ExchangeLET/register
 
   double time_map2_all;
@@ -100,8 +106,11 @@ struct SharedData {
       , time_tree_growglobal(0)
       , time_let_all      (0)
       , time_let_traverse (0)
-      , time_let_req      (0)
-      , time_let_response (0)
+      , time_let_req_all  (0)
+      , time_let_req_comm (0)
+      , time_let_res_all  (0)
+      , time_let_res_attr_comm (0)
+      , time_let_res_body_comm (0)
       , time_let_register (0)
       , time_map2_all(0)
       , time_map2_let(0)
