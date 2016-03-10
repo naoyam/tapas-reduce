@@ -42,15 +42,12 @@ static void ProductMapImpl(Mapper &mapper,
 
   bool am = iter1.AllowMutualInteraction(iter2);
 
-  TAPAS_ASSERT(end1 > beg1 && end2 > beg2);
-
 #if 0
   std::string T1_str, T2_str;
   {
     int status;
     char * t1_demangled = abi::__cxa_demangle(typeid(T1_Iter).name(),0,0,&status);
     char * t2_demangled = abi::__cxa_demangle(typeid(T2_Iter).name(),0,0,&status);
-#if 0
     if (strncmp("tapas::iterator::BodyIterator", t1_demangled, strlen("tapas::iterator::BodyIterator")) != 0 ||
         strncmp("tapas::iterator::BodyIterator", t2_demangled, strlen("tapas::iterator::BodyIterator")) != 0) {
       std::cout << "T1_Iter=" << (t1_demangled+17) << " "
@@ -60,7 +57,6 @@ static void ProductMapImpl(Mapper &mapper,
                 << ((end1 - beg1 <= kT1 && end2 - beg2 <= kT2) ? "Serial" : "Split")
                 << std::endl;
     }
-#endif
     T1_str = t1_demangled;
     T2_str = t2_demangled;
     free(t1_demangled);
@@ -99,23 +95,16 @@ static void ProductMapImpl(Mapper &mapper,
     // Source side (iter2) can be split and paralleilzed.
     // target side cannot paralleize due to accumulation
     int mid1 = (end1 + beg1) / 2;
-
-#if 0
-    if (T1_str.find("BodyIterator") == std::string::npos && T2_str.find("BodyIterator") == std::string::npos) {
-      std::cout << "T1_str=" << T1_str << ", "
-                << "T2_str=" << T2_str << ", "
-                << "beg1=" << beg1 << ", "
-                << "end1=" << end1 << ", "
-                << "mid1=" << mid1 << ", "
-                << "mutual=" << mapper.opt_mutual_ << ", "
-                << std::endl;
-    }
-#endif
         
     typename Th::TaskGroup tg;
     tg.createTask([&]() { ProductMapImpl(mapper, iter1, beg1, mid1, iter2, beg2, end2, f, args...); });
-    tg.createTask([&]() { ProductMapImpl(mapper, iter1, mid1, end1, iter2, beg2, end2, f, args...); });
+    ProductMapImpl(mapper, iter1, mid1, end1, iter2, beg2, end2, f, args...);
     tg.wait();
+  } else if (end2 - beg2 == 1) {
+    // opt_mutual == 1 && end2 - beg2 == 1
+    int mid1 = (end1 + beg1) / 2;
+    ProductMapImpl(mapper, iter1, beg1, mid1, iter2, beg2, end2, f, args...);
+    ProductMapImpl(mapper, iter1, mid1, end1, iter2, beg2, end2, f, args...);
   } else {
     int mid1 = (end1 + beg1) / 2;
     int mid2 = (end2 + beg2) / 2;
