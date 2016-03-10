@@ -18,7 +18,7 @@ endif
 
 CC ?= clang
 CXX ?= clang++
-MPICXX ?= mpicxx -cxx=$(CXX) -DUSE_MPI
+MPICXX ?= mpicxx
 CXXFLAGS := -std=c++11 -Wall -Wextra -fno-elide-constructors
 
 #PROF := -pg
@@ -26,7 +26,8 @@ CXXFLAGS := -std=c++11 -Wall -Wextra -fno-elide-constructors
 ifneq (,$(findstring clang++,$(CXX)))
 	CXXFLAGS += -funroll-loops -fcolor-diagnostics -Wno-sign-compare
 else ifneq (, $(findstring g++, $(CXX)))
-	CXXFLAGS += -funroll-loops -Wno-sign-compare -fdiagnostics-color=auto -Wno-unknown-pragmas -Wno-unused-function
+	CXXFLAGS += -funroll-loops -fdiagnostics-color=auto \
+							-Wno-sign-compare -Wno-unknown-pragmas -Wno-unused-function -Wunused-function
 else ifneq (, $(findstring icpc, $(CXX)))
 endif
 

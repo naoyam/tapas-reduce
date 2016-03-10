@@ -118,8 +118,8 @@ echo Detecting mpicxx implementation
 # detect MPI implementation
 if mpicxx --showme:version 2>/dev/null | grep "Open MPI"; then
     # Opne MPI
-    MPICC="env CC=${CC} CXX=${CXX} mpicc"
-    MPICXX="env CC=${CC} CXX=${CXX} mpicxx"
+    MPICC="env OMPI_CC=${CC} mpicc"
+    MPICXX="env OMPI_CXX=${CXX} mpicxx"
     echo Looks like Open MPI.
 else
     # mpich family (mpich and mvapich)
@@ -178,7 +178,7 @@ fi
 SRC_DIR=$SRC_ROOT/sample/barnes-hut
 BIN=$SRC_DIR/bh_mpi
 
-make VERBOSE=1 MODE=release -C $SRC_DIR clean all
+make MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=release -C $SRC_DIR clean all
 
 for np in ${NP[@]}; do
     for nb in ${NB[@]}; do
