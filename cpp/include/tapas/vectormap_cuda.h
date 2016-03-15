@@ -242,10 +242,12 @@ struct Vectormap_CUDA_Simple {
 
   TESLA tesla_dev_;
 
-  /** Memory allocator for the unified memory.  It will replace the
-      vector allocators.  (N.B. Its name should be generic because it
-      is used in CPUs also.) */
-
+  /**
+   * \brief Memory allocator for the unified memory.  
+   * It will replace the
+   * vector allocators.  (N.B. Its name should be generic because it
+   * is used in CPUs also.)
+   */
   template <typename T>
   struct um_allocator : public std::allocator<T> {
    public:
