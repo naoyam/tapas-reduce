@@ -2,6 +2,8 @@
 #define TAPAS_UTIL_H_
 
 #include <cassert>
+#include <cerrno>
+#include <cstring>
 
 #include <fstream>
 #include <iostream>
@@ -16,6 +18,33 @@
 
 namespace tapas {
 namespace util {
+
+void OpenFileStream(std::ofstream &ofs, const char *fname, decltype(std::ios::out) mode) {
+  ofs.clear();
+
+  int err_cnt = 0;
+
+  while(1) {
+    ofs.open(fname, mode);
+    if (ofs.good()) {
+      break;
+    } else {
+      if (err_cnt++ >= 3) {
+        // fatal error. abort
+        std::cerr << "Tapas: [FATAL] open failed ('" << fname << "'): " << strerror(errno) << std::endl;
+        exit(-1);
+      } else {
+        std::cerr << "Tapas: [ERROR] open failed ('" << fname << "'): " << strerror(errno) << std::endl;
+      }
+    }
+  }
+
+  if (err_cnt > 0) {
+    std::cerr << "Tapas: [WARNING] open('" << fname << "') failed " << err_cnt << " time"
+              << (err_cnt > 1 ? "s" : "")
+              << " but seems to be recovered." << std::endl;
+  }
+}
 
 namespace {
 
@@ -177,8 +206,8 @@ class CSV {
   }
 
   void Dump(const char *fname) const {
-    std::ofstream ofs(fname, std::ios::out);
-    assert(ofs.good());
+    std::ofstream ofs;
+    OpenFileStream(ofs, fname, std::ios::out);
     Dump(ofs);
     ofs.close();
   }
@@ -216,7 +245,8 @@ class RankCSV {
   }
   
   void Dump(const char *fname) {
-    std::ofstream ofs(fname, std::ios::out);
+    std::ofstream ofs;
+    OpenFileStream(ofs, fname, std::ios::out);
     Dump(ofs);
   }
 
@@ -250,8 +280,8 @@ class RankCSV {
   }
 
   void Dump(const char *fname) const {
-    std::ofstream ofs(fname, std::ios::out);
-    assert(ofs.good());
+    std::ofstream ofs;
+    OpenFileStream(ofs, fname, std::ios::out);
     Dump(ofs);
     ofs.close();
   }
@@ -282,8 +312,8 @@ class RankCSV {
   }
   
   void Dump(const char *fname) {
-    std::ofstream ofs(fname, std::ios::out);
-    Dump(ofs);
+    const auto this_ = *this;
+    this_.Dump(fname);
   }
 
   void Dump(std::ostream &os) const {
@@ -291,8 +321,8 @@ class RankCSV {
   }
 
   void Dump(const char *fname) const {
-    std::ofstream ofs(fname, std::ios::out);
-    assert(ofs.good());
+    std::ofstream ofs;
+    OpenFileStream(ofs, fname, std::ios::out);
     Dump(ofs);
     ofs.close();
   }
