@@ -91,15 +91,15 @@ void Report(const Data &data) {
   {
     RankCSV csv {"LET-All", "LET-Trav",
           "LET-Req-all", "LET-Req-comm",
-          "LET-Res-all", "LET-Res-attr-comm", "LET-Res-body-comm",
+          "LET-Res-all", "LET-Res-acomm", "LET-Res-bcomm",
           "LET-Reg"};
     csv.At("LET-All") = data.time_let_all;
     csv.At("LET-Trav") = data.time_let_traverse;
     csv.At("LET-Req-all") = data.time_let_req_all;
     csv.At("LET-Req-comm") = data.time_let_req_comm;
     csv.At("LET-Res-all") = data.time_let_res_all;
-    csv.At("LET-Res-attr-comm")  = data.time_let_res_attr_comm;
-    csv.At("LET-Res-body-comm") = data.time_let_res_body_comm;
+    csv.At("LET-Res-acomm")  = data.time_let_res_attr_comm;
+    csv.At("LET-Res-bcomm") = data.time_let_res_body_comm;
     csv.At("LET-Reg") = data.time_let_register;
     csv.Dump(report_prefix + "let_construction" + report_suffix + ".csv");
   }

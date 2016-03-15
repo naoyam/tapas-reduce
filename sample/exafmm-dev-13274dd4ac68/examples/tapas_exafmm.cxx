@@ -508,16 +508,25 @@ int main(int argc, char ** argv) {
     args.print(logger::stringLength, P);
   }
 
-  double time_upw = 0, time_dtt = 0, time_dwn = 0;
+  double time_upw = 0, time_dtt = 0, time_dwn = 0, time_tree = 0;
   
   for (int t=0; t<args.repeat; t++) {
-    auto total_bt = std::chrono::system_clock::now();
+    double total_bt = MPI_Wtime();
     logger::printTitle("FMM Profiling");
     logger::startTimer("Total FMM");
     logger::startPAPI();
     logger::startDAG();
-    
-    TapasFMM::Cell *root = TapasFMM::Partition(bodies.data(), bodies.size(), args.ncrit);
+
+    TapasFMM::Cell *root = nullptr;
+    {
+      MPI_Barrier(MPI_COMM_WORLD);
+      double bt = MPI_Wtime();
+      
+      root = TapasFMM::Partition(bodies.data(), bodies.size(), args.ncrit);
+
+      double et = MPI_Wtime();
+      time_tree = et - bt;
+    }
 
     root->SetOptMutual(args.mutual);
     
@@ -528,15 +537,16 @@ int main(int argc, char ** argv) {
 
     // Upward (P2M + M2M)
     {
+      MPI_Barrier(MPI_COMM_WORLD);
       logger::startTimer("Upward pass");
-      auto bt = std::chrono::system_clock::now();
+      double bt = MPI_Wtime();
       
       tapas::UpwardMap(FMM_Upward, *root, args.theta);
       
-      auto et = std::chrono::system_clock::now();
+      double et = MPI_Wtime();
       logger::stopTimer("Upward pass");
 
-      time_upw = std::chrono::duration_cast<std::chrono::milliseconds>(et - bt).count() / 1000.0;
+      time_upw = et - bt;
     }
     
 #ifdef TAPAS_DEBUG_DUMP
@@ -548,15 +558,16 @@ int main(int argc, char ** argv) {
 #endif
 
     {
+      MPI_Barrier(MPI_COMM_WORLD);
       logger::startTimer("Traverse");
-      auto bt = std::chrono::system_clock::now();
+      double bt = MPI_Wtime();
       ResetCount();
       
       tapas::Map(FMM_DTT(), tapas::Product(*root, *root), args.mutual, args.nspawn, args.theta);
-      
-      auto et = std::chrono::system_clock::now();
+
+      double et = MPI_Wtime();
       logger::stopTimer("Traverse");
-      time_dtt = std::chrono::duration_cast<std::chrono::milliseconds>(et - bt).count() / 1000.0;
+      time_dtt = et - bt;
     }
     
     TAPAS_LOG_DEBUG() << "Dual Tree Traversal done\n";
@@ -567,14 +578,15 @@ int main(int argc, char ** argv) {
 #endif
 
     {
+      MPI_Barrier(MPI_COMM_WORLD);
       logger::startTimer("Downward pass");
-      auto bt = std::chrono::system_clock::now();
+      double bt = MPI_Wtime();
       
       tapas::DownwardMap(FMM_Downward, *root);
       
-      auto et = std::chrono::system_clock::now();
+      double et = MPI_Wtime();
       logger::stopTimer("Downward pass");
-      time_dwn = std::chrono::duration_cast<std::chrono::milliseconds>(et - bt).count() / 1000.0;
+      time_dwn = et - bt;
     }
     
     TAPAS_LOG_DEBUG() << "L2P done\n";
@@ -586,14 +598,14 @@ int main(int argc, char ** argv) {
     CopyBackResult(bodies, root);
     //CopyBackResult(bodies, root->body_attrs(), args.numBodies);
 
-    auto total_et = std::chrono::system_clock::now();
+    double total_et = MPI_Wtime();
     logger::printTitle("Total runtime");
     logger::stopPAPI();
     logger::stopTimer("Total FMM");
     logger::resetTimer("Total FMM");
-
-    double time_total = std::chrono::duration_cast<std::chrono::milliseconds>(total_et - total_bt).count() / 1000.0;
-    tapas::util::RankCSV csv {"total", "upward", "traverse", "downward"
+    
+    double time_total = total_et - total_bt;
+    tapas::util::RankCSV csv {"total", "upward", "traverse", "downward", "tree"
 #ifdef COUNT
           , "numP2P", "numM2L"
 #endif
@@ -602,6 +614,7 @@ int main(int argc, char ** argv) {
     csv.At("upward") = time_upw;
     csv.At("traverse") = time_dtt;
     csv.At("downward") = time_dwn;
+    csv.At("tree") = time_tree;
 #ifdef COUNT
     csv.At("numP2P") = numP2P;
     csv.At("numM2L") = numM2L;
@@ -624,11 +637,12 @@ int main(int argc, char ** argv) {
     logger::writeTime();
 #endif
 
-    const int numTargets = 100;
-
-    logger::startTimer("Total Direct");
-    CheckResult(bodies, numTargets, cycle, args.images);
-    logger::stopTimer("Total Direct");
+    if (args.check) {
+      const int numTargets = 100;
+      logger::startTimer("Total Direct");
+      CheckResult(bodies, numTargets, cycle, args.images);
+      logger::stopTimer("Total Direct");
+    }
     
     //buildTree.printTreeData(cells);
     logger::printPAPI();

@@ -100,7 +100,7 @@ private:
 public:
   Args(int argc=0, char ** argv=NULL) : numBodies(1000000), ncrit(16), nspawn(1000), threads(16), images(0),
                                         theta(.4), useRmax(0), useRopt(0), mutual(1), graft(1),
-                                        verbose(1), distribution("cube"), repeat(1), mpi_size(1), mpi_rank(0) {
+                                        verbose(1), check(1), distribution("cube"), repeat(1), mpi_size(1), mpi_rank(0) {
     while (1) {
       int option_index;
       int c = getopt_long(argc, argv, "n:c:s:T:i:t:x:o:m:g:v:d:r:k:h", long_options, &option_index);
@@ -149,7 +149,7 @@ public:
 					usage(argv[0]);
 					exit(0);
 				case 'k':
-					check = 1;
+					check = atoi(optarg);
 					break;
 				default:
 					usage(argv[0]);

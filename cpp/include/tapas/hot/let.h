@@ -937,6 +937,7 @@ struct LET {
                          KeySet &req_keys_attr, KeySet &req_keys_body,
                          UserFunct f, Args...args) {
     SCOREP_USER_REGION("LET-Traverse", SCOREP_USER_REGION_TYPE_FUNCTION);
+    MPI_Barrier(MPI_COMM_WORLD);
     double beg = MPI_Wtime();
     
     req_keys_attr.clear(); // cells of which attributes are to be transfered from remotes to local
@@ -948,6 +949,7 @@ struct LET {
     Traverse(root.key(), root.key(), root.data(), req_keys_attr, req_keys_body, f, args...);
 
     double end = MPI_Wtime();
+    MPI_Barrier(MPI_COMM_WORLD);
     root.data().time_let_traverse = end - beg;
   }
 
@@ -963,6 +965,7 @@ struct LET {
     const auto &ht = data.ht_;
     double bt_all, et_all, bt_comm, et_comm;
 
+    MPI_Barrier(MPI_COMM_WORLD);
     bt_all = MPI_Wtime();
 
     // return values
@@ -1056,6 +1059,7 @@ struct LET {
       });
 #endif
 
+    MPI_Barrier(MPI_COMM_WORLD);
     et_all = MPI_Wtime();
     data.time_let_req_all = et_all - bt_all;
   }
@@ -1095,6 +1099,7 @@ struct LET {
     // ===== Pre-comm computation =====
     // Create and send responses to the src processes of requests.
 
+    MPI_Barrier(MPI_COMM_WORLD);
     bt_all = MPI_Wtime();
 
     Partitioner<TSP>::SelectResponseCells(req_attr_keys, attr_src_ranks,
@@ -1207,6 +1212,7 @@ struct LET {
 
     TAPAS_ASSERT(data.let_bodies_.size() == res_bodies.size());
     
+    MPI_Barrier(MPI_COMM_WORLD);
     et_all = MPI_Wtime();
     data.time_let_res_all = et_all - bt_all;
   }
@@ -1221,6 +1227,7 @@ struct LET {
                        const std::vector<KeyType> &res_leaf_keys,
                        const std::vector<index_t> &res_nb) {
     SCOREP_USER_REGION("LET-Register", SCOREP_USER_REGION_TYPE_FUNCTION);
+    MPI_Barrier(MPI_COMM_WORLD);
     double beg = MPI_Wtime();
     
     // Register received LET cells to local ht_let_ hash table.
@@ -1268,6 +1275,7 @@ struct LET {
       body_offset += nb;
     }
     
+    MPI_Barrier(MPI_COMM_WORLD);
     double end = MPI_Wtime();
     data->time_let_register = end - beg;
   }
