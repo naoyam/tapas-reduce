@@ -311,11 +311,6 @@ class RankCSV {
     Dump(fname.c_str());
   }
   
-  void Dump(const char *fname) {
-    const auto this_ = *this;
-    this_.Dump(fname);
-  }
-
   void Dump(std::ostream &os) const {
     csv_->Dump(os);
   }

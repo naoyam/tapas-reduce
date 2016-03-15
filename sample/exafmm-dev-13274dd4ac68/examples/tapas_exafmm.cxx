@@ -54,6 +54,16 @@ inline void ResetCount() { }
 # define RDTSC() 0
 #endif
 
+double GetTime() {
+#ifdef USE_MPI
+  return MPI_Wtime();
+#else
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return tv.tv_sec + tv.tv_usec * 1e-6;
+#endif
+}
+
 template <int DIM, class FP> inline
 tapas::Vec<DIM, FP> &asn(tapas::Vec<DIM, FP> &dst, const vec<DIM, FP> &src) {
   for (int i = 0; i < DIM; ++i) {
@@ -511,7 +521,7 @@ int main(int argc, char ** argv) {
   double time_upw = 0, time_dtt = 0, time_dwn = 0, time_tree = 0;
   
   for (int t=0; t<args.repeat; t++) {
-    double total_bt = MPI_Wtime();
+    double total_bt = GetTime();
     logger::printTitle("FMM Profiling");
     logger::startTimer("Total FMM");
     logger::startPAPI();
@@ -519,12 +529,14 @@ int main(int argc, char ** argv) {
 
     TapasFMM::Cell *root = nullptr;
     {
+#ifdef USE_MPI
       MPI_Barrier(MPI_COMM_WORLD);
-      double bt = MPI_Wtime();
+#endif
+      double bt = GetTime();
       
       root = TapasFMM::Partition(bodies.data(), bodies.size(), args.ncrit);
 
-      double et = MPI_Wtime();
+      double et = GetTime();
       time_tree = et - bt;
     }
 
@@ -537,13 +549,15 @@ int main(int argc, char ** argv) {
 
     // Upward (P2M + M2M)
     {
+#ifdef USE_MPI
       MPI_Barrier(MPI_COMM_WORLD);
+#endif
       logger::startTimer("Upward pass");
-      double bt = MPI_Wtime();
+      double bt = GetTime();
       
       tapas::UpwardMap(FMM_Upward, *root, args.theta);
       
-      double et = MPI_Wtime();
+      double et = GetTime();
       logger::stopTimer("Upward pass");
 
       time_upw = et - bt;
@@ -553,19 +567,17 @@ int main(int argc, char ** argv) {
     dumpM(*root);
 #endif
 
-#ifdef USE_MPI
-    MPI_Barrier(MPI_COMM_WORLD);
-#endif
-
     {
+#ifdef USE_MPI
       MPI_Barrier(MPI_COMM_WORLD);
+#endif
       logger::startTimer("Traverse");
-      double bt = MPI_Wtime();
+      double bt = GetTime();
       ResetCount();
       
       tapas::Map(FMM_DTT(), tapas::Product(*root, *root), args.mutual, args.nspawn, args.theta);
 
-      double et = MPI_Wtime();
+      double et = GetTime();
       logger::stopTimer("Traverse");
       time_dtt = et - bt;
     }
@@ -578,13 +590,15 @@ int main(int argc, char ** argv) {
 #endif
 
     {
+#ifdef USE_MPI
       MPI_Barrier(MPI_COMM_WORLD);
+#endif
       logger::startTimer("Downward pass");
-      double bt = MPI_Wtime();
+      double bt = GetTime();
       
       tapas::DownwardMap(FMM_Downward, *root);
       
-      double et = MPI_Wtime();
+      double et = GetTime();
       logger::stopTimer("Downward pass");
       time_dwn = et - bt;
     }
@@ -598,7 +612,7 @@ int main(int argc, char ** argv) {
     CopyBackResult(bodies, root);
     //CopyBackResult(bodies, root->body_attrs(), args.numBodies);
 
-    double total_et = MPI_Wtime();
+    double total_et = GetTime();
     logger::printTitle("Total runtime");
     logger::stopPAPI();
     logger::stopTimer("Total FMM");
