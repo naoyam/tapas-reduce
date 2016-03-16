@@ -1253,7 +1253,7 @@ Partitioner<TSP>::Partition(typename TSP::Body *b, index_t num_bodies) {
   // Build local trees
   SamplingOctree<TSP, SFC> stree(b, num_bodies, data, max_nb_);
   stree.Build();
-    
+
   // Build Global trees
   GlobalTree<TSP>::Build(*data);
 
