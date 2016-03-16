@@ -33,14 +33,14 @@ template<class TSP> class Cell;
 /**
  * \class SamplingOctree
  * \brief Collection of static functions for sampling-based octree construction.
- * 
+ *
  */
 template<class TSP, class SFC_>
 class SamplingOctree {
  public:
   static const constexpr int kDim = TSP::Dim;
   static const constexpr int kPosOffset = TSP::kBodyCoordOffset;
-  
+
   using FP = typename TSP::FP;
   using SFC = SFC_;
   using KeyType = typename SFC::KeyType;
@@ -62,13 +62,13 @@ class SamplingOctree {
   Region<TSP> region_;
   Data* data_;
   int ncrit_;
-            
+
  public:
   SamplingOctree(const BodyType *b, index_t nb, Data *data, int ncrit)
       : bodies_(b, b+nb), body_keys_(), proc_first_keys_(), region_(), data_(data), ncrit_(ncrit)
   {
     Vec<kDim, FP> local_max, local_min;
-    
+
     for (index_t i = 0; i < nb; i++) {
       Vec<kDim, FP> pos = ParticlePosOffset<kDim, FP, kPosOffset>::vec(reinterpret_cast<const void*>(b+i));
       for (int d = 0; d < kDim; d++) {
@@ -76,23 +76,23 @@ class SamplingOctree {
         local_min = (i == 0) ? pos[d] : std::min(pos[d], local_min[d]);
       }
     }
-    
+
     region_.min() = local_min;
     region_.max() = local_max;
   }
-    
+
   void ExchangeRegion() {
     Vec<kDim, FP> new_max, new_min;
 
     // Exchange max
     tapas::mpi::Allreduce(&region_.max()[0], &new_max[0], kDim, MPI_MAX, MPI_COMM_WORLD);
-  
+
     // Exchange min
     tapas::mpi::Allreduce(&region_.min()[0], &new_min[0], kDim, MPI_MIN, MPI_COMM_WORLD);
 
     region_ = Region<TSP>(new_min, new_max);
   }
-  
+
 
   /**
    * \brief Split the finest-level keys into `mpi_size` groups. Used in the DD-process.
@@ -109,7 +109,7 @@ class SamplingOctree {
     //     L = log_B(Np) + 2
     //
     // L must be larger than the number of processes, and large enough to achieve good load balancing.
-    // However, too large L leads to unnecessary deep tree structure because domain boundary may be too 
+    // However, too large L leads to unnecessary deep tree structure because domain boundary may be too
     // close to a certain particle.
 
     const int B = 1 << kDim;
@@ -127,7 +127,7 @@ class SamplingOctree {
     TAPAS_ASSERT(W > mpi_size);
 
     const int q = keys.size() / mpi_size; // each process should have roughly q bodies
-    
+
     std::vector<int> nb(W); // number of bodies each L-level key owns
 
     KeyType kl = K;
@@ -142,16 +142,16 @@ class SamplingOctree {
 
     // sum(nb) must be equal to keys.size(), becuase the for loop above cover the entire domain
     TAPAS_ASSERT(std::accumulate(nb.begin(), nb.end(), 0) == (int)keys.size());
-        
+
     std::vector<int> nb_iscan(W); // inclusive scan of nb vector
 
     for (size_t i = 0; i < nb_iscan.size(); i++) {
       // Future work: this operation can be parallelized by parallel scan
       nb_iscan[i] = nb[i] + (i > 0 ? nb_iscan[i-1] : 0);
     }
-    
+
     std::vector<KeyType> beg_keys(mpi_size); // return value
-    
+
     // find domain boundaries:
     // process i's beginning key is j-th key in level L, where j is the smallest index satisfying
     //   nb_iscan[j] >= q * i
@@ -163,28 +163,28 @@ class SamplingOctree {
 
     return beg_keys;
   }
-  
+
   /**
    * \brief Get sampling rate configuration
    */
   static double SamplingRate() {
     double R = 0.01;
-    
+
 #ifdef TAPAS_SAMPLING_RATE
     R = (TAPAS_SAMPLING_RATE);
 #endif
-    
+
     if (getenv("TAPAS_SAMPLING_RATE")) {
       R = atof(getenv("TAPAS_SAMPLING_RATE"));
     }
-    
+
     TAPAS_ASSERT(0.0 < R && R < 1.0);
-    
+
     return R;
   }
 
   /**
-   * \brief Sample bodies and determine proc_first_keys_. 
+   * \brief Sample bodies and determine proc_first_keys_.
    * Output: proc_first_keys_.
    */
   void Sample() {
@@ -204,7 +204,7 @@ class SamplingOctree {
     // sample particles in this process
     int sample_nb = std::max((int)(bodies_.size() * R),
                              (int)min_sample_nb);
-    
+
     std::vector<BodyType> sampled_bodies = std::vector<BodyType>(bodies_.begin(), bodies_.begin() + sample_nb);
     std::vector<KeyType> sampled_keys_local = BodiesToKeys(sampled_bodies, data_->region_);
     std::vector<KeyType> sampled_keys;
@@ -221,7 +221,7 @@ class SamplingOctree {
     if (data_->mpi_rank_ == dd_proc_id) {
       // in DD-process
       TAPAS_ASSERT(SFC::GetDepth(sampled_keys[0]) == SFC::MAX_DEPTH);
-      
+
       proc_first_keys_ = PartitionSpace(sampled_keys, data_->mpi_size_);
       TAPAS_ASSERT((int)proc_first_keys_.size() == data_->mpi_size_);
     }
@@ -234,12 +234,12 @@ class SamplingOctree {
     data_->time_tree_sample = end - beg;
   }
 
-  /** 
+  /**
    * \brief Exchange bodies to owner processes determined by Sample() function.
-   */ 
+   */
   void Exchange() {
     double beg = MPI_Wtime();
-    
+
     data_->nb_before = bodies_.size();
 
     // Exchange bodies according to proc_first_keys_
@@ -258,11 +258,11 @@ class SamplingOctree {
     bzero(data_->local_body_attrs_.data(), sizeof(BodyAttrType) * bodies_.size());
 
     data_->nb_after = data_->local_bodies_.size();
-    
+
     double end = MPI_Wtime();
     data_->time_tree_exchange = end - beg;
   }
-  
+
   /**
    * \brief Build an octree from bodies b, with a sampling-based method
    */
@@ -272,9 +272,9 @@ class SamplingOctree {
     index_t nb_total = 0;
     tapas::mpi::Allreduce((index_t)bodies_.size(), nb_total, MPI_SUM, MPI_COMM_WORLD);
     data_->nb_total = nb_total;
-    
+
     Sample();
-    
+
     Exchange();
 
     GrowLocal();
@@ -297,14 +297,14 @@ class SamplingOctree {
 
     data_->nleaves = data_->leaf_keys_.size();
     data_->ncells = data_->ht_.size();
-    
+
     double end = MPI_Wtime();
     data_->time_tree_all = end - beg;
   }
 
   /**
    * \brief Grow the local tree, from local bodies, leaves to the root cell
-   */ 
+   */
   void GrowLocal() {
     double beg = MPI_Wtime();
     proc_first_keys_.push_back(SFC::GetNext(0));
@@ -313,28 +313,28 @@ class SamplingOctree {
 
     TAPAS_ASSERT(data_->ht_[0]->local_nb() == body_keys_.size());
     proc_first_keys_.pop_back();
-    
+
     double end = MPI_Wtime();
     data_->time_tree_growlocal = end - beg;
   }
 
   /**
    * Generate a cell object of Key k if it is within the range of local bodies
-   */ 
+   */
   void GenerateCell(KeyType k,
                     typename std::vector<KeyType>::const_iterator pbeg, // beg of a subset of bkeys
                     typename std::vector<KeyType>::const_iterator pend // end of a subset of bkeys
                     ) {
     KeyType k2 = SFC::GetNext(k);
     auto bbeg = body_keys_.begin();
-    
+
     int rank = data_->mpi_rank_;
-      
+
     // find the range of bodies that belong to the cell k by binary searching.
     auto range_beg = std::lower_bound(pbeg, pend, k);
     auto range_end = std::lower_bound(pbeg, pend, k2);
     int nb = range_end - range_beg;
-    
+
     // Checks if the cell is (completely) included in the process or strides over two processes.
     // If the cell strides over multiple processes, it's never a leaf and must be split, even if nb <= ncrit.
     bool included = SFC::Includes(proc_first_keys_[rank], proc_first_keys_[rank+1], k);
@@ -356,7 +356,7 @@ class SamplingOctree {
     c->data_ = data_;
     c->bid_ = body_beg;
     bzero(&c->attr_, sizeof(c->attr_));
-    
+
     TAPAS_ASSERT(nb >= 0);
     TAPAS_ASSERT(body_beg >= 0);
 
@@ -367,7 +367,7 @@ class SamplingOctree {
     }
     TAPAS_ASSERT(SFC::GetDepth(k) <= SFC::MaxDepth() &&
                  data_->max_depth_ <= SFC::MaxDepth());
-    
+
     if (is_leaf) {
       // The cell [k] is a leaf.
       data_->leaf_keys_.push_back(k);
@@ -377,16 +377,16 @@ class SamplingOctree {
       // The cell [k] is not a leaf. Split it again.
       // Note: if the cell is not a leaf and nb == 0, that means other processes may have particles which belong to the cell.
       auto ch_keys = SFC::GetChildren(k);
-      
+
       for (auto chk : ch_keys) {
         // Check if the child key is in the range of this process, ignore it otherwise.
         bool overlap = SFC::Overlapped(chk, SFC::GetNext(chk),
                                        proc_first_keys_[rank],
                                        proc_first_keys_[rank+1]);
-        
+
         // Note: SFC::GetNext(0) is the next key of the root key 0, which means
         //       the `end` of the whole region
-        
+
         if (overlap) {
           GenerateCell(chk, range_beg, range_end);
         }
@@ -418,7 +418,7 @@ class SamplingOctree {
 
     return recv_bodies;
   }
-  
+
   /**
    * \brief Returns the rank of the domain decomposition process (DD-process)
    * For now, the rank 0 process always does this.
@@ -431,7 +431,7 @@ class SamplingOctree {
   static std::vector<KeyType> BodiesToKeys(const VecT &bodies, const Region<TSP> &region) {
     return BodiesToKeys(bodies.begin(), bodies.end(), region);
   }
-  
+
   /**
    * \brief Transform a vector of bodies into a vector of Kyes
    * \param[in] bodies A vector of bodies
@@ -450,14 +450,14 @@ class SamplingOctree {
     }
 
     auto ins = std::back_inserter(keys);
-    
+
     for (auto iter = beg; iter != end; iter++) {
       Vec<kDim, FP> ofst = ParticlePosOffset<kDim, FP, kPosOffset>::vec(reinterpret_cast<const void*>(&*iter));
       ofst -= region.min();
       ofst /= pitch;
 
       Vec<kDim, int> anchor; // An SFC key-like, but SOA-format vector without depth information  (not that SFC keys are AOS format).
-      
+
       // now ofst is a kDim-dimensional index of the finest-level cell to which the body belongs.
       for (int d = 0; d < kDim; d++) {
         anchor[d] = (int)ofst[d];
@@ -476,9 +476,8 @@ class SamplingOctree {
   }
 };
 
-} // namespace hot 
+} // namespace hot
 } // namespace tapas
 
 
 #endif // TAPAS_HOT_BUILDTREE_H
-
