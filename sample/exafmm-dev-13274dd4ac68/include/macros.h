@@ -6,13 +6,6 @@
 #pragma warning(disable:161 193 383 444 981 1572 2259)
 #endif
 
-// Override assertion
-#if ASSERT
-#include <cassert>
-#else
-#define assert(x)
-#endif
-
 // Detect SIMD Byte length of architecture
 #if __MIC__
 const int SIMD_BYTES = 64;                                      //!< SIMD byte length of MIC
