@@ -75,20 +75,103 @@ inline void vectormap_check_error(const char *msg, const char *file, const int l
     assert(ce == cudaSuccess);
   }
 }
+
+/**
+ * \breif Atomic-add code from cuda-c-programming-guide (double precision version)
+ */
+__device__
+static double atomicAdd(double* address, double val) {
+  // Should we use uint64_t ?
+  static_assert(sizeof(unsigned long long int) == sizeof(double),   "sizeof(unsigned long long int) == sizeof(double)");
+  static_assert(sizeof(unsigned long long int) == sizeof(uint64_t), "sizeof(unsigned long long int) == sizeof(uint64_t)");
+  
+  unsigned long long int* address1 = (unsigned long long int*)address;
+  unsigned long long int chk;
+  unsigned long long int old;
+  chk = *address1;
+  do {
+    old = chk;
+    chk = atomicCAS(address1, old,
+                    __double_as_longlong(val + __longlong_as_double(old)));
+  } while (old != chk);
+  return __longlong_as_double(old);
+}
+
+/**
+ * \breif Atomic-add code from cuda-c-programming-guide (double precision version)
+ */
+__device__
+static float atomicAdd(float* address, float val) {
+  // Should we use uint32_t ?
+  static_assert(sizeof(int) == sizeof(float), "sizeof(int) == sizeof(float)");
+  static_assert(sizeof(uint32_t) == sizeof(float), "sizeof(int) == sizeof(float)");
+  
+  int* address1 = (int*)address;
+  int chk;
+  int old;
+  chk = *address1;
+  do {
+    old = chk;
+    chk = atomicCAS(address1, old,
+                    __float_as_int(val + __int_as_float(old)));
+  } while (old != chk);
+  return __int_as_float(old);
+}
+
+template<class T0, class T1, class T2>
+struct cellcompare_r {
+  bool operator() (const std::tuple<T0, T1, T2> &i,
+                   const std::tuple<T0, T1, T2> &j) {
+    return ((std::get<2>(i).data) < (std::get<2>(j).data));
+  }
+};
+
 } // anon namespace
 
-#if 0
-template <class Funct, typename BV, class... Args>
+/**
+ * \brief Single argument mapping over bodies on GPU
+ */
+template <class CA, class V3, class BT, class BT_ATTR, class Funct, class... Args>
 __global__
-void vectormap_cuda_kernel1(BV* v0, size_t n0,
-                            Funct f, Args... args) {
+void vectormap_cuda_plain_kernel1(const CA c_attr, const V3 c_center,
+                                  const BT* b, BT_ATTR* b_attr,
+                                  size_t sz, Funct f, Args... args) {
   int index = (blockDim.x * blockIdx.x + threadIdx.x);
-  if (index < n0) {
-    BV p0 = v0[index];
-    f(p0, args...);
+  if (index < sz) {
+    f(c_attr, c_center, (b + index), (b_attr + index), args...);
   }
 }
-#endif
+
+template <class Funct, class BT, class BT_ATTR, class CELL_ATTR, class VEC,
+          template <class T> class CELLDATA, class... Args>
+__global__
+void vectormap_cuda_pack_kernel1(int nmapdata, size_t nbodies,
+                                 CELLDATA<BT>* body_list,
+                                 CELLDATA<BT_ATTR>* attr_list,
+                                 CELL_ATTR* cell_attrs,
+                                 VEC* cell_centers,
+                                 Funct f, Args... args) {
+  static_assert(std::is_same<BT_ATTR, kvec4>::value, "attribute type=kvec4");
+
+  int index = (blockDim.x * blockIdx.x + threadIdx.x);
+  if (index < nbodies) {
+    int bodycount = 0;
+    int nth = -1;
+    for (size_t i = 0; i < nmapdata; i++) {
+      if (index < (bodycount + body_list[i].size)) {
+        nth = i;
+        break;
+      } else {
+        bodycount += body_list[i].size;
+      }
+    }
+    assert(nth != -1);
+    int nthbody = index - bodycount;
+    f(cell_attrs[nth], cell_centers[nth],
+      (body_list[nth].data + nthbody), (attr_list[nth].data + nthbody),
+      args...);
+  }
+}
 
 /* (Two argument mapping (each pair)) */
 
@@ -127,44 +210,6 @@ void vectormap_cuda_plain_kernel2(BV* v0, BV* v1, BA* a0,
   if (index < n0) {
     a0[index] = q0;
   }
-}
-
-/* (Atomic-add code from cuda-c-programming-guide). */
-
-__device__
-static double atomicAdd(double* address, double val) {
-  // Should we use uint64_t ?
-  static_assert(sizeof(unsigned long long int) == sizeof(double),   "sizeof(unsigned long long int) == sizeof(double)");
-  static_assert(sizeof(unsigned long long int) == sizeof(uint64_t), "sizeof(unsigned long long int) == sizeof(uint64_t)");
-  
-  unsigned long long int* address1 = (unsigned long long int*)address;
-  unsigned long long int chk;
-  unsigned long long int old;
-  chk = *address1;
-  do {
-    old = chk;
-    chk = atomicCAS(address1, old,
-                    __double_as_longlong(val + __longlong_as_double(old)));
-  } while (old != chk);
-  return __longlong_as_double(old);
-}
-
-__device__
-static float atomicAdd(float* address, float val) {
-  // Should we use uint32_t ?
-  static_assert(sizeof(int) == sizeof(float), "sizeof(int) == sizeof(float)");
-  static_assert(sizeof(uint32_t) == sizeof(float), "sizeof(int) == sizeof(float)");
-  
-  int* address1 = (int*)address;
-  int chk;
-  int old;
-  chk = *address1;
-  do {
-    old = chk;
-    chk = atomicCAS(address1, old,
-                    __float_as_int(val + __int_as_float(old)));
-  } while (old != chk);
-  return __int_as_float(old);
 }
 
 template <class Funct, class BV, class BA,
@@ -224,19 +269,8 @@ void vectormap_cuda_pack_kernel2(CELLDATA<BV>* v, CELLDATA<BA>* a,
   }
 }
 
-template<class T0, class T1, class T2>
-struct cellcompare_r {
-  bool operator() (const std::tuple<T0, T1, T2> &i,
-                   const std::tuple<T0, T1, T2> &j) {
-    return ((std::get<2>(i).data) < (std::get<2>(j).data));
-  }
-};
-
-
-
 template<int _DIM, class _FP, class _BT, class _BT_ATTR>
 struct Vectormap_CUDA_Simple {
-
   using Body = _BT;
   using BodyAttr = _BT_ATTR;
 
@@ -395,18 +429,18 @@ struct Vectormap_CUDA_Simple {
   }
 #endif
 
-  /* (Two argument mapping) */
-
-  /* Implements a map on a GPU.  It extracts vectors of bodies.  It
-     uses a fixed command stream to serialize processing on each cell.
-     A call to cudaDeviceSynchronize() is needed on the caller of
-     Tapas-map.  The CTA size is the count in the first cell rounded
-     up to multiples of 256.  The tile size is the count in the first
-     cell rounded down to multiples of 64 (tile size is the count of
-     preloading of the second cells). */
-
+  /**
+   * \brief Two argument mapping
+   * Implements a map on a GPU.  It extracts vectors of bodies.  It
+   * uses a fixed command stream to serialize processing on each cell.
+   * A call to cudaDeviceSynchronize() is needed on the caller of
+   * Tapas-map.  The CTA size is the count in the first cell rounded
+   * up to multiples of 256.  The tile size is the count in the first
+   * cell rounded down to multiples of 64 (tile size is the count of
+   * preloading of the second cells). 
+   */
   template <class Funct, class Cell, class... Args>
-  void vectormap_cuda_plain(Funct f, Cell &c0, Cell &c1, Args... args) {
+  void vectormap_cuda_plain2(Funct f, Cell &c0, Cell &c1, Args... args) {
     using BV = Body;
     using BA = BodyAttr;
 
@@ -472,10 +506,10 @@ struct Vectormap_CUDA_Simple {
     const Cell &c0 = prod.first().cell();
     const Cell &c1 = prod.second().cell();
     if (c0 == c1) {
-      vectormap_cuda_plain(f, c0, c1, args...);
+      vectormap_cuda_plain2(f, c0, c1, args...);
     } else {
-      vectormap_cuda_plain(f, c0, c1, args...);
-      //vectormap_cuda_plain(f, c1, c0, args...); // mutual is not supported 
+      vectormap_cuda_plain2(f, c0, c1, args...);
+      //vectormap_cuda_plain2(f, c1, c0, args...); // mutual is not supported 
     }
   }
 
@@ -759,7 +793,7 @@ struct Vectormap_CUDA_Packed
    * @brief ctor.
    * not thread safe
    */
-  Vectormap_CUDA_Packed()
+  Vectormap_CUDA_Packed_Map2()
       : npairs_(0)
       , dvcells_(nullptr)
       , hvcells_(nullptr)
