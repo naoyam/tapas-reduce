@@ -363,6 +363,9 @@ struct GPUMapper {
     }
   }
   
+  /**
+   * @brief Map function f over product of two iterators
+   */
   template <class Funct, class T1_Iter, class ...Args>
   inline void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
     if (prod.size() > 0) {
@@ -372,9 +375,10 @@ struct GPUMapper {
                      f, args...);
     }
   }
-  
-  /* (Specialization of the Map() below by a general ProductIterator<T>
-     with ProductIterator<BodyIterator<T>>). */
+
+  /**
+   * \brief Specialization of Map() over body x body product for GPU
+   */
   template <class Funct, class...Args>
   inline void Map(Funct f, ProductIterator<BodyIterator<Cell>> prod, Args...args) {
     vmap_.map2(f, prod, args...);
