@@ -329,7 +329,7 @@ struct Vectormap_CUDA_Simple {
     int rankofnode, rankinnode, nprocsinnode;
     rank_in_node(MPI_COMM_WORLD, rankofnode, rankinnode, nprocsinnode);
 
-#else /* USE_MPI */
+#else /* #ifdef USE_MPI */
 
     int rank = 0;
     int rankinnode = 0;
@@ -571,19 +571,35 @@ struct gens<0, S...> {
   typedef seq<S...> type;
 };
 
-// Abstract base class of Applier.
-// Subclasses take a particular function type (ex. P2P) and variadic arguments.
+/**
+ * \brief Abstract base class of Applier.
+ * 
+ * Subclasses take a particular function type (ex. P2P) and variadic arguments.
+ * When map-1 and map-2 are to be executed on GPUs, there are two steps:
+ *   1. When user's function applies Map() over bodies or product of (bodies x bodies), 
+ *      the pairs and the callback functions are joined to a interaction list.
+ *   2. After all the traveresals are done, GPU invokes the callback function(s) over the
+ *      interaction list.
+ * The problem here is that Tapas has to save the function, not only the cell pairs.
+ * In addition, functions should NOT be wrapped as std::function because it prevents the compiler
+ * from inlining. Functions must be held statically. 
+ * A subclass of AbstractApplier is a template class with a parameter of `class Funct` and 
+ * they hold the callback function and variadic parameters.
+ */
 template<class Vectormap>
 class AbstractApplier {
  public:
   virtual void apply(Vectormap *vm) = 0;
 };
 
-// When tapas::Map <Body x Body>
+/**
+ * Applier for Map-2 (2-parameter map)
+ */
+// When tapas::Map <Body x Body> (corresponds to Map-2)
 template<class Vectormap, class Funct, class...Args>
-class Applier : public AbstractApplier<Vectormap> {
+class Applier2 : public AbstractApplier<Vectormap> {
   Funct f_;
-  std::tuple<Args...> args_;
+  std::tuple<Args...> args_; // variadic arguments
   std::mutex mutex_;
   cudaFuncAttributes func_attrs_;
   
@@ -603,7 +619,7 @@ class Applier : public AbstractApplier<Vectormap> {
   }
 
   // ctor. not thread safe.
-  Applier(Funct f, Args... args) : f_(f), args_(args...), func_attrs_() {
+  Applier2(Funct f, Args... args) : f_(f), args_(args...), func_attrs_() {
     using BV = Body;
     using BA = BodyAttr;
     if (func_attrs_.binaryVersion == 0) {
@@ -634,7 +650,7 @@ class Applier : public AbstractApplier<Vectormap> {
     using BV = Body;
     using BA = BodyAttr;
     using namespace std::chrono;
-
+    
     using CellTuple = std::tuple<Cell_Data<BV>, Cell_Data<BA>, Cell_Data<BV>>;
 
     auto t0 = high_resolution_clock::now();
