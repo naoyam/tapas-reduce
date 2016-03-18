@@ -22,7 +22,7 @@ ifneq (,$(findstring clang++,$(CXX)))
 	CXXFLAGS += -funroll-loops -fcolor-diagnostics -Wno-sign-compare -Wno-unused-function
 else ifneq (, $(findstring g++, $(CXX)))
 	CXXFLAGS += -funroll-loops -fdiagnostics-color=auto \
-							-Wno-sign-compare -Wno-unknown-pragmas -Wno-unused-function -Wunused-function
+							-Wno-sign-compare -Wno-unknown-pragmas -Wno-unused-function
 else ifneq (, $(findstring icpc, $(CXX)))
 endif
 
