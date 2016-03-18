@@ -112,7 +112,7 @@ void* mpi_sendbuf_cast(T* p) {
 // MPI-related utilities and wrappers
 // TODO: wrap them as a pluggable policy/traits class
 template<class T> struct MPI_DatatypeTraits {
-  static constexpr MPI_Datatype type() {
+  static MPI_Datatype type() {
     return MPI_BYTE;
   }
   static constexpr bool IsEmbType() {
