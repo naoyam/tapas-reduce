@@ -56,6 +56,9 @@ namespace iter = tapas::iterator;
 
 namespace tapas {
 
+
+
+
 /**
  * @brief Provides MPI-based distributed SFC-based octree partitioning
  */
@@ -371,6 +374,13 @@ class Cell: public tapas::BasicCell<TSP> {
 
   Mapper& mapper() { return data_->mapper_; }
   const Mapper &mapper() const { return data_->mapper; }
+
+  /**
+   * 'Shortest' distance function
+   */
+  inline static FP DistShortest(Cell &c1, Cell &2) {
+  }
+
 
  protected:
   // utility/accessor functions
@@ -1332,6 +1342,7 @@ struct HOT {
 
 template<class _TSP>
 struct Tapas2 {
+  using FP = typename _TSP::FP;
   using TSP = _TSP;
   using Partitioner = typename TSP::template Partitioner<TSP>;
   using Region = tapas::Region<TSP>;
