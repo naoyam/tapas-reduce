@@ -1,8 +1,3 @@
-# Build using g++
-# CXX = g++
-# MPICXX = mpicxx -cxx=g++ -DUSE_MPI
-# CXXFLAGS := -std=c++11 -Wall -Wextra -O0
-# CXXFLAGS += -g -g3 -ggdb -Wall -fno-elide-constructors
 
 MODE ?= release
 
@@ -24,7 +19,7 @@ CXXFLAGS := -std=c++11 -Wall -Wextra -fno-elide-constructors
 #PROF := -pg
 
 ifneq (,$(findstring clang++,$(CXX)))
-	CXXFLAGS += -funroll-loops -fcolor-diagnostics -Wno-sign-compare
+	CXXFLAGS += -funroll-loops -fcolor-diagnostics -Wno-sign-compare -Wno-unused-function
 else ifneq (, $(findstring g++, $(CXX)))
 	CXXFLAGS += -funroll-loops -fdiagnostics-color=auto \
 							-Wno-sign-compare -Wno-unknown-pragmas -Wno-unused-function -Wunused-function
@@ -58,10 +53,10 @@ bh: bh.o
 	$(CXX) $^ -o $@
 
 bh_mpi.o: bh.cc
-	$(MPICXX) -o $@ $(CXXFLAGS)  -I$(TAPAS_DIR)/include $(OPT) $(DEBUG) $(LOG) -c $^ $(PROF)
+	$(MPICXX) -DUSE_MPI -o $@ $(CXXFLAGS)  -I$(TAPAS_DIR)/include $(OPT) $(DEBUG) $(LOG) -c $^ $(PROF)
 
 bh_mpi: bh_mpi.o
-	$(MPICXX) $^ $(PROF) -o $@ $(PROF)
+	$(MPICXX) -DUSE_MPI $^ $(PROF) -o $@ $(PROF)
 
 clean:
 	$(RM) -f *.o bh bh_mpi

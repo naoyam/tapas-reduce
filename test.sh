@@ -142,7 +142,7 @@ echo --------------------------------------------------------------------
 
 SRC_DIR=$SRC_ROOT/cpp/tests
 
-echoCyan make MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=release -C $SRC_DIR clean all
+echoCyan make MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" VERBOSE=1 MODE=release -C $SRC_DIR clean all
 make MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=release -C $SRC_DIR clean all
 
 for t in $SRC_DIR/test_*; do
@@ -178,7 +178,8 @@ fi
 SRC_DIR=$SRC_ROOT/sample/barnes-hut
 BIN=$SRC_DIR/bh_mpi
 
-make MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=release -C $SRC_DIR clean all
+echoCyan make CXX=\"${CXX}\" CC=\"${CC}\" MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" VERBOSE=1 MODE=release -C $SRC_DIR clean all
+make CXX=${CXX} CC=${CC} MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=release -C $SRC_DIR clean all
 
 for np in ${NP[@]}; do
     for nb in ${NB[@]}; do
