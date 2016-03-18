@@ -901,9 +901,9 @@ struct LET {
     const int d = data.max_depth_;
     TAPAS_ASSERT(d <= SFC::MaxDepth());
 
+#ifdef TAPAS_DEBUG
     const long ncells = data.ht_.size();
     const long nall   = (pow(8.0, d+1) - 1) / 7;
-#ifdef TAPAS_DEBUG
     BarrierExec([&](int,int) {
         std::cout << "Cells: " << ncells << std::endl;
         std::cout << "depth: " << d << std::endl;
@@ -1093,8 +1093,8 @@ struct LET {
     //   1. Pre-comm computation
     //   2. Communication (Alltoallv)
     //   3. Post-comm computation
-    double bt_all, et_all;
-    double bt, et;
+    double bt_all=0, et_all=0;
+    double bt=0, et=0;
 
     // ===== Pre-comm computation =====
     // Create and send responses to the src processes of requests.
