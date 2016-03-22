@@ -2,6 +2,7 @@
 #define TAPAS_VEC_H_
 
 #include <cstdarg>
+#include <initializer_list>
 
 #include "tapas/common.h"
 
@@ -11,21 +12,27 @@ template <int DIM, class FP>
 class Vec {
   FP x_[DIM];
  public:
+  static const int Dim = DIM;
+  
   Vec() {}
   explicit Vec(const FP* v) {
     for (int i = 0; i < DIM; ++i) {
       x_[i] = v[i];
     }
   }
-#if 0  
+
+#if 0
   template <class... Args>  
-  explicit Vec(Args... args): x_{args...} {}  
+  explicit Vec(Args... args): x_{args...} {}
+#endif
+  Vec(std::initializer_list<FP> list) : x_(list) { }
+  
   Vec(const Vec<DIM, FP> &v) {
     for (int i = 0; i < DIM; ++i) {
       x_[i] = v[i];
     }
   }
-#endif
+
   Vec(const FP &x1) {
     for (int i = 0; i < DIM; ++i) {
       x_[i] = x1;
@@ -39,6 +46,13 @@ class Vec {
       const FP &x3, const FP &x4):
       x_{x1, x2, x3, x4} {}
 
+  FP norm() const {
+    FP sum = 0;
+    for (int i = 0; i < DIM; i++) {
+      sum += x_[i] * x_[i];
+    }
+    return sum;
+  }
 
   FP &operator[](int i) {
     return x_[i];

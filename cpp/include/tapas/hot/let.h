@@ -6,6 +6,7 @@
 #include <tapas/iterator.h>
 #include <tapas/debug_util.h>
 #include <tapas/hot/mapper.h>
+#include <tapas/hot/distance.h>
 
 using tapas::debug::BarrierExec;
 
@@ -570,6 +571,23 @@ struct LET {
       return SFC::GetDepth(key_);
     }
 
+    /**
+     * \brief Distance Function
+     */
+    inline FP Distance(ProxyCell &rhs, DistanceType t) {
+      switch(t) {
+        case DistanceType::Edge:
+          assert(0);
+          return 0;
+          break;
+        case DistanceType::Center:
+          return (this->center() - rhs.center()).norm();
+        default:
+          assert(0);
+          return 0;
+      }
+    }
+    
     /**
      * \fn FP ProxyCell::width(FP d) const
      */

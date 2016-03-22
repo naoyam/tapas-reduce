@@ -45,6 +45,7 @@
 #include "tapas/hot/let.h"
 #include "tapas/hot/report.h"
 #include "tapas/hot/mapper.h"
+#include "tapas/hot/distance.h"
 
 #define DEBUG_SENDRECV
 
@@ -376,11 +377,19 @@ class Cell: public tapas::BasicCell<TSP> {
   const Mapper &mapper() const { return data_->mapper; }
 
   /**
-   * 'Shortest' distance function
+   * \brief Distance Function
    */
-  inline static FP DistShortest(Cell &c1, Cell &2) {
+  inline FP Distance(const Cell &rhs, tapas::DistanceType t) {
+    switch(t) {
+      case DistanceType::Edge:
+        assert(0);
+        break;
+      case DistanceType::Center:
+        return (this->center() - rhs.center()).norm();
+      default:
+        assert(0);
+    }
   }
-
 
  protected:
   // utility/accessor functions

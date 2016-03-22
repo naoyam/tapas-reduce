@@ -113,6 +113,13 @@ echo CC=$(which ${CC})
 echo CXX=$(which ${CXX})
 echo MPICXX=$(which mpicxx)
 
+echo Checking if compiler works
+echo ${CXX} --version
+${CXX} --version || {
+    echoRed "ERROR: Compiler '${CXX}' seems to be broken"
+    exit 1
+}
+
 echo Detecting mpicxx implementation
 
 # detect MPI implementation
@@ -239,7 +246,8 @@ fi
     
 SRC_DIR=$SRC_ROOT/sample/exafmm-dev-13274dd4ac68/examples
 
-make VERBOSE=1 MODE=release -C $SRC_DIR clean tapas
+echoCyan env CC=${CC} CXX=${CXX} MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" make VERBOSE=1 MODE=release -C $SRC_DIR clean tapas
+env CC=${CC} CXX=${CXX} MPICC="${MPICC}" MPICXX="${MPICXX}" make VERBOSE=1 MODE=release -C $SRC_DIR clean tapas
 
 function accuracyCheck() {
     local fname=$1

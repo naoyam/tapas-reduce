@@ -33,6 +33,7 @@
 #include "tapas/logging.h"
 #include "tapas/debug_util.h"
 #include "tapas/iterator.h"
+#include "tapas/hot/distance.h"
 //#include "tapas/morton_common.h"
 #include "tapas/sfc_morton.h"
 #include "tapas/single_node_mapper.h"
@@ -117,7 +118,8 @@ class Cell: public tapas::BasicCell<TSP> {
   typedef typename TSP::BodyAttr BodyAttrType; // to be fixed
   typedef typename TSP::BodyAttr BodyAttr;
   typedef typename TSP::Threading Threading;
-  
+
+  using FP = typename TSP::FP;
   using SFC = typename TSP::SFC;
   using KeyType = typename SFC::KeyType;
 
@@ -149,24 +151,36 @@ class Cell: public tapas::BasicCell<TSP> {
   static void PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
   static void PreOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
   
-    KeyType key() const { return key_; }
+  KeyType key() const { return key_; }
 
   bool operator==(const Cell &c) const;
   bool operator<(const Cell &c) const;
-    template <class T>
-    bool operator==(const T &) const { return false; }
-    bool IsRoot() const;
-    bool IsLeaf() const;
-    int nsubcells() const;
-    size_t local_nb() const { return nb_; } 
-    Cell &subcell(int idx) const;
-    Cell &parent() const;
+  template <class T>
+  bool operator==(const T &) const { return false; }
+  bool IsRoot() const;
+  bool IsLeaf() const;
+  int nsubcells() const;
+  size_t local_nb() const { return nb_; } 
+  Cell &subcell(int idx) const;
+  Cell &parent() const;
 
   bool IsLocal() const { return true; }
 
   INLINE Mapper& mapper() { return mapper_; }
   INLINE const Mapper& mapper() const { return mapper_; }
-  
+
+  inline FP Distance(const Cell &rhs, tapas::DistanceType t) {
+    switch(t) {
+      case DistanceType::Edge:
+        assert(0);
+        break;
+      case DistanceType::Center:
+        return (this->center() - rhs.center()).norm();
+      default:
+        assert(0);
+    }
+  }
+
 #ifdef DEPRECATED
   typename TSP::Body &particle(index_t idx) const {
     return body(idx);

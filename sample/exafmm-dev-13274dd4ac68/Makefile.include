@@ -25,11 +25,11 @@ MPICXX ?= mpicxx -cxx=$(CXX) # mpich's mpicxx
 ifneq (,$(findstring clang++,$(CXX)))
 	CXX    += -std=c++11 -Wall -Wextra -O2 -funroll-loops -fcolor-diagnostics -lrt -Wno-unused-function
 	MPICXX += -std=c++11 -Wall -Wextra -O2 -funroll-loops -fcolor-diagnostics -lrt -Wno-unused-function
-else ifneq (,$(findstring g++, $(CXX)))
+else ifneq (,$(findstring g++,$(CXX)))
 	CXX    += -std=c++11 -Wall -Wextra -O2 -funroll-loops -fdiagnostics-color=auto -fno-openmp -lrt -Wno-unused-function
 	MPICXX += -std=c++11 -Wall -Wextra -O2 -funroll-loops -fdiagnostics-color=auto -fno-openmp -lrt -Wno-unused-function
-else ifneq (,$(findstring icpc, $(CXX)))
-# for ICC, we don't use -static option (as well as -fast which implicitly includes it) because it causes a linking error.
+else ifneq (,$(findstring icpc,$(CXX)))
+	# for ICC, we don't use -static option (as well as -fast which implicitly includes it) because it causes a linking error.
 	CXX    += -std=c++11 -Wall -Wextra -funroll-loops -xHOST -O3 -no-prec-div -fp-model fast=2 -fno-openmp -lrt \
             -no-inline-max-per-routine -no-inline-max-per-compile
 	MPICXX += -std=c++11 -Wall -Wextra -funroll-loops -xHOST -O3 -no-prec-div -fp-model fast=2 -fno-openmp -lrt \
