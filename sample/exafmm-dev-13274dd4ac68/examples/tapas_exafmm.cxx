@@ -135,7 +135,7 @@ struct FMM_DTT {
     //if (Ci.nb() == 0 || Cj.nb() == 0) return;
 
     //real_t R2 = (Ci.center() - Cj.center()).norm();
-    real_t R2 = Ci.Distance(Cj, tapas::DistanceType::Center);
+    real_t R2 = Ci.Distance(Cj, tapas::Center);
     vec3 Xperiodic = 0; // dummy; periodic is not ported
     
     real_t Ri = 0;

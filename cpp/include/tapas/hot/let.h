@@ -574,19 +574,13 @@ struct LET {
     /**
      * \brief Distance Function
      */
-    inline FP Distance(ProxyCell &rhs, DistanceType t) {
-      switch(t) {
-        case DistanceType::Edge:
-          assert(0);
-          return 0;
-          break;
-        case DistanceType::Center:
-          return (this->center() - rhs.center()).norm();
-        default:
-          assert(0);
-          return 0;
-      }
+    inline FP Distance(ProxyCell &rhs, tapas::CenterClass) {
+      return tapas::Distance<tapas::CenterClass, FP>::Calc(*this, rhs);
     }
+  
+    //inline FP Distance(Cell &rhs, tapas::Edge) {
+    //  return tapas::Distance<tapas::Edge, FP>::Calc(*this, rhs);
+    //}
     
     /**
      * \fn FP ProxyCell::width(FP d) const

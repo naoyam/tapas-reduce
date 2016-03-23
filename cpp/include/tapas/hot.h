@@ -376,20 +376,13 @@ class Cell: public tapas::BasicCell<TSP> {
   Mapper& mapper() { return data_->mapper_; }
   const Mapper &mapper() const { return data_->mapper; }
 
-  /**
-   * \brief Distance Function
-   */
-  inline FP Distance(const Cell &rhs, tapas::DistanceType t) {
-    switch(t) {
-      case DistanceType::Edge:
-        assert(0);
-        break;
-      case DistanceType::Center:
-        return (this->center() - rhs.center()).norm();
-      default:
-        assert(0);
-    }
+  inline FP Distance(Cell &rhs, tapas::CenterClass) {
+    return tapas::Distance<tapas::CenterClass, FP>::Calc(*this, rhs);
   }
+  
+  //inline FP Distance(Cell &rhs, tapas::Edge) {
+  //  return tapas::Distance<tapas::Edge, FP>::Calc(*this, rhs);
+  //}
 
  protected:
   // utility/accessor functions
