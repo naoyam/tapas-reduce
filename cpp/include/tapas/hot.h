@@ -38,6 +38,7 @@
 #include "tapas/sfc_morton.h"
 #include "tapas/threading/default.h"
 #include "tapas/mpi_util.h"
+#include "tapas/distance.h"
 
 #include "tapas/hot/shared_data.h"
 #include "tapas/hot/buildtree.h"
@@ -45,7 +46,6 @@
 #include "tapas/hot/let.h"
 #include "tapas/hot/report.h"
 #include "tapas/hot/mapper.h"
-#include "tapas/hot/distance.h"
 
 #define DEBUG_SENDRECV
 

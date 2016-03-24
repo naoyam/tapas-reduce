@@ -25,7 +25,9 @@ class Vec {
   template <class... Args>  
   explicit Vec(Args... args): x_{args...} {}
 #endif
-  Vec(std::initializer_list<FP> list) : x_(list) { }
+  Vec(std::initializer_list<FP> list) {
+    std::copy(list.begin(), list.end(), x_);
+  }
   
   Vec(const Vec<DIM, FP> &v) {
     for (int i = 0; i < DIM; ++i) {

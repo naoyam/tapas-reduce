@@ -33,7 +33,7 @@
 #include "tapas/logging.h"
 #include "tapas/debug_util.h"
 #include "tapas/iterator.h"
-#include "tapas/hot/distance.h"
+#include "tapas/distance.h"
 //#include "tapas/morton_common.h"
 #include "tapas/sfc_morton.h"
 #include "tapas/single_node_mapper.h"

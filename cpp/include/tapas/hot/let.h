@@ -5,8 +5,8 @@
 
 #include <tapas/iterator.h>
 #include <tapas/debug_util.h>
+#include <tapas/distance.h>
 #include <tapas/hot/mapper.h>
-#include <tapas/hot/distance.h>
 
 using tapas::debug::BarrierExec;
 
