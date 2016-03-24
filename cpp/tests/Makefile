@@ -1,5 +1,5 @@
 .PHONY : all clean
-targets = test_set test_morton_key test_allgatherv test_alltoallv test_cpptricks test_distance
+targets = test_set test_morton_key test_allgatherv test_alltoallv test_cpptricks test_geometry
 all: $(targets)
 
 CXXFLAGS := -std=c++11 -Wall -Wextra -I../include -Wno-sign-compare -DUSE_MPI -Werror
@@ -9,4 +9,5 @@ $(targets): % : %.cpp
 	$(MPICXX) $(CXXFLAGS) $< -o $@
 
 clean:
+	find . -perm -u+x -name "test_*" -print -exec rm {} \;
 	rm -f $(targets)

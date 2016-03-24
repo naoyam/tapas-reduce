@@ -4,7 +4,7 @@
 
 #include <tapas/common.h>
 #include <tapas/test.h>
-#include <tapas/distance.h>
+#include <tapas/geometry.h>
 
 SETUP_TEST;
 
@@ -66,8 +66,6 @@ void Test_Center() {
   tctr = sctr; // answer
   dist = tapas::Distance<tapas::CenterClass, double>::CalcApprox(tmax, tmin, smax, smin);
   dist_ans = 0 * 0;
-  std::cout << "dist = " << sqrt(dist[0]) << std::endl;
-  std::cout << "ditt_ans = " << sqrt(dist_ans[0]) << std::endl;
   ASSERT_TRUE(Close(dist, dist_ans));
 
   // Case 4
@@ -80,8 +78,6 @@ void Test_Center() {
   tctr = sctr; // answer
   dist = tapas::Distance<tapas::CenterClass, double>::CalcApprox(tmax, tmin, smax, smin);
   dist_ans = 0 * 0;
-  //std::cout << "dist = " << sqrt(dist[0]) << std::endl;
-  //std::cout << "ditt_ans = " << sqrt(dist_ans[0]) << std::endl;
   ASSERT_TRUE(Close(dist, dist_ans));
   
   // Case 5

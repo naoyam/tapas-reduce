@@ -38,7 +38,7 @@
 #include "tapas/sfc_morton.h"
 #include "tapas/threading/default.h"
 #include "tapas/mpi_util.h"
-#include "tapas/distance.h"
+#include "tapas/geometry.h"
 
 #include "tapas/hot/shared_data.h"
 #include "tapas/hot/buildtree.h"
