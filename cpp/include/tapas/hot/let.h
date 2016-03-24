@@ -134,8 +134,6 @@ struct InteractionPred {
       return SplitType::Body;
     }
 
-    // ここまでOK
-
     // else
     const auto &p1 = c1.body(0);
     real_t d = std::sqrt(distR2(p1, src_key));
@@ -188,22 +186,6 @@ struct LET {
     inline const ProxyBodyAttr& operator=(const T &) const {
       return *this;
     }
-
-#if 0
-    INLINE const ProxyBodyAttr& operator=(const BodyAttrType &v) const {
-      // empty
-      // In Auto-LET mechanims, assignment statement (using operator=) is replaced with this overload.
-      // From a point of view of LET construction, user's functions have both of necessary and unnecessary arithmetic
-      // operation. We only need the necessary operations, so we expetct the compiler does the job for us.
-      // Assignment to Body or BodyAttr is overloaded by this operator=(), which is empty, and
-      // optimized out by the compiler.
-#if defined(AUTO_LET_SLOW)
-      dummy_value = v.x;
-#else
-#endif
-      return *this;
-    }
-#endif /* if 0 */
   }; // class ProxyBodyAttr
 
   class ProxyAttr : public CellAttrType {
@@ -751,13 +733,7 @@ struct LET {
     list_attr.insert(src_key);
 
     // Approx/Split branch
-#if defined(MANUAL_LET)
-    SplitType split = InteractionPred<TSP>(data)(trg_key, src_key);
-#elif defined(AUTO_LET_SLOW)
     SplitType split = LET<TSP>::ProxyCell::Pred(trg_key, src_key, data, f, args...); // automated predicator object
-#else
-    SplitType split = LET<TSP>::ProxyCell::Pred(trg_key, src_key, data, f, args...); // automated predicator object
-#endif
 
     switch(split) {
       case SplitType::SplitBoth:
