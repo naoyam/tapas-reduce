@@ -30,7 +30,7 @@ void Test_Center() {
   V tmax = {1}, tmin = {-1};
   V smax, smin, dist, dist_ans;
   V sctr, tctr;
-  const V R = 0.5;
+  V R = 0.5;
 
   // Case 1
   // |---+---|                 src
@@ -80,6 +80,8 @@ void Test_Center() {
   tctr = sctr; // answer
   dist = tapas::Distance<tapas::CenterClass, double>::CalcApprox(tmax, tmin, smax, smin);
   dist_ans = 0 * 0;
+  //std::cout << "dist = " << sqrt(dist[0]) << std::endl;
+  //std::cout << "ditt_ans = " << sqrt(dist_ans[0]) << std::endl;
   ASSERT_TRUE(Close(dist, dist_ans));
   
   // Case 5
@@ -93,6 +95,22 @@ void Test_Center() {
   dist = tapas::Distance<tapas::CenterClass, double>::CalcApprox(tmax, tmin, smax, smin);
   dist_ans = 0 * 0;
   ASSERT_TRUE(Close(dist, dist_ans));
+  
+  // Case 6
+  // |-------------+-------------| src
+  //   |----------+----------|   trg
+  //  -1                     1
+  R = 2.5;
+  sctr = 0.1;
+  smin = sctr - R/2;
+  smax = sctr + R/2;
+  tctr = 0.0;
+  dist = tapas::Distance<tapas::CenterClass, double>::CalcApprox(tmax, tmin, smax, smin);
+  dist_ans = 0.1 * 0.1;
+  //std::cout << "dist = " << sqrt(dist[0]) << std::endl;
+  //std::cout << "ditt_ans = " << sqrt(dist_ans[0]) << std::endl;
+  ASSERT_TRUE(Close(dist, dist_ans));
+  
 }
 
 int main(int argc, char **argv) {
