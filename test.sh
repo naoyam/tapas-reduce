@@ -152,12 +152,13 @@ SRC_DIR=$SRC_ROOT/cpp/tests
 echoCyan make MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" VERBOSE=1 MODE=release -C $SRC_DIR clean all
 make MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=release -C $SRC_DIR clean all
 
-for t in $SRC_DIR/test_*; do
-    if [[ -x $t ]]; then
-        echoCyan $t 
-        $t
-    fi
+for t in `find $SRC_DIR -perm -u+x -name "test_*"`; do
+    for NP in 1 2 3 4; do
+        echoCyan mpiexec -np $NP $t 
+        mpiexec -np $NP $t
+    done
 done
+exit 0
 
 echo --------------------------------------------------------------------
 echo Barnes Hut
