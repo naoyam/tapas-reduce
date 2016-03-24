@@ -9,6 +9,7 @@
 SETUP_TEST;
 
 using V = tapas::Vec<1, double>;
+using V2 = tapas::Vec<2, double>;
 
 bool Close(double a, double b) {
   return fabs(a - b) < 1e-6;
@@ -26,7 +27,40 @@ bool Close(V a, V b) {
   return fabs(a[0] - b[0]) < 1e-10;
 }
 
-void Test_Center() {
+void Test_Center2d() {
+  {
+    V2 tmax = {0,0}, tmin = {-1,-1};
+    V2 smax = {1,1}, smin = { 0, 0};
+
+    // Case 1
+    double dist = tapas::Distance<tapas::CenterClass, double>::CalcApprox(tmax, tmin, smax, smin);
+    double dist_ans = 2;
+    ASSERT_TRUE(Close(dist, dist_ans));
+  }
+  
+  {
+    // Case 2
+    V2 tmax = {0,0}, tmin = {-1,-1};
+    V2 smax = {1,1}, smin = {0.5, 0.5};
+
+    double dist = tapas::Distance<tapas::CenterClass, double>::CalcApprox(tmax, tmin, smax, smin);
+    double dist_ans = 2;
+    ASSERT_TRUE(Close(dist, dist_ans));
+  }
+
+  {
+    // Case 3
+    V2 tmax = {0,0}, tmin = {-1,-1};
+    V2 smax = {1,0}, smin = {0.5, - 0.5};
+
+    double dist = tapas::Distance<tapas::CenterClass, double>::CalcApprox(tmax, tmin, smax, smin);
+    double dist_ans = 1;
+    ASSERT_TRUE(Close(dist, dist_ans));
+  }
+
+}
+
+void Test_Center1d() {
   V tmax = {1}, tmin = {-1};
   V smax, smin, dist, dist_ans;
   V sctr, tctr;
@@ -106,13 +140,13 @@ void Test_Center() {
   //std::cout << "dist = " << sqrt(dist[0]) << std::endl;
   //std::cout << "ditt_ans = " << sqrt(dist_ans[0]) << std::endl;
   ASSERT_TRUE(Close(dist, dist_ans));
-  
 }
 
 int main(int argc, char **argv) {
   MPI_Init(&argc, &argv);
 
-  Test_Center();
+  Test_Center1d();
+  Test_Center2d();
 
   TEST_REPORT_RESULT();
   
