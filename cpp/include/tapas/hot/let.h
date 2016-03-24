@@ -156,9 +156,12 @@ struct InteractionPred {
 
 /**
  * A set of static functions to construct LET (Locally Essential Tree)
+ * 
+ * ExactLET puts no assumption on user's function but has more overhead instead.
+ * It emulates all the behavior of user's function.
  */
 template<class TSP>
-struct LET {
+struct ExactLET {
   // typedefs
   using FP = typename TSP::FP;
   using CellType = Cell<TSP>;
@@ -347,8 +350,8 @@ struct LET {
   class ProxyCell {
    public:
     // Export same type definitions as tapas::hot::Cell does.
-    using KeyType = tapas::hot::LET<TSP>::KeyType;
-    using SFC = tapas::hot::LET<TSP>::SFC;
+    using KeyType = tapas::hot::ExactLET<TSP>::KeyType;
+    using SFC = tapas::hot::ExactLET<TSP>::SFC;
 
     using attr_type = ProxyAttr;
     using CellAttrType = ProxyAttr;
@@ -733,7 +736,7 @@ struct LET {
     list_attr.insert(src_key);
 
     // Approx/Split branch
-    SplitType split = LET<TSP>::ProxyCell::Pred(trg_key, src_key, data, f, args...); // automated predicator object
+    SplitType split = ExactLET<TSP>::ProxyCell::Pred(trg_key, src_key, data, f, args...); // automated predicator object
 
     switch(split) {
       case SplitType::SplitBoth:

@@ -168,7 +168,8 @@ class Cell: public tapas::BasicCell<TSP> {
   friend class Partitioner<TSP>;
   friend class iter::BodyIterator<Cell>;
 
-  friend struct LET<TSP>;
+  friend struct ExactLET<TSP>;
+  using LET = ExactLET<TSP>;
   
   //========================================================
   // Typedefs 
@@ -190,7 +191,7 @@ class Cell: public tapas::BasicCell<TSP> {
 
   using Body = BodyType;
   using BodyAttr = BodyAttrType;
-  using Mapper = typename TSP::template Mapper<CellType, Body, LET<TSP>>;
+  using Mapper = typename TSP::template Mapper<CellType, Body, LET>;
   
   using BodyIterator = iter::BodyIterator<Cell>;
   using SubCellIterator = iter::SubCellIterator<Cell>;
