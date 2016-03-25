@@ -43,9 +43,14 @@
 #include "tapas/hot/shared_data.h"
 #include "tapas/hot/buildtree.h"
 #include "tapas/hot/global_tree.h"
-#include "tapas/hot/exact_let.h"
 #include "tapas/hot/report.h"
 #include "tapas/hot/mapper.h"
+
+#ifdef EXACT_LET
+# include "tapas/hot/exact_let.h"
+#else
+# include "tapas/hot/opt_let.h"
+#endif
 
 #define DEBUG_SENDRECV
 
@@ -56,9 +61,6 @@ namespace iter = tapas::iterator;
 }
 
 namespace tapas {
-
-
-
 
 /**
  * @brief Provides MPI-based distributed SFC-based octree partitioning
@@ -168,8 +170,13 @@ class Cell: public tapas::BasicCell<TSP> {
   friend class Partitioner<TSP>;
   friend class iter::BodyIterator<Cell>;
 
+#ifdef EXACT_LET
   friend struct ExactLET<TSP>;
   using LET = ExactLET<TSP>;
+#else
+  friend struct OptLET<TSP>;
+  using LET = OptLET<TSP>;
+#endif
   
   //========================================================
   // Typedefs 

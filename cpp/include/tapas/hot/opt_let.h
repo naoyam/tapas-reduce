@@ -7,48 +7,15 @@
 #include <tapas/debug_util.h>
 #include <tapas/geometry.h>
 #include <tapas/hot/mapper.h>
+#include <tapas/hot/let_common.h>
 
 using tapas::debug::BarrierExec;
 
-#if defined(AUTO_LET_SLOW)
-#  warning "Using Auto/Slow LET"
-#elif defined(MANUAL_LET)
-#  warning "Using Manual LET"
-#elif defined(OLD_LET_TRAVERSE)
-#  warning "Using old LET traverse"
-#endif
-
 namespace tapas {
-
-#ifdef AUTO_LET_SLOW
-volatile double dummy_value = 0;
-#endif
-
 namespace hot {
 
 template<class TSP> class Cell;
 template<class TSP> class Partitioner;
-
-/**
- * Enum values of predicate function
- */
-enum class SplitType {
-  Approx,       // Compute using right cell's attribute
-  Body,         // Compute using right cell's bodies
-  SplitLeft,    // Split Left (local) cell
-  SplitRight,   // Split Right (remote) cell
-  SplitBoth,    // Split both cells
-  None,         // Nothing. Use when a target cell isn't local in Traverse
-};
-
-#define USING_TAPAS_TYPES(TSP)                          \
-  using FP = typename TSP::FP;                          \
-  using BodyType = TSP::BT::type BodyType;              \
-  using BodyAttrType = TSP::BT_ATTR;                    \
-  using SFC = typename TSP::SFC;                        \
-  using KeyType = typename CellType::KeyType;           \
-  using CellType = Cell<TSP>;                           \
-  using Data = typename CellType::Data
 
 template<class TSP>
 struct InteractionPred {
@@ -157,11 +124,11 @@ struct InteractionPred {
 /**
  * A set of static functions to construct LET (Locally Essential Tree)
  * 
- * ExactLET puts no assumption on user's function but has more overhead instead.
+ * OptLET puts no assumption on user's function but has more overhead instead.
  * It emulates all the behavior of user's function.
  */
 template<class TSP>
-struct ExactLET {
+struct OptLET {
   // typedefs
   using FP = typename TSP::FP;
   using CellType = Cell<TSP>;
@@ -350,8 +317,8 @@ struct ExactLET {
   class ProxyCell {
    public:
     // Export same type definitions as tapas::hot::Cell does.
-    using KeyType = tapas::hot::ExactLET<TSP>::KeyType;
-    using SFC = tapas::hot::ExactLET<TSP>::SFC;
+    using KeyType = tapas::hot::OptLET<TSP>::KeyType;
+    using SFC = tapas::hot::OptLET<TSP>::SFC;
 
     using attr_type = ProxyAttr;
     using CellAttrType = ProxyAttr;
@@ -736,7 +703,7 @@ struct ExactLET {
     list_attr.insert(src_key);
 
     // Approx/Split branch
-    SplitType split = ExactLET<TSP>::ProxyCell::Pred(trg_key, src_key, data, f, args...); // automated predicator object
+    SplitType split = OptLET<TSP>::ProxyCell::Pred(trg_key, src_key, data, f, args...); // automated predicator object
 
     switch(split) {
       case SplitType::SplitBoth:
@@ -1156,7 +1123,7 @@ struct ExactLET {
   }
 
   /**
-   * \brief Build Locally essential tree
+   * \brief Build Locally essential tree (main function of LET)
    */
   template<class UserFunct, class...Args>
   static void Exchange(CellType &root, UserFunct f, Args...args) {

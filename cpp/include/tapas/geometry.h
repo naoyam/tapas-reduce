@@ -5,6 +5,19 @@
 
 namespace tapas {
 
+template<typename VEC>
+bool Separated(VEC &xmax, VEC &xmin, VEC &ymax, VEC &ymin) {
+  constexpr int Dim = VEC::Dim;
+  
+  bool separated = false;
+
+  for (int d = 0; d < Dim; d++) {
+    separated |= (xmax[d] <= ymin[d] || ymax[d] <= xmin[d]);
+  }
+
+  return separated;
+}
+
 class CenterClass {} Center;
 class EdgeClass{} Edge;
 

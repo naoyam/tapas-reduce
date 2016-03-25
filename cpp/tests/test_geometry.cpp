@@ -142,11 +142,62 @@ void Test_Center1d() {
   ASSERT_TRUE(Close(dist, dist_ans));
 }
 
+void Test_Separated() {
+  using V1 = tapas::Vec<1, double>;
+  using V2 = tapas::Vec<2, double>;
+
+  {
+    V1 xmax = {1.0}, xmin = {0.0}, ymax = {3.0}, ymin = {1.1};
+    ASSERT_TRUE(tapas::Separated(xmax, xmin, ymax, ymin));
+    ASSERT_TRUE(tapas::Separated(ymax, ymin, xmax, xmin));
+  }
+  
+  {
+    V1 xmax = {1.0}, xmin = {0.0}, ymax = {3.0}, ymin = {1.1};
+    ASSERT_TRUE(tapas::Separated(ymax, ymin, xmax, xmin));
+    ASSERT_TRUE(tapas::Separated(ymax, ymin, xmax, xmin));
+  }
+  
+  {
+    V1 xmax = {1.0}, xmin = {0.0}, ymax = {3.0}, ymin = {1.1};
+    ASSERT_TRUE(!tapas::Separated(xmax, xmin, xmax, xmin));
+    ASSERT_TRUE(!tapas::Separated(ymax, ymin, ymax, ymin));
+  }
+
+  {
+    V2 xmax = { 1, 1};
+    V2 xmin = { 0, 0};
+    V2 ymax = { 0, 0};
+    V2 ymin = {-1,-1};
+    ASSERT_TRUE(tapas::Separated(xmax, xmin, ymax, ymin));
+    ASSERT_TRUE(tapas::Separated(ymax, ymin, xmax, xmin));
+  }
+  
+  {
+    V2 xmax = { 2, 0};
+    V2 xmin = { 1,-1};
+    V2 ymax = { 0, 0};
+    V2 ymin = {-1,-1};
+    ASSERT_TRUE(tapas::Separated(xmax, xmin, ymax, ymin));
+    ASSERT_TRUE(tapas::Separated(ymax, ymin, xmax, xmin));
+  }
+  
+  {
+    V2 xmax = { 1, 1};
+    V2 xmin = { -0.1, -0.1};
+    V2 ymax = { 0, 0};
+    V2 ymin = {-1,-1};
+    ASSERT_TRUE(!tapas::Separated(xmax, xmin, ymax, ymin));
+    ASSERT_TRUE(!tapas::Separated(ymax, ymin, xmax, xmin));
+  }
+}
+
 int main(int argc, char **argv) {
   MPI_Init(&argc, &argv);
 
   Test_Center1d();
   Test_Center2d();
+  Test_Separated();
 
   TEST_REPORT_RESULT();
   

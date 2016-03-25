@@ -7,48 +7,15 @@
 #include <tapas/debug_util.h>
 #include <tapas/geometry.h>
 #include <tapas/hot/mapper.h>
+#include <tapas/hot/let_common.h>
 
 using tapas::debug::BarrierExec;
 
-#if defined(AUTO_LET_SLOW)
-#  warning "Using Auto/Slow LET"
-#elif defined(MANUAL_LET)
-#  warning "Using Manual LET"
-#elif defined(OLD_LET_TRAVERSE)
-#  warning "Using old LET traverse"
-#endif
-
 namespace tapas {
-
-#ifdef AUTO_LET_SLOW
-volatile double dummy_value = 0;
-#endif
-
 namespace hot {
 
 template<class TSP> class Cell;
 template<class TSP> class Partitioner;
-
-/**
- * Enum values of predicate function
- */
-enum class SplitType {
-  Approx,       // Compute using right cell's attribute
-  Body,         // Compute using right cell's bodies
-  SplitLeft,    // Split Left (local) cell
-  SplitRight,   // Split Right (remote) cell
-  SplitBoth,    // Split both cells
-  None,         // Nothing. Use when a target cell isn't local in Traverse
-};
-
-#define USING_TAPAS_TYPES(TSP)                          \
-  using FP = typename TSP::FP;                          \
-  using BodyType = TSP::BT::type BodyType;              \
-  using BodyAttrType = TSP::BT_ATTR;                    \
-  using SFC = typename TSP::SFC;                        \
-  using KeyType = typename CellType::KeyType;           \
-  using CellType = Cell<TSP>;                           \
-  using Data = typename CellType::Data
 
 template<class TSP>
 struct InteractionPred {
