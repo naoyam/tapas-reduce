@@ -123,7 +123,7 @@ struct InteractionPred {
 
 /**
  * A set of static functions to construct LET (Locally Essential Tree)
- * 
+ *
  * OptLET puts no assumption on user's function but has more overhead instead.
  * It emulates all the behavior of user's function.
  */
@@ -411,13 +411,14 @@ struct OptLET {
      * \brief Distance Function
      */
     inline FP Distance(ProxyCell &rhs, tapas::CenterClass) {
+
       return tapas::Distance<tapas::CenterClass, FP>::Calc(*this, rhs);
     }
-  
+
     //inline FP Distance(Cell &rhs, tapas::Edge) {
     //  return tapas::Distance<tapas::Edge, FP>::Calc(*this, rhs);
     //}
-    
+
     /**
      * \fn FP ProxyCell::width(FP d) const
      */
@@ -666,15 +667,13 @@ struct OptLET {
   static void Traverse(KeyType trg_key, KeyType src_key, Data &data,
                        KeySet &list_attr, KeySet &list_body,
                        UserFunct f, Args...args) {
-    SCOREP_USER_REGION("LET-Traverse", SCOREP_USER_REGION_TYPE_FUNCTION);
-
     // Traverse traverses the hypothetical global tree and constructs a list of
     // necessary cells required by the local process.
     auto &ht = data.ht_; // hash table
 
     // (A) check if the trg cell is local (kept in this function)
     if (ht.count(trg_key) == 0) {
-      return; // SplitType::None;
+      return;
     }
 
     // Maximum depth of the tree.
@@ -687,9 +686,8 @@ struct OptLET {
     //tapas::debug::DebugStream("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << std::endl;
 
     if (is_src_local_leaf) {
-      // the cell is local. everythig's fine. nothing to do.
-      //tapas::debug::DebugStream("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " is_src_local_leaf" << std::endl;
-      return; // SplitType::None;
+      // Target cell is local and source cell is a local leaf. done.
+      return;
     }
 
     if (is_src_remote_leaf) {
@@ -699,8 +697,12 @@ struct OptLET {
       //tapas::debug::DebugStream("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " is_src_remote_leaf" << std::endl;
       return; // SplitType::Body;
     }
+
     TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
     list_attr.insert(src_key);
+
+    // If the target and source cell overlaps, the source cell is need to be unconditionally split.
+
 
     // Approx/Split branch
     SplitType split = OptLET<TSP>::ProxyCell::Pred(trg_key, src_key, data, f, args...); // automated predicator object
