@@ -75,7 +75,7 @@ template<class TSP> class DummyCell;
 
 /**
  * @brief Remove redundunt elements in a std::vector. The vector must be sorted.
- * 
+ *
  * This way is much faster than using std::set.
  */
 template<class T, class Iterator>
@@ -86,7 +86,7 @@ std::vector<T> uniq(Iterator beg, Iterator end) {
 }
 
 /**
- * @brief Returns the range of bodies from an array of T (body type) that belong to the cell specified by the given key. 
+ * @brief Returns the range of bodies from an array of T (body type) that belong to the cell specified by the given key.
  * @tparam BT Body type. (might be replaced by Iter::value_type)
  * @tparam Iter Iterator type of the body array.
  * @tparam Functor Functor type that retrieves morton key from a body type value.
@@ -98,15 +98,15 @@ GetBodyRange(const typename SFC::KeyType k,
              Iter beg, Iter end,
              Functor get_key = __id<BT>) {
   using KeyType = typename SFC::KeyType;
-  
+
   // When used in Refine(), a cells has sometimes no body.
   // In this special case, just returns (0, 0)
   if (beg == end) return std::make_pair(0, 0);
-  
+
   auto less_than = [get_key] (const BT &hn, KeyType k) {
     return get_key(hn) < k;
   };
-  
+
   auto fst = std::lower_bound(beg, end, k, less_than); // first node 
   auto lst = std::lower_bound(fst, end, SFC::GetNext(k), less_than); // last node
   
