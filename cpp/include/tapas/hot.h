@@ -1220,8 +1220,16 @@ Partitioner<TSP>::Partition(std::vector<typename TSP::Body> &b) {
 
 template <class TSP>
 Region<TSP> Cell<TSP>::CalcRegion(KeyType key, const Region<TSP> &region) {
+  using SFC = typename TSP::SFC;
+  using FP = typename TSP::FP;
+
+  auto r = region;
+
+  SFC::template CalcRegion<FP>(key, region.max(), region.min(), r.max(), r.min());
+
+#if 0
   if (key == 0) return region;
-  
+
   const int kDim = TSP::Dim;
   
   auto r = region;
@@ -1237,6 +1245,7 @@ Region<TSP> Cell<TSP>::CalcRegion(KeyType key, const Region<TSP> &region) {
       }
     }
   }
+#endif
   
   return r;
 }

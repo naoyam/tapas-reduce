@@ -504,10 +504,33 @@ class Morton {
     int dir = RemoveDepth(k) >> ((MAX_DEPTH - depth) * Dim);
     return (dir >> dim) & 1;
   }
-};
 
-}
-}
+  template<class FP>
+  static inline
+  void CalcRegion(KeyType key,
+                  const Vec<Dim, FP> &root_max,
+                  const Vec<Dim, FP> &root_min,
+                  Vec<Dim, FP> &max,
+                  Vec<Dim, FP> &min) {
+    const int kDepth = GetDepth(key);
+    max = root_max;
+    min = root_min;
+
+    for (int dep = 1; dep <= kDepth; dep++) {
+      for (int dim = 0; dim < Dim; dim++) {
+        FP center = (max[dim] + min[dim]) / 2;
+        if (GetDirOnDepth(key, dim, dep) == 1) {
+          min[dim] = center;
+        } else {
+          max[dim] = center;
+        }
+      }
+    }
+  }
+}; /* class Morton */
+
+} /* namespace sfc */
+} /* namespace tapas */
 
 
 #endif // _SFC_MORTON_H_
