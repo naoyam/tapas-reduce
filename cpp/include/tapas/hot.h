@@ -43,7 +43,7 @@
 #include "tapas/hot/shared_data.h"
 #include "tapas/hot/buildtree.h"
 #include "tapas/hot/global_tree.h"
-#include "tapas/hot/let.h"
+#include "tapas/hot/exact_let.h"
 #include "tapas/hot/report.h"
 #include "tapas/hot/mapper.h"
 

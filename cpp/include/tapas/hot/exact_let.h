@@ -1,5 +1,5 @@
-#ifndef __TAPAS_HOT_LET__
-#define __TAPAS_HOT_LET__
+#ifndef __TAPAS_HOT_EXACT_LET__
+#define __TAPAS_HOT_EXACT_LET__
 
 #include<vector>
 
@@ -1250,4 +1250,4 @@ struct ExactLET {
 
 } // namespace tapas
 
-#endif // __TAPAS_HOT_LET__
+#endif // __TAPAS_HOT_EXACT_LET__
