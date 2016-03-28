@@ -17,110 +17,6 @@ namespace hot {
 template<class TSP> class Cell;
 template<class TSP> class Partitioner;
 
-template<class TSP>
-struct InteractionPred {
-  using FP = typename TSP::FP;
-  using CT = Cell<TSP>;
-  using BT = typename CT::BodyType;
-  using KT = typename Cell<TSP>::KeyType;
-  using DT = typename Cell<TSP>::Data;
-  using VT = Vec<TSP::Dim, FP>;
-  using SFC = typename Cell<TSP>::SFC;
-
-  const DT &data_;
-
-  InteractionPred(const DT &data) : data_(data) {}
-
-  INLINE static FP distR2(const VT& v1, const VT& v2) {
-    FP dx = v1[0] - v2[0];
-    FP dy = v1[1] - v2[1];
-    FP dz = v1[2] - v2[2];
-    return dx * dx + dy * dy + dz * dz;
-  }
-
-  INLINE FP distR2(const BT &p, const VT &v2) {
-    VT v1(p.x, p.y, p.z);
-    return distR2(v1, v2);
-  }
-
-  template<class T1>
-  INLINE FP distR2(const T1 &t, const CT &c) {
-    return distR2(t, c.center());
-  }
-
-  template<class T2>
-  INLINE FP distR2(const CT &c, const T2 &t) {
-    return distR2(c.center(), t);
-  }
-
-  template<class T1>
-  INLINE FP distR2(const T1 &v1, KT k2) {
-    const auto &r = data_.region_;
-    return distR2(v1, CT::CalcCenter(k2, r));
-  }
-
-  template<class T2>
-  INLINE FP distR2(KT k1, const T2 &v2) {
-    return distR2(CT::CalcCenter(k1, data_.region_), v2);
-  }
-
-  INLINE FP distR2(KT k1, KT k2) {
-    return distR2(CT::CalcCenter(k1, data_.region_),
-                  CT::CalcCenter(k2, data_.region_));
-  }
-
-  INLINE bool IsLeaf(KT k) {
-    if (data_.ht_.count(k) > 0) {
-      return data_.ht_.at(k)->IsLeaf();
-    } else {
-      return data_.max_depth_ <= SFC::GetDepth(k);
-    }
-  }
-
-  INLINE size_t nb(KT) { return 1; } // nb() method for remote cell always returns '1' in LET mode
-
-  INLINE SplitType operator() (KT trg_key, KT src_key) {
-    const constexpr FP theta = 0.5;
-    const auto &ht = data_.ht_;
-    TAPAS_ASSERT(data_.ht_.count(trg_key) > 0);
-    const auto &c1 = *(ht.at(trg_key));
-
-    if (!c1.IsLeaf()) {
-      return SplitType::SplitLeft;
-    }
-
-    if (c1.nb() == 0) {
-      return SplitType::None;
-    }
-
-    //bool is_src_local = ht.count(src_key) != 0;
-    //bool is_src_local_leaf = is_src_local && ht.at(src_key)->IsLeaf();
-    //bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= data_.max_depth_;
-
-    if (IsLeaf(src_key)) { // c2.IsLeaf()
-      return SplitType::Body;
-    }
-
-    // else
-    const auto &p1 = c1.body(0);
-    real_t d = std::sqrt(distR2(p1, src_key));
-    real_t s = CT::CalcRegion(src_key, data_.region_).width(0);
-
-    // tapas::debug::DebugStream("traverse_count").out() << "particle(" << SFC::Simplify(trg_key) << ") [" << p1.x << "," << p1.y << "," << p1.z << "]"
-    //                                << " " << SFC::Simplify(src_key) << " s=" << s << " d=" << d << " "
-    //                                << (s/d > theta ? "SplitRight" : "Approx")
-    //                                << std::endl;
-
-    // tapas::debug::DebugStream("comp_count_manual").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " "
-    //                                   << "s=" << s << " d=" << d << std::endl;
-    if ((s/d) < theta) {
-      return SplitType::Approx;
-    } else {
-      return SplitType::SplitRight;
-    }
-  }
-};
-
 /**
  * A set of static functions to construct LET (Locally Essential Tree)
  *
@@ -332,16 +228,40 @@ struct OptLET {
 
     using Mapper = ProxyMapper;
 
-    // ctor
-    ProxyCell(KeyType key, const Data &data)
-        : key_(key), data_(data), marked_touched_(false), marked_split_(false), marked_body_(false),
-          is_local_(false), cell_(nullptr), bodies_(), body_attrs_(), attr_()
+   private:
+   public:
+
+    /**
+     * \brief Constructor for target pseudo cells
+     */
+    ProxyCell(const Vec &max, const Vec &min, int depth, const Data &data)
+        : region_(min, max)
+        , center_((region_.max() + region_.min()) / 2)
+        , depth_(depth)
+        , source_(false)
+        , key_(0)
+        , data_(data)
+        , marked_touched_(false), marked_split_(false), marked_body_(false)
+          //, cell_(nullptr)
+        , bodies_(), body_attrs_(), attr_()
     {
-      if (data.ht_.count(key_) > 0) {
-        is_local_ = true;
-        cell_ = data.ht_.at(key_);
-        attr_ = ProxyAttr(cell_->attr());
-      }
+    }
+
+    /**
+     * \brief Constructor for source pseudo cells
+     */
+    ProxyCell(Vec &max, Vec &min, KeyType key, const Data &data)
+        : region_(min, max)
+        , center_((region_.max() + region_.min()) / 2)
+        , depth_(SFC::GetDepth(key_))
+        , source_(true)
+        , key_(key)
+        , data_(data)
+        , marked_touched_(false), marked_split_(false), marked_body_(false)
+          //, cell_(nullptr)
+        , bodies_(), body_attrs_(), attr_()
+    {
+      center_ = region_.center();
     }
 
     inline ProxyCell &cell() { return *this; }
@@ -358,19 +278,24 @@ struct OptLET {
 
     /**
      * bool ProxyCell::operator==(const ProxyCell &rhs) const
+     * 
      */
     bool operator==(const ProxyCell &rhs) const {
-      return key_ == rhs.key_;
+      if (source_) return key_ == 0;
+      else         return rhs.key_ == 0;
     }
-
-    bool operator<(const ProxyCell &rhs) const {
-      return key_ < rhs.key_;
-    }
+    
+    // bool operator<(const ProxyCell &rhs) const {
+    //   return key_ < rhs.key_;
+    // }
 
     template<class UserFunct, class...Args>
-    static SplitType Pred(KeyType trg_key, KeyType src_key, const Data &data, UserFunct f, Args...args) {
-      ProxyCell trg_cell(trg_key, data);
-      ProxyCell src_cell(src_key, data);
+    static SplitType Pred(KeyType src_key, const Data &data, UserFunct f, Args...args) {
+      int depth = SFC::GetDepth(src_key);
+      const auto src_region = CellType::CalcRegion(src_key, data.region_);
+      
+      ProxyCell trg_cell(data.local_bb_max_, data.local_bb_min_, depth, data);
+      ProxyCell src_cell(src_region.max(), src_region.min(), src_key, data);
 
       f(trg_cell, src_cell, args...);
 
@@ -400,7 +325,7 @@ struct OptLET {
      */
     inline Vec center() {
       Touched();
-      return Cell<TSP>::CalcCenter(key_, data_.region_);
+      return center_;
     }
 
     inline int depth() const {
@@ -411,7 +336,6 @@ struct OptLET {
      * \brief Distance Function
      */
     inline FP Distance(ProxyCell &rhs, tapas::CenterClass) {
-
       return tapas::Distance<tapas::CenterClass, FP>::Calc(*this, rhs);
     }
 
@@ -424,7 +348,7 @@ struct OptLET {
      */
     inline FP width(FP d) const {
       Touched();
-      return Cell<TSP>::CalcRegion(key_, data_.region_).width(d);
+      return region_.width(d);
     }
 
     /**
@@ -432,25 +356,28 @@ struct OptLET {
      */
     inline bool IsLeaf() const {
       Touched();
-      if (is_local_) return cell_->IsLeaf();
-      else           return data_.max_depth_ <= SFC::GetDepth(key_);
+      return data_.max_depth_ <= depth_;
     }
 
-    inline bool IsLocal() const {
-      return is_local_;
-      //return data_.ht_.count(key_) > 0;
-    }
+    // inline bool IsLocal() const {
+    //   return is_local_;
+    //   //return data_.ht_.count(key_) > 0;
+    // }
 
     inline size_t nb() {
-      Touched();
-      if (is_local_) {
-        return cell_->nb();
-      } else {
-        TAPAS_ASSERT(IsLeaf() && "Cell::nb() is not allowed for non-leaf cells.");
-        Body();
-        return 0;
-      }
+      Body();
+      return 0;
     }
+    // inline size_t nb() {
+    //   Touched();
+    //   if (is_local_) {
+    //     return cell_->nb();
+    //   } else {
+    //     TAPAS_ASSERT(IsLeaf() && "Cell::nb() is not allowed for non-leaf cells.");
+    //     Body();
+    //     return 0;
+    //   }
+    // }
 
     inline SubCellIterator<ProxyCell> subcells() {
       Split();
@@ -540,6 +467,11 @@ struct OptLET {
     }
 
    private:
+    Region<TSP> region_;
+    Vec center_;
+    int depth_;
+    bool source_; // target cell or source cell
+    
     KeyType key_;
     const Data &data_;
 
@@ -631,54 +563,61 @@ struct OptLET {
   // However, it is actually not possible because LET class is declared as 'friend' in the Cell class
   // only with TSP parameter. It's impossible to declare a partial specialization to be friend.
 
-  // Supporting routine for Traverse(KeyType, KeyType, Data, KeySet, KeySet);
-  template<class UserFunct, class...Args>
-  static void Traverse(std::vector<KeyType> &trg_keys, KeyType src_key,
-                       Data &data, KeySet &list_attr, KeySet &list_body,
-                       UserFunct f, Args...args) {
-    // Apply Traverse for each keys in trg_keys. If interaction between trg_keys[i] and src_key is 'approximate',
-    // trg_keys[i+1...] will be all 'approximate'.
-    for (size_t i = 0; i < trg_keys.size(); i++) {
-      Traverse(trg_keys[i], src_key, data, list_attr, list_body, f, args...);
-    }
-  }
+  // // Supporting routine for Traverse(KeyType, KeyType, Data, KeySet, KeySet);
+  // template<class UserFunct, class...Args>
+  // static void Traverse(std::vector<KeyType> &trg_keys, KeyType src_key,
+  //                      Data &data, KeySet &list_attr, KeySet &list_body,
+  //                      UserFunct f, Args...args) {
+  //   // Apply Traverse for each keys in trg_keys. If interaction between trg_keys[i] and src_key is 'approximate',
+  //   // trg_keys[i+1...] will be all 'approximate'.
+  //   for (size_t i = 0; i < trg_keys.size(); i++) {
+  //     Traverse(trg_keys[i], src_key, data, list_attr, list_body, f, args...);
+  //   }
+  // }
 
   // Supporting routine for Traverse(KeyType, KeyType, Data, KeySet, KeySet);
   template<class UserFunct, class...Args>
-  static void Traverse(KeyType trg_key, std::vector<KeyType> src_keys,
+  static void Traverse(std::vector<KeyType> src_keys,
                        Data &data, KeySet &list_attr, KeySet &list_body,
                        UserFunct f, Args...args) {
     // Apply Traverse for each keys in src_keys.
     // If interaction between trg_key and src_keys[i] is 'approximate', trg_keys[i+1...] will be all 'approximate'.
     for (size_t i = 0; i < src_keys.size(); i++) {
-      Traverse(trg_key, src_keys[i], data, list_attr, list_body, f, args...);
+      Traverse(src_keys[i], data, list_attr, list_body, f, args...);
     }
   }
 
   /**
    * \brief Traverse a virtual global tree and collect cells to be requested to other processes.
-   * \param p Traget particle
-   * \param key Source cell key
+   * \param src_key Source cell key
    * \param data Data
    * \param list_attr (output) Set of request keys of which attrs are to be sent
    * \param list_body (output) Set of request keys of which bodies are to be sent
+   * \param f User's callback function
+   * \param args... Optional arguments given by the user.
+   *
+   * Main routine of LET-traverse. In contrast to ExactLET class, it takes only source cell key.
+   * Target cells are always pseudo-cells, which is equal or smaller than the source cell.
+   * It works with tightly with Distance::CalcApprox() in geometry.h
    */
   template<class UserFunct, class...Args>
-  static void Traverse(KeyType trg_key, KeyType src_key, Data &data,
+  static void Traverse(KeyType src_key, Data &data,
                        KeySet &list_attr, KeySet &list_body,
                        UserFunct f, Args...args) {
     // Traverse traverses the hypothetical global tree and constructs a list of
     // necessary cells required by the local process.
     auto &ht = data.ht_; // hash table
 
-    // (A) check if the trg cell is local (kept in this function)
-    if (ht.count(trg_key) == 0) {
-      return;
-    }
+    const auto &trg_max = data.local_bb_max_;
+    const auto &trg_min = data.local_bb_min_;
+
+    const auto src_region = CellType::CalcRegion(src_key, data.region_);
 
     // Maximum depth of the tree.
     const int max_depth = data.max_depth_;
 
+    list_attr.insert(src_key);
+      
     bool is_src_local = ht.count(src_key) != 0; // CAUTION: even if is_src_local, the children are not necessarily all local.
     bool is_src_local_leaf = is_src_local && ht[src_key]->IsLeaf();
     bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= max_depth;
@@ -692,53 +631,40 @@ struct OptLET {
 
     if (is_src_remote_leaf) {
       // If the source cell is a remote leaf, we need it (with it's bodies).
-      list_attr.insert(src_key);
       list_body.insert(src_key);
-      //tapas::debug::DebugStream("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " is_src_remote_leaf" << std::endl;
-      return; // SplitType::Body;
+      return;
     }
 
     TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
+    
     list_attr.insert(src_key);
 
-    // If the target and source cell overlaps, the source cell is need to be unconditionally split.
+    bool split_src = false; // if the source cell is split.
 
+    if (!tapas::Separated(trg_max, trg_min, src_region.max(), src_region.min())) {
+      // if the source cell overlaps the target region (BB of the target process)
+      // the source cell must be split.
+      split_src = true;
+    } else {
+      // Approx/Split branch
+      SplitType split = OptLET<TSP>::ProxyCell::Pred(src_key, data, f, args...); // predicator object
 
-    // Approx/Split branch
-    SplitType split = OptLET<TSP>::ProxyCell::Pred(trg_key, src_key, data, f, args...); // automated predicator object
-
-    switch(split) {
-      case SplitType::SplitBoth:
-        for (KeyType trg_ch : SFC::GetChildren(trg_key)) {
-          if (ht.count(trg_ch) > 0) {
-            for (KeyType src_ch : SFC::GetChildren(src_key)) {
-              Traverse(trg_ch, src_ch, data, list_attr, list_body, f, args...);
-            }
-          }
-        }
-        break;
-      case SplitType::SplitLeft:
-        for (KeyType ch : SFC::GetChildren(trg_key)) {
-          if (ht.count(ch) > 0) {
-            Traverse(ch, src_key, data, list_attr, list_body, f, args...);
-          }
-        }
-        break;
-
-      case SplitType::None:
-        break;
-
-      case SplitType::SplitRight:
-        Traverse(trg_key, SFC::GetChildren(src_key), data, list_attr, list_body, f, args...);
-        break;
-
-      case SplitType::Approx:
-        list_attr.insert(src_key); // <----- (4)
-        break;
-
-      default: assert(0); // Never happens
+      switch(split) {
+        case SplitType::SplitBoth:
+        case SplitType::SplitLeft:
+        case SplitType::SplitRight:
+          split_src = true;
+          break;
+        default:
+          split_src = false;
+      }
     }
-    return; // split;
+
+    if (split_src) {
+      Traverse(SFC::GetChildren(src_key), data, list_attr, list_body, f, args...);
+    }
+    
+    return;
   }
 
   static void ShowHistogram(const Data &data) {
@@ -790,7 +716,7 @@ struct OptLET {
     // Construct request lists of necessary cells
     req_keys_attr.insert(root.key());
 
-    Traverse(root.key(), root.key(), root.data(), req_keys_attr, req_keys_body, f, args...);
+    Traverse(root.key(), root.data(), req_keys_attr, req_keys_body, f, args...);
 
     double end = MPI_Wtime();
     MPI_Barrier(MPI_COMM_WORLD);

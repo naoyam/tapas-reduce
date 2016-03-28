@@ -426,7 +426,7 @@ void dumpLeaves(TapasFMM::Cell &root) {
       mtx.unlock();
     }
   };
-
+  
   tapas::UpwardMap(f, root);
   
   ofs.close();

@@ -7,7 +7,7 @@ namespace tapas {
 
 template<typename VEC>
 bool Separated(VEC &xmax, VEC &xmin, VEC &ymax, VEC &ymin) {
-  constexpr int Dim = VEC::Dim;
+  const constexpr int Dim = VEC::Dim;
   
   bool separated = false;
 
