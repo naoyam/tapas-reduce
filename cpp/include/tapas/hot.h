@@ -230,7 +230,8 @@ class Cell: public tapas::BasicCell<TSP> {
   }
 
   Cell(const Region<TSP> &region, index_t bid, index_t nb)
-      : tapas::BasicCell<TSP>(region, bid, nb) {} 
+      : tapas::BasicCell<TSP>(region, bid, nb)
+      , region_(CalcRegion(key_, region)) {} 
 
   //========================================================
   // Member functions
@@ -364,7 +365,7 @@ class Cell: public tapas::BasicCell<TSP> {
     return SubCellIterator(*this);
   }
 
-  const Region<TSP> &region() const { return data_->region_; }
+  const Region<TSP> &region() const { return region_; }
 
   bool GetOptMutual() const { return data_->opt_mutual_; }
   bool SetOptMutual(bool b) {
@@ -409,6 +410,8 @@ class Cell: public tapas::BasicCell<TSP> {
   
   bool is_local_; //!< if it's a local cell or LET cell.
   bool is_local_subtree_; //!< If all of its descendants are local.
+
+ const Region<TSP> region_; //!< Local region
 
   Mapper mapper_;
 

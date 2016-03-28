@@ -8,15 +8,16 @@
 
 namespace tapas {
 
-template <int DIM, class FP>
+template <int DIM_, class FP_>
 class Vec {
-  FP x_[DIM];
+  FP_ x_[DIM_];
  public:
-  static const int Dim = DIM;
+  using FP = FP_;
+  static const int Dim = DIM_;
   
   Vec() {}
   explicit Vec(const FP* v) {
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       x_[i] = v[i];
     }
   }
@@ -29,14 +30,14 @@ class Vec {
     std::copy(list.begin(), list.end(), x_);
   }
   
-  Vec(const Vec<DIM, FP> &v) {
-    for (int i = 0; i < DIM; ++i) {
+  Vec(const Vec<Dim, FP> &v) {
+    for (int i = 0; i < Dim; ++i) {
       x_[i] = v[i];
     }
   }
 
   Vec(const FP &x1) {
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       x_[i] = x1;
     }
   }
@@ -50,7 +51,7 @@ class Vec {
 
   FP norm() const {
     FP sum = 0;
-    for (int i = 0; i < DIM; i++) {
+    for (int i = 0; i < Dim; i++) {
       sum += x_[i] * x_[i];
     }
     return sum;
@@ -65,21 +66,21 @@ class Vec {
 
   Vec operator-() const {
     Vec v(*this);
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       v.x_[i] = -x_[i];
     }
     return v;
   }
 
   Vec operator-=(const Vec &v) {
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       x_[i] -= v[i];
     }
     return *this;
   }
 
   Vec operator+=(const Vec &v) {
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       x_[i] += v[i];
     }
     return *this;
@@ -87,14 +88,14 @@ class Vec {
   
   Vec operator-(const Vec &v) const {
     Vec x(*this);    
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       x[i] -= v[i];
     }
     return x;
   }
 
   Vec operator/=(const Vec &v) {
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       x_[i] /= v[i];
     }
     return *this;
@@ -102,7 +103,7 @@ class Vec {
 
   Vec operator*(const FP &v) const {
     Vec x(*this);
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       x[i] *= v;
     }
     return x;
@@ -110,7 +111,7 @@ class Vec {
 
   Vec operator*(const Vec &v) const {
     Vec x(*this);
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       x[i] *= v[i];
     }
     return x;
@@ -118,7 +119,7 @@ class Vec {
 
   Vec operator/(const FP &v) const {
     Vec x(*this);
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       x[i] /= v;
     }
     return x;
@@ -128,7 +129,7 @@ class Vec {
   Vec operator/(const T &v) const {
     Vec x(*this);
     FP c = (FP)v;
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       x[i] /= c;
     }
     return x;
@@ -136,7 +137,7 @@ class Vec {
   
   Vec operator/(const Vec &v) const {
     Vec x(*this);
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       x[i] /= v[i];
     }
     return x;
@@ -145,7 +146,7 @@ class Vec {
   
   Vec operator+(const FP &v) const {
     Vec x(*this);
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       x[i] += v;
     }
     return x;
@@ -153,7 +154,7 @@ class Vec {
 
   Vec operator+(const Vec &v) const {
     Vec x(*this);
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       x[i] += v[i];
     }
     return x;
@@ -162,35 +163,35 @@ class Vec {
 
   Vec operator-(const FP &v) const {
     Vec x(*this);
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       x[i] -= v;
     }
     return x;
   }
 
   bool operator>(const FP &v) const {
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       if (!(x_[i] > v)) return false;
     }
     return true;
   }
   
   bool operator>=(const FP &v) const {
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       if (!(x_[i] >= v)) return false;
     }
     return true;
   }
   
   bool operator<(const FP &v) const {
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       if (!(x_[i] < v)) return false;
     }
     return true;
   }
 
   bool operator<=(const FP &v) const {
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       if (!(x_[i] <= v)) return false;
     }
     return true;
@@ -198,7 +199,7 @@ class Vec {
 
   FP reduce_sum() const {
     FP sum = x_[0];
-    for (int i = 1; i < DIM; ++i) {
+    for (int i = 1; i < Dim; ++i) {
       sum += x_[i];
     }
     return sum;
@@ -206,10 +207,22 @@ class Vec {
   
   std::ostream &print(std::ostream &os) const {
     StringJoin sj(", ");
-    for (int i = 0; i < DIM; ++i) {
+    for (int i = 0; i < Dim; ++i) {
       sj << x_[i];
     }
     return os << sj;
+  }
+
+  inline void SetMax(const Vec &rhs) {
+    for (int d = 0; d < Dim; d++) {
+      x_[d] = std::max(x_[d], rhs.x_[d]);
+    }
+  }
+  
+  inline void SetMin(const Vec &rhs) {
+    for (int d = 0; d < Dim; d++) {
+      x_[d] = std::min(x_[d], rhs.x_[d]);
+    }
   }
 };
 

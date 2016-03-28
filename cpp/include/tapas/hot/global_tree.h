@@ -3,9 +3,10 @@
 
 #include "tapas/stdcbug.h"
 
-#include <vector>
-#include <iterator>
 #include <algorithm>
+#include <iterator>
+#include <limits>
+#include <vector>
 
 #include <mpi.h>
 
@@ -30,12 +31,16 @@ class GlobalTree {
   using KeyType = typename CellType::KeyType;
   using HashTable = typename CellType::CellHashTable;
   using KeySet = typename CellType::KeySet;
+  using FP = typename TSP::FP;
+  static const constexpr int Dim = TSP::Dim;
   
   /**
    * \brief Build global tree
    * 1. Traverse recursively from the root and identify global leaves
    * 2. Exchange global leaves using Alltoallv
    * 3. Build global tree locally
+   *
+   * Called from Partition() in hot.h
    */
   static void Build(Data &data) {
     double beg = MPI_Wtime();
@@ -55,10 +60,48 @@ class GlobalTree {
     // Glow the global tree locally in each process
     GrowGlobalTree(gleaves, data.ht_, data.ht_gtree_);
 
+    GetLocalBB(data);
+
     double end = MPI_Wtime();
     data.time_tree_growglobal = end - beg;
   }
 
+  /**
+   * \brief Calculate local bouding box;
+   */
+  static void GetLocalBB(Data &data) {
+    auto &bb_max = data.local_bb_max_;
+    auto &bb_min = data.local_bb_min_;
+
+    for (int d = 0; d < Dim; d++) {
+      bb_max[d] = std::numeric_limits<FP>::min();
+      bb_min[d] = std::numeric_limits<FP>::max();
+    }
+
+    for (auto it : data.ht_) {
+      CellType *c = it.second;
+      
+      if (data.ht_gtree_.count(c->key()) == 0) {
+        auto &r = c->region();
+        bb_max.SetMax(r.max());
+        bb_min.SetMin(r.min());
+      }
+    }
+
+#if 0
+#ifdef TAPAS_DEBUG
+    // check local bb_max / bb_min
+    tapas::debug::BarrierExec([&](int, int) {
+        std::cout << "bb_max = " << data.local_bb_max_ << std::endl;
+        std::cout << "bb_min = " << data.local_bb_min_ << std::endl;
+        for (int d = 0; d < Dim; d++) {
+          TAPAS_ASSERT(bb_max[d] > bb_min[d]);
+        }
+      });
+#endif
+#endif
+  }
+  
   /**
    * \brief A reducing function used with LocalUpwardReduce, to check if a cell is a local subtree.
    */
