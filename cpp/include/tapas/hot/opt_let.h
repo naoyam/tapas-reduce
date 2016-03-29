@@ -1,3 +1,4 @@
+
 #ifndef __TAPAS_HOT_OPT_LET__
 #define __TAPAS_HOT_OPT_LET__
 
@@ -336,9 +337,19 @@ struct OptLET {
      * \brief Distance Function
      */
     inline FP Distance(ProxyCell &rhs, tapas::CenterClass) {
-      return tapas::Distance<tapas::CenterClass, FP>::Calc(*this, rhs);
+      // TODO
+      Region<TSP> src_reg, trg_reg;
+      if (source_) {
+        src_reg = region_;
+        trg_reg = rhs.region_;
+      } else {
+        src_reg = rhs.region_;
+        trg_reg = region_;
+      }
+      return tapas::Distance<tapas::CenterClass, FP>::CalcApprox(trg_reg.max(), trg_reg.min(),
+                                                                 src_reg.max(), src_reg.min());
     }
-
+    
     //inline FP Distance(Cell &rhs, tapas::Edge) {
     //  return tapas::Distance<tapas::Edge, FP>::Calc(*this, rhs);
     //}
@@ -1055,6 +1066,9 @@ struct OptLET {
    */
   template<class UserFunct, class...Args>
   static void Exchange(CellType &root, UserFunct f, Args...args) {
+    if (root.data().mpi_rank_ == 0) {
+      std::cout << "Using OptLET" << std::endl;
+    }
     SCOREP_USER_REGION("LET-All", SCOREP_USER_REGION_TYPE_FUNCTION);
     double beg = MPI_Wtime();
 

@@ -1381,11 +1381,6 @@ struct Tapas2 {
     return part.Partition(b, nb);
   }
 };
-
-#ifdef AUTO_LET_SLOW
-extern volatile double dummy_value;
-#endif
-
 } // namespace tapas
 
 #ifdef TAPAS_DEBUG_DUMP

@@ -1127,6 +1127,9 @@ struct ExactLET {
    */
   template<class UserFunct, class...Args>
   static void Exchange(CellType &root, UserFunct f, Args...args) {
+    if (root.data().mpi_rank_ == 0) {
+      std::cout << "Using ExactLET" << std::endl;
+    }
     SCOREP_USER_REGION("LET-All", SCOREP_USER_REGION_TYPE_FUNCTION);
     double beg = MPI_Wtime();
 
