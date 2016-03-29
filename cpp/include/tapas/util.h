@@ -35,6 +35,7 @@ void OpenFileStream(std::ofstream &ofs, const char *fname, decltype(std::ios::ou
         exit(-1);
       } else {
         std::cerr << "Tapas: [ERROR] open failed ('" << fname << "'): " << strerror(errno) << std::endl;
+        usleep(5e5);
       }
     }
   }
@@ -244,13 +245,7 @@ class RankCSV {
     Dump(fname.c_str());
   }
   
-  void Dump(const char *fname) {
-    std::ofstream ofs;
-    OpenFileStream(ofs, fname, std::ios::out);
-    Dump(ofs);
-  }
-
-  void Dump(std::ostream &os) const {
+  void Dump(const char *fname) const {
     int mpi_size;
     MPI_Comm_size(comm_, &mpi_size);
     
@@ -272,18 +267,14 @@ class RankCSV {
     MPI_Gather(my_row.c_str(), max_len, MPI_BYTE, recv_buf, max_len, MPI_BYTE, 0, comm_);
 
     if (mpi_rank_ == 0) {
-      csv_->DumpHeader(os);
+      std::ofstream ofs;
+      OpenFileStream(ofs, fname, std::ios::out);
+      csv_->DumpHeader(ofs);
       for (int r = 0; r < mpi_size; r++) {
-        os << &recv_buf[r * len];
+        ofs << &recv_buf[r * len];
       }
+      ofs.close();
     }
-  }
-
-  void Dump(const char *fname) const {
-    std::ofstream ofs;
-    OpenFileStream(ofs, fname, std::ios::out);
-    Dump(ofs);
-    ofs.close();
   }
 };
 

@@ -58,7 +58,7 @@ void Report(const Data &data) {
   WriteHostName(report_prefix + "hostnames" + report_suffix + ".csv");
 
   // misc data
-  if (rank == 0) {
+  {
     CSV csv({"SamplingRate", "NB"}, 1);
     csv.At("SamplingRate", 0) = data.sampling_rate;
     csv.At("NB", 0) = data.nb_total;
