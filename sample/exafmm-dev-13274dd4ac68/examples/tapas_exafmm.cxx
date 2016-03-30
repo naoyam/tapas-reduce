@@ -120,6 +120,18 @@ static inline void FMM_Downward(TapasFMM::Cell &c) {
   }
 }
 
+#define D(msg) do {                                                     \
+    int rank;                                                           \
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);                               \
+    if (rank == 0 && getenv("TAPAS_IN_LET")) {                          \
+      auto src_key = Cj.key();                                          \
+      if (src_key == 4467570830351532034 || src_key == 4035225266123964417) { \
+        std::cout << "key " << src_key << " is traversed : "            \
+                  << msg << std::endl;                                  \
+      }                                                                 \
+    }                                                                   \
+  } while(0)
+
 // Perform ExaFMM's Dual Tree Traversal (M2L & P2P)
 struct FMM_DTT {
   template<class Cell>
@@ -130,13 +142,17 @@ struct FMM_DTT {
       ResetCount();
     }
 #endif
-    
+
     // TODO:
     //if (Ci.nb() == 0 || Cj.nb() == 0) return;
+
+    D("found");
 
     //real_t R2 = (Ci.center() - Cj.center()).norm();
     real_t R2 = Ci.Distance(Cj, tapas::Center);
     vec3 Xperiodic = 0; // dummy; periodic is not ported
+
+    D("R2 = " << R2);
     
     real_t Ri = 0;
     real_t Rj = 0;
@@ -145,8 +161,13 @@ struct FMM_DTT {
       Ri = std::max(Ri, Ci.width(d));
       Rj = std::max(Rj, Cj.width(d));
     }
+    D("Ri = " << Ri);
+    D("Rj = " << Rj);
     Ri = (Ri / 2 * 1.00001) / theta;
     Rj = (Rj / 2 * 1.00001) / theta;
+
+    D("(Ri + Rj)^2 = " << (Ri+Rj)*(Ri*Rj));
+    D("R2 > (Ri+Rj)^2 ? " << (R2 > (Ri + Rj) * (Ri + Rj) ? " => Yes => Approx" : " => No => Split"));
     
     if (R2 > (Ri + Rj) * (Ri + Rj)) {                   // If distance is far enough
       // tapas::Apply(M2L, Ci, Cj, Xperiodic, mutual); // \todo

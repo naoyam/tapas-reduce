@@ -18,6 +18,19 @@ bool Separated(VEC &xmax, VEC &xmin, VEC &ymax, VEC &ymin) {
   return separated;
 }
 
+// Returns if X includes Y
+template<typename VEC>
+bool Includes(VEC &xmax, VEC &xmin, VEC &ymax, VEC &ymin) {
+  const constexpr int Dim = VEC::Dim;
+  bool res = true;
+
+  for (int d = 0; d < Dim; d++) {
+    res &= (xmax[d] >= ymax[d] && ymin[d] >= xmin[d]);
+  }
+
+  return res;
+}
+
 class CenterClass {} Center;
 class EdgeClass{} Edge;
 

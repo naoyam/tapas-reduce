@@ -356,6 +356,22 @@ void Alltoallv(const std::vector<T> &send_buf,
 
   auto kType = MPI_DatatypeTraits<T>::type();
 
+#if 0
+  // Print a communication matrix
+  tapas::debug::BarrierExec([&](int rank, int) {
+      if (rank == 0) {
+        std::cout << "MPI_Alltoallv comm. matrix" << std::endl;
+        std::cout << " ";
+      }
+
+      std::cout << std::setw(2) << rank << " ";
+      for (int p = 0; p < mpi_size; p++) {
+        std::cout << std::setw(5) << send_count[p] << " ";
+      }
+      std::cout << std::endl;
+    });
+#endif
+
   auto send_count2 = send_count;
   auto send_disp2 = send_disp;
   auto recv_count2 = recv_count;

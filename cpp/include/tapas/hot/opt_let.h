@@ -226,20 +226,19 @@ struct OptLET {
     using Threading = typename CellType::Threading;
 
     using RealCellType = CellType;
-
     using Mapper = ProxyMapper;
 
-   private:
    public:
 
     /**
      * \brief Constructor for target pseudo cells
      */
-    ProxyCell(const Vec &max, const Vec &min, int depth, const Data &data)
+    ProxyCell(const Vec &max, const Vec &min, int depth, const Vec& src_width, const Data &data)
         : region_(min, max)
         , center_((region_.max() + region_.min()) / 2)
         , depth_(depth)
         , source_(false)
+        , src_width_(src_width)
         , key_(0)
         , data_(data)
         , marked_touched_(false), marked_split_(false), marked_body_(false)
@@ -251,18 +250,18 @@ struct OptLET {
     /**
      * \brief Constructor for source pseudo cells
      */
-    ProxyCell(Vec &max, Vec &min, KeyType key, const Data &data)
+    ProxyCell(const Vec &max, const Vec &min, KeyType key, const Data &data)
         : region_(min, max)
         , center_((region_.max() + region_.min()) / 2)
         , depth_(SFC::GetDepth(key_))
         , source_(true)
+        , src_width_(max - min)
         , key_(key)
         , data_(data)
         , marked_touched_(false), marked_split_(false), marked_body_(false)
           //, cell_(nullptr)
         , bodies_(), body_attrs_(), attr_()
     {
-      center_ = region_.center();
     }
 
     inline ProxyCell &cell() { return *this; }
@@ -294,9 +293,14 @@ struct OptLET {
     static SplitType Pred(KeyType src_key, const Data &data, UserFunct f, Args...args) {
       int depth = SFC::GetDepth(src_key);
       const auto src_region = CellType::CalcRegion(src_key, data.region_);
-      
-      ProxyCell trg_cell(data.local_bb_max_, data.local_bb_min_, depth, data);
-      ProxyCell src_cell(src_region.max(), src_region.min(), src_key, data);
+      const auto &src_max = src_region.max();
+      const auto &src_min = src_region.min();
+
+      // Create target proxy cell
+      ProxyCell trg_cell(data.local_bb_max_, data.local_bb_min_, depth, src_max - src_min, data);
+
+      // Create source proxy cell
+      ProxyCell src_cell(src_max, src_min, src_key, data);
 
       f(trg_cell, src_cell, args...);
 
@@ -359,7 +363,7 @@ struct OptLET {
      */
     inline FP width(FP d) const {
       Touched();
-      return region_.width(d);
+      return src_width_;
     }
 
     /**
@@ -482,6 +486,7 @@ struct OptLET {
     Vec center_;
     int depth_;
     bool source_; // target cell or source cell
+    Vec src_width_; // if this cell is traget cell, save the width of the source cell
     
     KeyType key_;
     const Data &data_;
@@ -627,13 +632,16 @@ struct OptLET {
     // Maximum depth of the tree.
     const int max_depth = data.max_depth_;
 
+    if (data.lroots_.count(src_key) != 0) {
+      // src_key and all its descendants are local. Need not to traverse.
+      return;
+    }
+
     list_attr.insert(src_key);
-      
+
     bool is_src_local = ht.count(src_key) != 0; // CAUTION: even if is_src_local, the children are not necessarily all local.
     bool is_src_local_leaf = is_src_local && ht[src_key]->IsLeaf();
     bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= max_depth;
-
-    //tapas::debug::DebugStream("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << std::endl;
 
     if (is_src_local_leaf) {
       // Target cell is local and source cell is a local leaf. done.
@@ -642,6 +650,7 @@ struct OptLET {
 
     if (is_src_remote_leaf) {
       // If the source cell is a remote leaf, we need it (with it's bodies).
+      list_attr.insert(src_key);
       list_body.insert(src_key);
       return;
     }
@@ -658,16 +667,16 @@ struct OptLET {
       split_src = true;
     } else {
       // Approx/Split branch
+      int depth = SFC::GetDepth(src_key);
+      data.let_func_count[depth]++;
       SplitType split = OptLET<TSP>::ProxyCell::Pred(src_key, data, f, args...); // predicator object
-
-      switch(split) {
-        case SplitType::SplitBoth:
-        case SplitType::SplitLeft:
-        case SplitType::SplitRight:
-          split_src = true;
-          break;
-        default:
-          split_src = false;
+      
+      if (split == SplitType::SplitBoth ||
+          split == SplitType::SplitLeft ||
+          split == SplitType::SplitRight) {
+        split_src = true;
+      } else {
+        split_src = false;
       }
     }
 
@@ -904,7 +913,9 @@ struct OptLET {
     MPI_Barrier(MPI_COMM_WORLD);
     bt = MPI_Wtime();
 
+    if(data.mpi_rank_ == 0) std::cout << "Res Attr keys" << std::endl;
     tapas::mpi::Alltoallv2(attr_keys_send, attr_dest_ranks, req_attr_keys,  attr_src_ranks, MPI_COMM_WORLD);
+    if(data.mpi_rank_ == 0) std::cout << "Res Attr" << std::endl;
     tapas::mpi::Alltoallv2(attr_sendbuf,   attr_dest_ranks, res_cell_attrs, attr_src_ranks, MPI_COMM_WORLD);
 
     MPI_Barrier(MPI_COMM_WORLD);

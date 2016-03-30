@@ -206,6 +206,18 @@ class GlobalTree {
     std::vector<KeyType> gl_keys_send(lroots.begin(), lroots.end()); // global leaf keys
     std::vector<KeyType> gl_keys_recv;
     tapas::mpi::Allgatherv(gl_keys_send, gl_keys_recv, MPI_COMM_WORLD);
+
+#if 0
+    // Dump local roots
+    tapas::debug::BarrierExec([&](int rank, int) {
+        if (rank == 0) {
+          std::cout << "Local roots:" << std::endl;
+        }
+        for (auto &&key : lroots) {
+          std::cout << rank << " " << SFC::Decode(key) << std::endl;
+        }
+      });
+#endif
   
     gleaves.insert(gl_keys_recv.begin(), gl_keys_recv.end());
   }

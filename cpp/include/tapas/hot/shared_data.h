@@ -30,7 +30,7 @@ struct SharedData {
   CellHashTable ht_let_;
   CellHashTable ht_gtree_;  // Hsah table of the global tree.
   KeySet        gleaves_;   // set of global leaves, which are a part of ht_gtree_.keys and ht_.keys
-  KeySet        lroots_;    // set of local roots. It must be a subset of gleaves_. gleaves_ is "Allgatherv()ed" lroots.
+  KeySet        lroots_;    // set of local roots. It must be a subset of gleaves_. gleaves_ is "Allgatherv-ed" lroots.
   std::mutex ht_mtx_;  //!< mutex to protect ht_
   Region<TSP> region_; //!< global bouding box
   Mapper mapper_;
@@ -92,6 +92,8 @@ struct SharedData {
   double time_map2_dev;  // CUDA kernel runtime
 #endif
 
+  std::unordered_map<int, int> let_func_count;
+
   SharedData()
       : mpi_rank_(0)
       , mpi_size_(1)
@@ -123,6 +125,7 @@ struct SharedData {
 #ifdef __CUDACC__
       , time_map2_dev(0)
 #endif
+      , let_func_count()
   {
     ReadEnv();
   }

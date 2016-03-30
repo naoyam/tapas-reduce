@@ -28,7 +28,7 @@ endif
 
 CXXFLAGS += -DS=$(S)
 
-CXXFLAGS += -DTAPAS_BH # temporary cxxflag for Tapas Barnes-Hut implementation.
+# CXXFLAGS += -DEXACT_LET
 
 ifeq ($(LET),hardcoded)
 	CXXFLAGS += -DOLD_LET_TRAVERSE
