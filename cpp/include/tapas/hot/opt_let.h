@@ -262,6 +262,14 @@ struct OptLET {
           //, cell_(nullptr)
         , bodies_(), body_attrs_(), attr_()
     {
+#if 0
+      if (key_ == 3242591731706757122) {
+        std::cout << "In ProxyCell(): key=" << key_ << std::endl;
+        std::cout << "In ProxyCell(): max=" << max << std::endl;
+        std::cout << "In ProxyCell(): min=" << min << std::endl;
+        std::cout << "In ProxyCell(): ctr=" << center_ << std::endl;
+      }
+#endif
     }
 
     inline ProxyCell &cell() { return *this; }
@@ -353,6 +361,10 @@ struct OptLET {
       return tapas::Distance<tapas::CenterClass, FP>::CalcApprox(trg_reg.max(), trg_reg.min(),
                                                                  src_reg.max(), src_reg.min());
     }
+
+    inline const Region<TSP>& region() const {
+      return region_;
+    }
     
     //inline FP Distance(Cell &rhs, tapas::Edge) {
     //  return tapas::Distance<tapas::Edge, FP>::Calc(*this, rhs);
@@ -363,7 +375,7 @@ struct OptLET {
      */
     inline FP width(FP d) const {
       Touched();
-      return src_width_;
+      return src_width_[d];
     }
 
     /**

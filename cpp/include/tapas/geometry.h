@@ -52,11 +52,13 @@ struct Distance<CenterClass, FP> {
    *        the target cell is a pseudo-cell (or region of the local process)
    */
   template<int DIM>
-  static inline FP CalcApprox(Vec<DIM, FP> &trg_max,
-                              Vec<DIM, FP> &trg_min,
-                              Vec<DIM, FP> &src_max,
-                              Vec<DIM, FP> &src_min) {
-    Vec<DIM, FP> trg_ctr, src_ctr;    
+  static inline FP CalcApprox(const Vec<DIM, FP> &trg_max,
+                              const Vec<DIM, FP> &trg_min,
+                              const Vec<DIM, FP> &src_max,
+                              const Vec<DIM, FP> &src_min) {
+    Vec<DIM, FP> trg_ctr, src_ctr;
+    Vec<DIM, FP> decision = 0.0;
+    
     for (int d = 0; d < DIM; d++) {
       FP Rt = trg_max[d] - trg_min[d];
       FP Rs = src_max[d] - src_min[d];
@@ -64,13 +66,28 @@ struct Distance<CenterClass, FP> {
       
       if (Rs >= Rt) {
         trg_ctr[d] = (trg_max[d] + trg_min[d]) / 2;
+        decision[d] = 1.0;
       } else if (sctr < trg_min[d] + Rs/2) {
         trg_ctr[d] = trg_min[d] + Rs/2;
+        decision[d] = 2.0;
       } else if (sctr > trg_max[d] - Rs/2) {
         trg_ctr[d] = trg_max[d] - Rs/2;
+        decision[d] = 3.0;
       } else {
-        trg_ctr[d] = sctr;
+        trg_ctr[d] = src_ctr[d];
+        decision[d] = 4.0;
       }
+    }
+    
+    if (getenv("TAPAS_DEBUG_TMP")) {
+      std::cout << "CalcApprox: " << "trg_max =" << trg_max << std::endl;
+      std::cout << "CalcApprox: " << "trg_min =" << trg_min << std::endl;
+      std::cout << "CalcApprox: " << "Rt      =" << (trg_max - trg_min) << std::endl;
+      std::cout << "CalcApprox: " << "src_max =" << src_max << std::endl;
+      std::cout << "CalcApprox: " << "src_min =" << src_min << std::endl;
+      std::cout << "CalcApprox: " << "Rs      =" << (src_max - src_min) << std::endl;
+      std::cout << "CalcApprox: " << "trg_ctr =" << trg_ctr << std::endl;
+      std::cout << "CalcApprox: " << "dec     =" << decision << std::endl;
     }
     
     return (src_ctr - trg_ctr).norm();

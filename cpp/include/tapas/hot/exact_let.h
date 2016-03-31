@@ -344,6 +344,11 @@ struct ExactLET {
       }
     }
 
+    // for debug
+    inline Region<TSP> region() const {
+      return RealCellType::CalcRegion(key_, data_.region_);
+    }
+
     inline ProxyCell &cell() { return *this; }
     inline const ProxyCell &cell() const { return *this; }
 

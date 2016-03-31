@@ -123,14 +123,32 @@ static inline void FMM_Downward(TapasFMM::Cell &c) {
 #define D(msg) do {                                                     \
     int rank;                                                           \
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);                               \
-    if (rank == 0 && getenv("TAPAS_IN_LET")) {                          \
+    if (rank == 1 && getenv("TAPAS_IN_LET")) {                          \
       auto src_key = Cj.key();                                          \
-      if (src_key == 4467570830351532034 || src_key == 4035225266123964417) { \
-        std::cout << "key " << src_key << " is traversed : "            \
+      if (src_key == 3242591731706757123 ||                           \
+          src_key == 3242591731706757122 ||                             \
+          0 /*src_key == 2882303761517117441*/ ) {                      \
+        std::cout << "key " << Cell::SFC::Simplify(src_key) << " : "    \
                   << msg << std::endl;                                  \
       }                                                                 \
     }                                                                   \
   } while(0)
+
+
+#define D2(stmt) do {                                                   \
+    int rank;                                                           \
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);                               \
+    if (rank == 1 && getenv("TAPAS_IN_LET")) {                          \
+      auto src_key = Cj.key();                                          \
+      if (src_key == 3242591731706757123 ||                            \
+          src_key == 3242591731706757122 ||                             \
+          0 /*src_key == 2882303761517117441*/ ) {                      \
+        stmt;                                                           \
+      }                                                                 \
+    }                                                                   \
+  } while(0)
+
+
 
 // Perform ExaFMM's Dual Tree Traversal (M2L & P2P)
 struct FMM_DTT {
@@ -146,13 +164,15 @@ struct FMM_DTT {
     // TODO:
     //if (Ci.nb() == 0 || Cj.nb() == 0) return;
 
-    D("found");
+    //D("found");
 
     //real_t R2 = (Ci.center() - Cj.center()).norm();
+    D2(setenv("TAPAS_DEBUG_TMP", "1", 1));
     real_t R2 = Ci.Distance(Cj, tapas::Center);
+    D2(unsetenv("TAPAS_DEBUG_TMP"));
     vec3 Xperiodic = 0; // dummy; periodic is not ported
 
-    D("R2 = " << R2);
+    //D("R2 = " << R2);
     
     real_t Ri = 0;
     real_t Rj = 0;
@@ -161,13 +181,42 @@ struct FMM_DTT {
       Ri = std::max(Ri, Ci.width(d));
       Rj = std::max(Rj, Cj.width(d));
     }
-    D("Ri = " << Ri);
-    D("Rj = " << Rj);
+    //D("Ri = " << Ri);
+    //D("Rj = " << Rj);
+    
     Ri = (Ri / 2 * 1.00001) / theta;
     Rj = (Rj / 2 * 1.00001) / theta;
 
-    D("(Ri + Rj)^2 = " << (Ri+Rj)*(Ri*Rj));
-    D("R2 > (Ri+Rj)^2 ? " << (R2 > (Ri + Rj) * (Ri + Rj) ? " => Yes => Approx" : " => No => Split"));
+    { // debug begin
+      std::stringstream ss;
+      ss << "R2 > (Ri+Rj)^2 ? " << (R2 > (Ri + Rj) * (Ri + Rj) ? " => Yes => Approx" : " => No  => Split ")
+         << " (where R2=" << R2 << " Ri=" << Ri << " Rj=" << Rj << " (Ri+Rj)^2=" << ((Ri+Rj)*(Ri+Rj)) << ")";
+      D(ss.str());
+
+      // debug for exact
+      if (12.29 < R2 && R2 < 12.30) {
+        ss.str("");
+        ss << "target center=[" << Ci.center() << "]" << " depth=" << Ci.depth() << " key=" << Ci.key();
+        ss << " max=" << Ci.region().max() << " min=" << Ci.region().min() << " width=" << (Ci.region().max() - Ci.region().min());
+        D(ss.str());
+        ss.str("");
+        ss << "source center=[" << Cj.center() << "]" << " depth=" << Cj.depth() << " key=" << Cj.key();
+        ss << " max=" << Cj.region().max() << " min=" << Cj.region().min() << " width=" << (Cj.region().max() - Cj.region().min());
+        D(ss.str());
+      }
+
+      // debug for opt
+      if (19.6 < R2 && R2 < 19.7) {
+        ss.str("");
+        ss << "target center=[" << Ci.center() << "]" << " depth=" << Ci.depth() << " key=" << Ci.key();
+        ss << " max=" << Ci.region().max() << " min=" << Ci.region().min() << " width=" << (Ci.region().max() - Ci.region().min());
+        D(ss.str());
+        ss.str("");
+        ss << "source center=[" << Cj.center() << "]" << " depth=" << Cj.depth() << " key=" << Cj.key();
+        ss << " max=" << Cj.region().max() << " min=" << Cj.region().min() << " width=" << (Cj.region().max() - Cj.region().min());
+        D(ss.str());
+      }
+    } // debug end
     
     if (R2 > (Ri + Rj) * (Ri + Rj)) {                   // If distance is far enough
       // tapas::Apply(M2L, Ci, Cj, Xperiodic, mutual); // \todo

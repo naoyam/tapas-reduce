@@ -78,15 +78,43 @@ class GlobalTree {
       bb_min[d] = std::numeric_limits<FP>::max();
     }
 
+#if 0
     for (auto it : data.ht_) {
       CellType *c = it.second;
-      
+
+      if (data.mpi_rank_ == 1) {
+        if (c->key() == 1080863910568919042L) {
+          std::cout << "GetLocalBB(): Found the key " << c->key() << std::endl;
+          if (data.ht_gtree_.count(c->key())) {
+            std::cout << "GetLocalBB(): The key " << c->key() << " is in gtree" << std::endl;
+          }
+        }
+      }
+
       if (data.ht_gtree_.count(c->key()) == 0) {
         auto &r = c->region();
         bb_max.SetMax(r.max());
         bb_min.SetMin(r.min());
       }
     }
+#else
+    for (auto k : data.lroots_) {
+      CellType *c = data.ht_[k];
+
+      if (data.mpi_rank_ == 1) {
+        if (c->key() == 1080863910568919042L) {
+          std::cout << "GetLocalBB(): Found the key " << c->key() << std::endl;
+          if (data.ht_gtree_.count(c->key())) {
+            std::cout << "GetLocalBB(): The key " << c->key() << " is in gtree" << std::endl;
+          }
+        }
+      }
+
+      auto &r = c->region();
+      bb_max.SetMax(r.max());
+      bb_min.SetMin(r.min());
+    }
+#endif
 
 #if 0
 #ifdef TAPAS_DEBUG
