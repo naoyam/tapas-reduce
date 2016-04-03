@@ -164,7 +164,7 @@ void FindLocalRoots(typename Cell<TSP>::KeyType,
                     typename Cell<TSP>::KeySet&);
 
 template <class TSP> // TapasStaticParams
-class Cell: public tapas::BasicCell<TSP> {
+class Cell {
   friend class SamplingOctree<TSP, typename TSP::SFC>;
   friend class GlobalTree<TSP>;
   friend class Partitioner<TSP>;
@@ -204,7 +204,6 @@ class Cell: public tapas::BasicCell<TSP> {
   using SubCellIterator = iter::SubCellIterator<Cell>;
 
   using FP = typename TSP::FP;
-  
   using Data = SharedData<TSP, SFC>;
 
   friend void FindLocalRoots<TSP>(KeyType, const CellHashTable&, KeySet&);
@@ -215,10 +214,7 @@ class Cell: public tapas::BasicCell<TSP> {
  public:
 
   static Cell *CreateRemoteCell(KeyType k, int nb, Data *data) {
-    auto reg = CalcRegion(k, data->region_);
-    
-    Cell *c = new Cell(reg, 0, 0);
-    c->key_ = k;
+    Cell *c = new Cell(k, data->region_, 0, 0);
     c->is_leaf_ = false;
     c->is_local_ = false; // This cell is 
     c->is_local_subtree_ = false;
@@ -229,9 +225,17 @@ class Cell: public tapas::BasicCell<TSP> {
     return c;
   }
 
-  Cell(const Region<TSP> &region, index_t bid, index_t nb)
-      : tapas::BasicCell<TSP>(region, bid, nb)
-      , region_(CalcRegion(key_, region)) {} 
+  /**
+   * \brief Constuctor
+   */
+  Cell(KeyType key, const Region<TSP> &region, index_t bid, index_t nb)
+      : key_(key)
+      , nb_(nb)
+      , bid_(bid)
+      , region_(CalcRegion(key, region))
+      , center_((region_.max() + region_.min()) / 2)
+  {} 
+  //: tapas::BasicCell<TSP>(region, bid, nb)
 
   //========================================================
   // Member functions
@@ -274,6 +278,21 @@ class Cell: public tapas::BasicCell<TSP> {
    */
   Cell &subcell(int idx);
 
+  /**
+   *
+   */
+  Vec<Dim, FP> center() const {
+    return center_;
+  }
+
+  Vec<Dim, FP> width() const {
+    return region_.width();
+  }
+  
+  FP width(int i) const {
+    return region_.width(i);
+  }
+  
   /**
    * @brief Returns the parent cell if it's local.
    *
@@ -343,6 +362,14 @@ class Cell: public tapas::BasicCell<TSP> {
     return nb_;
   }
 
+  AttrType &attr() {
+    return attr_;
+  }
+
+  const AttrType &attr() const {
+    return attr_;
+  }
+
   /**
    * \brief check if the cell is large enough to spawn tasks recursively
    */
@@ -407,13 +434,17 @@ class Cell: public tapas::BasicCell<TSP> {
   
   int nb_; //!< number of bodies in the local process (not bodies under this cell).
   int local_nb_;
+  index_t bid_;
   
   bool is_local_; //!< if it's a local cell or LET cell.
   bool is_local_subtree_; //!< If all of its descendants are local.
 
- const Region<TSP> region_; //!< Local region
+  const Region<TSP> region_; //!< Local region
+  const Vec<Dim, FP> center_; //!< The center of the cell
 
   Mapper mapper_;
+
+  AttrType attr_;
 
   void CheckBodyIndex(index_t idx) const;
 }; // class Cell
@@ -933,9 +964,9 @@ inline void Cell<TSP>::CheckBodyIndex(index_t idx) const {
   TAPAS_ASSERT(this->IsLeaf() && "body or body attribute access is not allowed for non-leaf cells.");
 
   if (is_local_) {
-    TAPAS_ASSERT(this->bid() + idx < (int)data_->local_bodies_.size());
+    TAPAS_ASSERT(bid_ + idx < (int)data_->local_bodies_.size());
   } else {
-    TAPAS_ASSERT(this->bid() + idx < (int)data_->let_bodies_.size());
+    TAPAS_ASSERT(bid_ + idx < (int)data_->let_bodies_.size());
   }
 }
 
@@ -944,9 +975,9 @@ inline const typename TSP::Body &Cell<TSP>::body(index_t idx) const {
   CheckBodyIndex(idx);
   
   if (is_local_) {
-    return data_->local_bodies_[this->bid() + idx];
+    return data_->local_bodies_[bid_ + idx];
   } else {
-    return data_->let_bodies_[this->bid() + idx];
+    return data_->let_bodies_[bid_ + idx];
   }
 }
 
@@ -961,7 +992,7 @@ const typename TSP::Body &Cell<TSP>::local_body(index_t idx) const {
   TAPAS_ASSERT((size_t)idx < data_->local_bodies_.size());
 
   // TODO is it correct?
-  return data_->local_bodies_[this->bid() + idx];
+  return data_->local_bodies_[bid_ + idx];
 }
 
 template <class TSP>
@@ -990,9 +1021,9 @@ const typename TSP::BodyAttr &Cell<TSP>::body_attr(index_t idx) const {
   CheckBodyIndex(idx);
   
   if (is_local_) {
-    return this->data_->local_body_attrs_[this->bid() + idx];
+    return this->data_->local_body_attrs_[bid_ + idx];
   } else {
-    return this->data_->let_body_attrs_[this->bid() + idx];
+    return this->data_->let_body_attrs_[bid_ + idx];
   }
 }
 
@@ -1031,7 +1062,7 @@ const typename TSP::BodyAttr &Cell<TSP>::local_body_attr(index_t idx) const {
   TAPAS_ASSERT(this->IsLocal() && "Cell::local_body_attr(...) is allowed only for local cells.");
   TAPAS_ASSERT(idx < (index_t)data_->local_body_attrs_.size());
   
-  return data_->local_body_attrs_[this->bid() + idx];
+  return data_->local_body_attrs_[bid_ + idx];
 }
 
 /**
