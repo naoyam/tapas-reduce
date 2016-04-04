@@ -591,18 +591,6 @@ struct OptLET {
   // However, it is actually not possible because LET class is declared as 'friend' in the Cell class
   // only with TSP parameter. It's impossible to declare a partial specialization to be friend.
 
-  // // Supporting routine for Traverse(KeyType, KeyType, Data, KeySet, KeySet);
-  // template<class UserFunct, class...Args>
-  // static void Traverse(std::vector<KeyType> &trg_keys, KeyType src_key,
-  //                      Data &data, KeySet &list_attr, KeySet &list_body,
-  //                      UserFunct f, Args...args) {
-  //   // Apply Traverse for each keys in trg_keys. If interaction between trg_keys[i] and src_key is 'approximate',
-  //   // trg_keys[i+1...] will be all 'approximate'.
-  //   for (size_t i = 0; i < trg_keys.size(); i++) {
-  //     Traverse(trg_keys[i], src_key, data, list_attr, list_body, f, args...);
-  //   }
-  // }
-
   // Supporting routine for Traverse(KeyType, KeyType, Data, KeySet, KeySet);
   template<class UserFunct, class...Args>
   static void Traverse(std::vector<KeyType> src_keys,
@@ -641,9 +629,6 @@ struct OptLET {
 
     const auto src_region = CellType::CalcRegion(src_key, data.region_);
 
-    // Maximum depth of the tree.
-    const int max_depth = data.max_depth_;
-
     if (data.lroots_.count(src_key) != 0) {
       // src_key and all its descendants are local. Need not to traverse.
       return;
@@ -653,7 +638,7 @@ struct OptLET {
 
     bool is_src_local = ht.count(src_key) != 0; // CAUTION: even if is_src_local, the children are not necessarily all local.
     bool is_src_local_leaf = is_src_local && ht[src_key]->IsLeaf();
-    bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= max_depth;
+    bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= data.max_depth_;
 
     if (is_src_local_leaf) {
       // Target cell is local and source cell is a local leaf. done.
@@ -699,6 +684,13 @@ struct OptLET {
     return;
   }
 
+  template<class UserFunct, class...Args>
+  static void TraverseGlobalTree(Data &data,
+                                 KeySet &list_attr, KeySet list_body,
+                                 UserFunct f, Args...args) {
+    
+  }
+
   static void ShowHistogram(const Data &data) {
     const int d = data.max_depth_;
     TAPAS_ASSERT(d <= SFC::MaxDepth());
@@ -733,6 +725,9 @@ struct OptLET {
 
   /**
    * \brief Traverse hypothetical global tree and construct a cell list.
+   *
+   * First, list necessary cells using the local process' boundary box.
+   * The boundary box is max/min of 
    */
   template<class UserFunct, class...Args>
   static void DoTraverse(CellType &root,
@@ -745,10 +740,15 @@ struct OptLET {
     req_keys_attr.clear(); // cells of which attributes are to be transfered from remotes to local
     req_keys_body.clear(); // cells of which bodies are to be transfered from remotes to local
 
-    // Construct request lists of necessary cells
+    // Construct a request list by traversing from local roots
     req_keys_attr.insert(root.key());
-
     Traverse(root.key(), root.data(), req_keys_attr, req_keys_body, f, args...);
+    
+    // Construct a request list by traversing local parts of the global tree
+    if (root.data().mpi_rank_ == 3) {
+      // TODO
+    }
+    //TraverseGlobalTree(root.data(), req_keys_attr, req_keys_body, f, args...);
 
     double end = MPI_Wtime();
     MPI_Barrier(MPI_COMM_WORLD);

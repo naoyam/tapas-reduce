@@ -150,32 +150,22 @@ static void ProductMapImpl(CPUMapper<CELL, BODY, LET> & /*mapper*/,
 
   if (am) {
     for (int i = beg1; i < end1; i++) {
-      //BodyIterator b1 = iter1 + i;
       for (int j = beg2; j <= i; j++) {
-        //BodyIterator b2 = iter2 + j;
         if (1) {
 #ifdef TAPAS_COMPILER_INTEL
 # pragma forceinline
 #endif
-          //mapper.Map(f, b1, b2, args...);
-          //f(*b1, b1.attr(), *b2, b2.attr(), args...);
-          //f(bodies[c1.bid() + i], attrs[c1.bid() + i], bodies[c2.bid() + j], attrs[c2.bid() + j], args...);
           f(bodies1[i], attrs1[i], bodies2[j], attrs2[j], args...);
         }
       }
     }
   } else {
     for (int i = beg1; i < end1; i++) {
-      //BodyIterator b1 = iter1 + i;
       for (int j = beg2; j < end2; j++) {
-        //BodyIterator b2 = iter2 + j;
 #ifdef TAPAS_COMPILER_INTEL
 # pragma forceinline
 #endif
-        //mapper.Map(f, b1, b2, args...);
-        //f(*b1, b1.attr(), *b2, b2.attr(), args...);
         f(bodies1[i], attrs1[i], bodies2[j], attrs2[j], args...);
-        //f(bodies[c1.bid() + i], attrs[c1.bid() + i], bodies[c2.bid() + j], attrs[c2.bid() + j], args...);
       }
     }
   }
