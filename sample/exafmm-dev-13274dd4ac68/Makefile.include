@@ -47,9 +47,9 @@ ifneq (,$(ENABLE_SCOREP))
   MPICXX += -DUSE_SCOREP
 endif
 
-ifneq (,$(EXACT_LET))
-	CXX += -DEXACT_LET
-	MPICXX += -DEXACT_LET
+ifneq (,$(TAPAS_ONESIDE_LETT))
+	CXX += -DTAPAS_ONESIDE_LET
+	MPICXX += -DTAPAS_ONESIDE_LET
 endif
 
 ### choose C++ compiler

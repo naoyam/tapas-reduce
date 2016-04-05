@@ -46,10 +46,10 @@
 #include "tapas/hot/report.h"
 #include "tapas/hot/mapper.h"
 
-#ifdef EXACT_LET
-# include "tapas/hot/exact_let.h"
-#else
+#ifdef TAPAS_ONESIDE_LET
 # include "tapas/hot/opt_let.h"
+#else
+# include "tapas/hot/exact_let.h"
 #endif
 
 #define DEBUG_SENDRECV
@@ -170,12 +170,12 @@ class Cell {
   friend class Partitioner<TSP>;
   friend class iter::BodyIterator<Cell>;
 
-#ifdef EXACT_LET
-  friend struct ExactLET<TSP>;
-  using LET = ExactLET<TSP>;
-#else
+#ifdef TAPAS_ONESIDE_LET
   friend struct OptLET<TSP>;
   using LET = OptLET<TSP>;
+#else
+  friend struct ExactLET<TSP>;
+  using LET = ExactLET<TSP>;
 #endif
   
   //========================================================

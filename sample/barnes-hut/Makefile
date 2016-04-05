@@ -28,8 +28,6 @@ endif
 
 CXXFLAGS += -DS=$(S)
 
-CXXFLAGS += -DEXACT_LET
-
 ifeq ($(LET),hardcoded)
 	CXXFLAGS += -DOLD_LET_TRAVERSE
 endif
