@@ -878,19 +878,6 @@ struct ExactLET {
     std::vector<int> attr_dest = Partitioner<TSP>::FindOwnerProcess(data.proc_first_keys_, keys_attr_send);
     std::vector<int> body_dest = Partitioner<TSP>::FindOwnerProcess(data.proc_first_keys_, keys_body_send);
 
-    if (data.mpi_rank_ == 0) {
-      int cnt = 0;
-      for (size_t i = 0; i < keys_attr_send.size(); i++) {
-        if (attr_dest[i] == 38) {
-          std::cout << keys_attr_send[i] << " ";
-          cnt++;
-        }
-      }
-      std::cout << std::endl;
-      std::cout << cnt << " keys to be sent to 38" << std::endl;
-    }
-
-
     MPI_Barrier(MPI_COMM_WORLD);
     bt_comm = MPI_Wtime();
 
