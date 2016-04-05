@@ -2,7 +2,8 @@
 #ifndef __TAPAS_HOT_OPT_LET__
 #define __TAPAS_HOT_OPT_LET__
 
-#include<vector>
+#include <vector>
+#include <stack>
 
 #include <tapas/iterator.h>
 #include <tapas/debug_util.h>
@@ -684,12 +685,94 @@ struct OptLET {
     return;
   }
 
+#if 0
   template<class UserFunct, class...Args>
   static void TraverseGlobalTree(Data &data,
-                                 KeySet &list_attr, KeySet list_body,
+                                 KeySet &list_attr, KeySet &list_body,
                                  UserFunct f, Args...args) {
+    // Bounding boxes of each level (0 - local_roots_lv_max)
+    std::map<int, Vec> bb_max;
+    std::map<int, Vec> bb_min;
     
+    // Get the bb of each level (from 0 to local_roots_lv_max)
+    for (KeyType k : data.lroots_) {
+      KeyType k2 = k;
+      while(1) {
+        int dep = SFC::GetDepth(k2);
+        auto r = CellType::CalcRegion(k2, data.region_);
+
+        if (bb_max.count(dep) == 0) {
+          bb_max[dep] = r.max();
+        } else {
+          bb_max[dep].SetMax(r.max());
+        }
+        
+        if (bb_min.count(dep) == 0) {
+          bb_min[dep] = r.min();
+        } else {
+          bb_min[dep].SetMin(r.min());
+        }
+        if (k2 == 0) break;
+        else k2 = SFC::Parent(k2);
+      }
+    }
+
+    // Maximum level of local roots
+    auto depth_max = [](int depth, KeyType k) {
+      return std::max(depth, SFC::GetDepth(k));
+    };
+    
+    int local_roots_lv_max = std::accumulate(data.lroots_.begin(), data.lroots_.end(),
+                                             0, depth_max);
+
+    if (data.mpi_rank_ == 3) {
+      for (int i = 0; i <= local_roots_lv_max; i++) {
+        std::cout << "Per-lv BB: " << i << " max: " << bb_max[i] << std::endl;
+        std::cout << "Per-lv BB: " << i << " min: " << bb_min[i] << std::endl;
+      }
+    }
   }
+#else
+  template<class UserFunct, class...Args>
+  static void TraverseGlobalTree(Data &data,
+                                 KeySet &list_attr, KeySet &/*list_body*/,
+                                 UserFunct, Args...) {
+    int gtree_dep_min = std::numeric_limits<int>::max();
+    int lroot_dep_max = 0;
+
+    for (KeyType k : data.gleaves_) {
+      gtree_dep_min = std::min(gtree_dep_min, SFC::GetDepth(k));
+    }
+
+
+    for (KeyType k : data.lroots_) {
+      lroot_dep_max = std::max(lroot_dep_max, SFC::GetDepth(k));
+    }
+
+    std::stack<KeyType> stk;
+    stk.push(0);
+
+    while(stk.size() > 0) {
+      KeyType k = stk.top();
+      stk.pop();
+
+      int d = SFC::GetDepth(k);
+
+      if (d >= gtree_dep_min) {
+        if (data.ht_gtree_.count(k) == 0) {
+          list_attr.insert(k);
+        }
+      }
+
+      if (d < lroot_dep_max) {
+        auto cks = SFC::GetChildren(k);
+        for (auto ck : cks) {
+          stk.push(ck);
+        }
+      }
+    }
+  }
+#endif
 
   static void ShowHistogram(const Data &data) {
     const int d = data.max_depth_;
@@ -744,15 +827,17 @@ struct OptLET {
     req_keys_attr.insert(root.key());
     Traverse(root.key(), root.data(), req_keys_attr, req_keys_body, f, args...);
     
-    // Construct a request list by traversing local parts of the global tree
-    if (root.data().mpi_rank_ == 3) {
-      // TODO
-    }
-    //TraverseGlobalTree(root.data(), req_keys_attr, req_keys_body, f, args...);
-
-    double end = MPI_Wtime();
     MPI_Barrier(MPI_COMM_WORLD);
-    root.data().time_let_traverse = end - beg;
+    double end = MPI_Wtime();
+    root.data().time_let_trav_main = end - beg;
+
+    beg = MPI_Wtime();
+    // Construct a request list by traversing local parts of the global tree
+    TraverseGlobalTree(root.data(), req_keys_attr, req_keys_body, f, args...);
+    
+    MPI_Barrier(MPI_COMM_WORLD);
+    end = MPI_Wtime();
+    root.data().time_let_trav_sub = end - beg;
   }
 
   /**
@@ -925,9 +1010,9 @@ struct OptLET {
     MPI_Barrier(MPI_COMM_WORLD);
     bt = MPI_Wtime();
 
-    if(data.mpi_rank_ == 0) std::cout << "Res Attr keys" << std::endl;
+    //if(data.mpi_rank_ == 0) std::cout << "Res Attr keys" << std::endl;
     tapas::mpi::Alltoallv2(attr_keys_send, attr_dest_ranks, req_attr_keys,  attr_src_ranks, MPI_COMM_WORLD);
-    if(data.mpi_rank_ == 0) std::cout << "Res Attr" << std::endl;
+    //if(data.mpi_rank_ == 0) std::cout << "Res Attr" << std::endl;
     tapas::mpi::Alltoallv2(attr_sendbuf,   attr_dest_ranks, res_cell_attrs, attr_src_ranks, MPI_COMM_WORLD);
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -1104,6 +1189,8 @@ struct OptLET {
     KeySet req_leaf_keys; // cells of which bodies are to be transfered from remotes to local
 
     DoTraverse(root, req_cell_attr_keys, req_leaf_keys, f, args...);
+
+    TraverseGlobalTree(root.data(), req_cell_attr_keys, req_leaf_keys, f, args...);
 
     std::vector<KeyType> res_cell_attr_keys; // cell keys of which attributes are requested
     std::vector<KeyType> res_leaf_keys; // leaf cell keys of which bodies are requested

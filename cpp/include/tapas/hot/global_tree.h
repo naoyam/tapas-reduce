@@ -86,29 +86,7 @@ class GlobalTree {
       bb_min.SetMin(r.min());
 
     }
-    if (data.mpi_rank_ == 3) {
-      const KeyType kk = 504403158265495554;
-      auto *c = data.ht_[kk];
-      std::cout << "----------" << std::endl;
-      std::cout << "Cell [kk]'s max=" << c->region().max() << std::endl;
-      std::cout << "Local BB's  max=" << data.local_bb_max_ << std::endl;
-      std::cout << "Computed max=   " << CellType::CalcRegion(kk, data.region_).max() << std::endl;
-      std::cout << std::endl;
-      std::cout << "Cell [kk]'s min=" << c->region().min() << std::endl;
-      std::cout << "Local BB's  min=" << data.local_bb_min_ << std::endl;
-      std::cout << "Computed min=   " << CellType::CalcRegion(kk, data.region_).min() << std::endl;
-      std::cout << "----------" << std::endl;
-      auto k = kk;
-      while(k) {
-        std::cout << SFC::Simplify(k) << " " << SFC::Decode(k) << " " << k << std::endl;
-        k = SFC::Parent(k);
-      }
-      if (data.ht_gtree_.count(kk) != 0) {
-        std::cout << "kk is in GTree!" << std::endl;
-      }
-      std::cout << "----------" << std::endl;
-    }
-
+    
 #if 0
 #ifdef TAPAS_DEBUG
     // check local bb_max / bb_min

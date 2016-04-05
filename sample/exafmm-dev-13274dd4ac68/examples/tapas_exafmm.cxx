@@ -120,6 +120,7 @@ static inline void FMM_Downward(TapasFMM::Cell &c) {
   }
 }
 
+#if 0
 #define SRC_KEY(_k) (_k == 3746994889972252674)
 
 #define IN_LET() (getenv("TAPAS_IN_LET"))
@@ -127,7 +128,7 @@ static inline void FMM_Downward(TapasFMM::Cell &c) {
 #define RANK(_r) (_r == 3)
 
 #define D(msg) do {                                                   \
-    int rank;                                                         \
+    in2t rank;                                                         \
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);                             \
     if (RANK(rank) && IN_LET()) {                                     \
       auto src_key = Cj.key();                                        \
@@ -149,7 +150,10 @@ static inline void FMM_Downward(TapasFMM::Cell &c) {
       }                                         \
     }                                           \
   } while(0)
-
+#else
+#define D2(stmt)
+#define D(msg)
+#endif
 
 
 // Perform ExaFMM's Dual Tree Traversal (M2L & P2P)
@@ -166,16 +170,12 @@ struct FMM_DTT {
     // TODO:
     //if (Ci.nb() == 0 || Cj.nb() == 0) return;
 
-    //D("found");
-
     //real_t R2 = (Ci.center() - Cj.center()).norm();
     D2(setenv("TAPAS_DEBUG_TMP", "1", 1));
     real_t R2 = Ci.Distance(Cj, tapas::Center);
     D2(unsetenv("TAPAS_DEBUG_TMP"));
     vec3 Xperiodic = 0; // dummy; periodic is not ported
 
-    //D("R2 = " << R2);
-    
     real_t Ri = 0;
     real_t Rj = 0;
 
@@ -183,12 +183,11 @@ struct FMM_DTT {
       Ri = std::max(Ri, Ci.width(d));
       Rj = std::max(Rj, Cj.width(d));
     }
-    //D("Ri = " << Ri);
-    //D("Rj = " << Rj);
     
     Ri = (Ri / 2 * 1.00001) / theta;
     Rj = (Rj / 2 * 1.00001) / theta;
 
+#if 0
     { // debug begin
       std::stringstream ss;
       ss << "R2 > (Ri+Rj)^2 ? " << (R2 > (Ri + Rj) * (Ri + Rj) ? " => Yes => Approx" : " => No  => Split ")
@@ -227,6 +226,7 @@ struct FMM_DTT {
         D(ss.str());
       }
     } // debug end
+#endif
     
     if (R2 > (Ri + Rj) * (Ri + Rj)) {                   // If distance is far enough
       // tapas::Apply(M2L, Ci, Cj, Xperiodic, mutual); // \todo
@@ -512,6 +512,20 @@ void dumpLeaves(TapasFMM::Cell &root) {
   ofs.close();
 }
 
+std::string Now() {
+  time_t now = time(NULL);
+  struct tm *pnow = localtime(&now);
+
+  std::stringstream ss;
+  ss << pnow->tm_year + 1900 << "/"
+     << (pnow->tm_mon + 1) << "/"
+     << pnow->tm_mday << " "
+     << pnow->tm_hour << ":"
+     << pnow->tm_min << ":"
+     << pnow->tm_sec;
+  return ss.str();
+}
+
 int main(int argc, char ** argv) {
   Args args(argc, argv);
   
@@ -520,6 +534,10 @@ int main(int argc, char ** argv) {
 
   MPI_Comm_rank(MPI_COMM_WORLD, &args.mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &args.mpi_size);
+
+  if (args.mpi_rank == 0) {
+    std::cout << Now() << " MPI Initialization done." << std::endl;
+  }
 #endif
 
 #ifdef TBB
@@ -598,6 +616,10 @@ int main(int argc, char ** argv) {
   }
 
   double time_upw = 0, time_dtt = 0, time_dwn = 0, time_tree = 0;
+
+  if (args.mpi_rank == 0) {
+    std::cout << "Starting FMM timesteps" << std::endl;
+  }
   
   for (int t=0; t<args.repeat; t++) {
     double total_bt = GetTime();

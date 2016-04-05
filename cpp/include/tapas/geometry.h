@@ -79,17 +79,6 @@ struct Distance<CenterClass, FP> {
       }
     }
     
-    if (getenv("TAPAS_DEBUG_TMP")) {
-      std::cout << "CalcApprox: " << "trg_max =" << trg_max << std::endl;
-      std::cout << "CalcApprox: " << "trg_min =" << trg_min << std::endl;
-      std::cout << "CalcApprox: " << "Rt      =" << (trg_max - trg_min) << std::endl;
-      std::cout << "CalcApprox: " << "src_max =" << src_max << std::endl;
-      std::cout << "CalcApprox: " << "src_min =" << src_min << std::endl;
-      std::cout << "CalcApprox: " << "Rs      =" << (src_max - src_min) << std::endl;
-      std::cout << "CalcApprox: " << "trg_ctr =" << trg_ctr << std::endl;
-      std::cout << "CalcApprox: " << "dec     =" << decision << std::endl;
-    }
-    
     return (src_ctr - trg_ctr).norm();
   }
 };

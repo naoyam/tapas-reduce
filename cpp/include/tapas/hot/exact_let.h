@@ -799,7 +799,7 @@ struct ExactLET {
 
     double end = MPI_Wtime();
     MPI_Barrier(MPI_COMM_WORLD);
-    root.data().time_let_traverse = end - beg;
+    root.data().time_let_trav_main = end - beg;
   }
 
   /**

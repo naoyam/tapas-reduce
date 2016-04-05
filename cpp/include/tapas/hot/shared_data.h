@@ -74,7 +74,8 @@ struct SharedData {
   double time_tree_growglobal; // Tree construction / grow global tree
 
   double time_let_all;      // ExchangeLET/All
-  double time_let_traverse; // ExchangeLET/Traverse
+  double time_let_trav_main; // ExchangeLET/Traverse
+  double time_let_trav_sub; // ExchangeLET/Traverse
   double time_let_req_all;      // ExchangeLET/Request
   double time_let_req_comm;     // ExchangeLET/Request
   double time_let_res_all;
@@ -112,7 +113,8 @@ struct SharedData {
       , time_tree_growlocal(0)
       , time_tree_growglobal(0)
       , time_let_all      (0)
-      , time_let_traverse (0)
+      , time_let_trav_main (0)
+      , time_let_trav_sub (0)
       , time_let_req_all  (0)
       , time_let_req_comm (0)
       , time_let_res_all  (0)

@@ -89,12 +89,13 @@ void Report(const Data &data) {
 
   // LET exchange breakdown
   {
-    RankCSV csv {"LET-All", "LET-Trav",
+    RankCSV csv {"LET-All", "LET-Trav-main", "LET-Trav-sub",
           "LET-Req-all", "LET-Req-comm",
           "LET-Res-all", "LET-Res-acomm", "LET-Res-bcomm",
           "LET-Reg"};
     csv.At("LET-All") = data.time_let_all;
-    csv.At("LET-Trav") = data.time_let_traverse;
+    csv.At("LET-Trav-main") = data.time_let_trav_main;
+    csv.At("LET-Trav-sub") = data.time_let_trav_sub;
     csv.At("LET-Req-all") = data.time_let_req_all;
     csv.At("LET-Req-comm") = data.time_let_req_comm;
     csv.At("LET-Res-all") = data.time_let_res_all;
