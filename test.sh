@@ -127,11 +127,13 @@ if mpicxx --showme:version 2>/dev/null | grep "Open MPI"; then
     # Opne MPI
     MPICC="env OMPI_CC=${CC} mpicc"
     MPICXX="env OMPI_CXX=${CXX} mpicxx"
+    MPI=mpiexec
     echo Looks like Open MPI.
 else
     # mpich family (mpich and mvapich)
     MPICC="env MPICH_CXX=${CXX} MPICH_CC=${CC} mpicc"
     MPICXX="env MPICH_CXX=${CXX} MPICH_CC=${CC} mpicxx"
+    MPI=mpirun
     echo Looks like Mpich.
 fi
 
@@ -154,8 +156,8 @@ make -j MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=release -C $SRC_DIR c
 
 for t in `find $SRC_DIR -perm -u+x -name "test_*"`; do
     for NP in 1 2 3 4; do
-        echoCyan mpiexec -np $NP $t 
-        mpiexec -np $NP $t
+        echoCyan ${MPI} -np $NP $t
+        ${MPI} -np $NP $t
     done
 done
 
@@ -181,7 +183,7 @@ else
     echo "Unknown SCALE : '$SCALE'" >&2
     exit 1
 fi
-    
+
 SRC_DIR=$SRC_ROOT/sample/barnes-hut
 BIN=$SRC_DIR/bh_mpi
 
@@ -190,8 +192,8 @@ make CXX=${CXX} CC=${CC} MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=rele
 
 for np in ${NP[@]}; do
     for nb in ${NB[@]}; do
-        echoCyan mpiexec -n $np $SRC_DIR/bh_mpi -w $nb
-        mpiexec -n $np $SRC_DIR/bh_mpi -w $nb | tee $TMPFILE
+        echoCyan ${MPI} -n $np $SRC_DIR/bh_mpi -w $nb
+        ${MPI} -n $np $SRC_DIR/bh_mpi -w $nb | tee $TMPFILE
 
         PERR=$(grep "P ERR" $TMPFILE | grep -oE "[0-9.e+-]+")
         FERR=$(grep "F ERR" $TMPFILE | grep -oE "[0-9.e+-]+")
@@ -243,7 +245,7 @@ else
     echo "Unknown SCALE : '$SCALE'" >&2
     exit 1
 fi
-    
+
 SRC_DIR=$SRC_ROOT/sample/exafmm-dev-13274dd4ac68/examples
 
 # Build one-side LET version
@@ -285,23 +287,23 @@ for dist in ${DIST[@]}; do
                 cat $TMPFILE
 
                 accuracyCheck $TMPFILE
-                
+
                 echo
                 echo
 
                 for np in ${NP[@]}; do
                     # run Exact LET TapasFMM
                     rm -f $TMPFILE; sleep 1s
-                    echoCyan mpiexec -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
-                    mpiexec -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
+                    echoCyan ${MPI} -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
+                    ${MPI} -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
                     cat $TMPFILE
 
                     accuracyCheck $TMPFILE
 
                     # run One-side LET TapasFMM
                     rm -f $TMPFILE; sleep 1s
-                    echoCyan mpiexec -n $np $SRC_DIR/parallel_tapas_oneside -n $nb -c $ncrit -d $dist --mutual $mutual
-                    mpiexec -n $np $SRC_DIR/parallel_tapas_oneside -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
+                    echoCyan ${MPI} -n $np $SRC_DIR/parallel_tapas_oneside -n $nb -c $ncrit -d $dist --mutual $mutual
+                    ${MPI} -n $np $SRC_DIR/parallel_tapas_oneside -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
                     cat $TMPFILE
 
                     accuracyCheck $TMPFILE
@@ -324,7 +326,7 @@ exit $STATUS
 if which nvcc >/dev/null 2>&1; then
     NVCC_OPT="-O3 -Xcicc -Xptas --compiler-options -Wall --compiler-options -Wextra --compiler-options -Wno-unused-parameter \
             -Xcompiler -rdynamic -lineinfo --device-debug -x cu -arch sm_35 -ccbin=g++"
-    
+
     which g++
     BIN=parallel_tapas_cuda
     SRC_DIR=$SRC_ROOT/sample/exafmm-dev-13274dd4ac68/examples
@@ -338,12 +340,12 @@ if which nvcc >/dev/null 2>&1; then
     compile=$(echo $compile | sed -e 's/-Wl,[^ ]*//g')
     echo $compile
     $compile
-    
+
     for dist in ${DIST[@]}; do
         for nb in ${NB[@]}; do
             for ncrit in ${NCRIT[@]}; do
-                echoCyan mpiexec -n 1 ./$BIN --numBodies 1000
-                mpiexec -n 1 ./$BIN --numBodies 10000 > $TMPFILE
+                echoCyan ${MPI} -n 1 ./$BIN --numBodies 1000
+                ${MPI} -n 1 ./$BIN --numBodies 10000 > $TMPFILE
                 cat $TMPFILE
                 accuracyCheck $TMPFILE
             done
@@ -351,4 +353,3 @@ if which nvcc >/dev/null 2>&1; then
     done
 
 fi
-
