@@ -246,6 +246,11 @@ fi
     
 SRC_DIR=$SRC_ROOT/sample/exafmm-dev-13274dd4ac68/examples
 
+# Build one-side LET version
+echoCyan env CC=${CC} CXX=${CXX} MPICC="${MPICC}" MPICXX="${MPICXX}" TAPAS_ONESIDE_LET=1 make VERBOSE=1 MODE=release -C $SRC_DIR clean tapas
+env CC=${CC} CXX=${CXX} MPICC="${MPICC}" MPICXX="${MPICXX}" TAPAS_ONESIDE_LET=1 make VERBOSE=1 MODE=release -C $SRC_DIR clean tapas
+mv $SRC_DIR/parallel_tapas $SRC_DIR/parallel_tapas_oneside
+
 echoCyan env CC=${CC} CXX=${CXX} MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" make VERBOSE=1 MODE=release -C $SRC_DIR clean tapas
 env CC=${CC} CXX=${CXX} MPICC="${MPICC}" MPICXX="${MPICXX}" make VERBOSE=1 MODE=release -C $SRC_DIR clean tapas
 
@@ -285,9 +290,18 @@ for dist in ${DIST[@]}; do
                 echo
 
                 for np in ${NP[@]}; do
+                    # run Exact LET TapasFMM
                     rm -f $TMPFILE; sleep 1s
                     echoCyan mpiexec -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
                     mpiexec -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
+                    cat $TMPFILE
+
+                    accuracyCheck $TMPFILE
+
+                    # run One-side LET TapasFMM
+                    rm -f $TMPFILE; sleep 1s
+                    echoCyan mpiexec -n $np $SRC_DIR/parallel_tapas_oneside -n $nb -c $ncrit -d $dist --mutual $mutual
+                    mpiexec -n $np $SRC_DIR/parallel_tapas_oneside -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
                     cat $TMPFILE
 
                     accuracyCheck $TMPFILE
