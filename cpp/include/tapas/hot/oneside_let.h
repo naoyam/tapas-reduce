@@ -700,8 +700,8 @@ struct OptLET {
   static void AddGapCells(Data &data,
                           KeySet &list_attr, KeySet &/*list_body*/,
                           UserFunct, Args...) {
-    int gtree_dep_min = std::numeric_limits<int>::max();
-    int lroot_dep_max = 0;
+    int gtree_dep_min = std::numeric_limits<int>::max(); // minimum depth (closest to the root) of the global tree
+    int lroot_dep_max = 0; // The maximum level of local roots
     
     for (KeyType k : data.gleaves_) {
       gtree_dep_min = std::min(gtree_dep_min, SFC::GetDepth(k));
@@ -712,6 +712,7 @@ struct OptLET {
       lroot_dep_max = std::max(lroot_dep_max, SFC::GetDepth(k));
     }
 
+    // Mark all the cells at the level of (gtree_dep_min < and < lroot_dep_max)
     if (lroot_dep_max - gtree_dep_min >= 2) {
       std::stack<KeyType> stk;
       stk.push(0);
