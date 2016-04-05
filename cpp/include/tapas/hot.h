@@ -47,7 +47,7 @@
 #include "tapas/hot/mapper.h"
 
 #ifdef TAPAS_ONESIDE_LET
-# include "tapas/hot/opt_let.h"
+# include "tapas/hot/oneside_let.h"
 #else
 # include "tapas/hot/exact_let.h"
 #endif
