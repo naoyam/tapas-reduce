@@ -530,7 +530,7 @@ struct ExactLET {
     void Body()    { marked_body_ = true; }
 
     void InitBodies() {
-      if (cell_ != nullptr && cell_->nb() >= 0) {
+      if (cell_ != nullptr && cell_->nb() > 0) {
         auto nb = cell_->nb();
         if (bodies_.size() != nb) {
           bodies_.resize(nb);
