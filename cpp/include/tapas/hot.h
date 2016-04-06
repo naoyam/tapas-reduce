@@ -107,11 +107,11 @@ GetBodyRange(const typename SFC::KeyType k,
     return get_key(hn) < k;
   };
 
-  auto fst = std::lower_bound(beg, end, k, less_than); // first node 
+  auto fst = std::lower_bound(beg, end, k, less_than); // first node
   auto lst = std::lower_bound(fst, end, SFC::GetNext(k), less_than); // last node
-  
+
   assert(lst <= end);
-  
+
   return std::make_pair(fst - beg, lst - fst); // returns (pos, nb)
 }
 
@@ -177,9 +177,9 @@ class Cell {
   friend struct ExactLET<TSP>;
   using LET = ExactLET<TSP>;
 #endif
-  
+
   //========================================================
-  // Typedefs 
+  // Typedefs
   //========================================================
  public: // public type usings
   static const constexpr int Dim = TSP::Dim;
@@ -189,7 +189,7 @@ class Cell {
 
   typedef std::unordered_map<KeyType, Cell*> CellHashTable;
   using KeySet = std::unordered_set<KeyType>;
-  
+
   typedef typename TSP::CellAttr attr_type;
   typedef typename TSP::CellAttr AttrType;
   typedef typename TSP::Body BodyType;
@@ -199,7 +199,7 @@ class Cell {
   using Body = BodyType;
   using BodyAttr = BodyAttrType;
   using Mapper = typename TSP::template Mapper<CellType, Body, LET>;
-  
+
   using BodyIterator = iter::BodyIterator<Cell>;
   using SubCellIterator = iter::SubCellIterator<Cell>;
 
@@ -216,12 +216,12 @@ class Cell {
   static Cell *CreateRemoteCell(KeyType k, int nb, Data *data) {
     Cell *c = new Cell(k, data->region_, 0, 0);
     c->is_leaf_ = false;
-    c->is_local_ = false; // This cell is 
+    c->is_local_ = false; // This cell is
     c->is_local_subtree_ = false;
     c->nb_ = nb;
     c->data_ = data;
     bzero(&c->attr_, sizeof(c->attr_));
-    
+
     return c;
   }
 
@@ -234,7 +234,7 @@ class Cell {
       , bid_(bid)
       , region_(CalcRegion(key, region))
       , center_((region_.max() + region_.min()) / 2)
-  {} 
+  {}
   //: tapas::BasicCell<TSP>(region, bid, nb)
 
   //========================================================
@@ -243,7 +243,7 @@ class Cell {
 
  public:
   KeyType key() const { return key_; }
-  
+
   template <class T> bool operator==(const T &) const { return false; }
   bool operator==(const Cell &c) const;
   bool operator<(const Cell &c) const;
@@ -262,17 +262,17 @@ class Cell {
    */
   bool IsLeaf() const;
   void SetLeaf(bool);
-  
+
   /**
    * @brief Returns if the cell is local.
    */
   bool IsLocal() const;
-  
+
   /**
    * @brief Returns the number of subcells. This is 0 or 2^DIM in HOT algorithm.
    */
   int nsubcells() const;
-  
+
   /**
    * @brief Returns idx-th subcell.
    */
@@ -288,11 +288,11 @@ class Cell {
   Vec<Dim, FP> width() const {
     return region_.width();
   }
-  
+
   FP width(int i) const {
     return region_.width(i);
   }
-  
+
   /**
    * @brief Returns the parent cell if it's local.
    *
@@ -308,7 +308,7 @@ class Cell {
 
   Data &data() { return *data_; }
   Data* data_ptr() { return data_; }
-  
+
 #ifdef DEPRECATED
   typename TSP::Body &particle(index_t idx) const {
     return body(idx);
@@ -321,7 +321,7 @@ class Cell {
 
   BodyType &local_body(index_t idx);
   const BodyType &local_body(index_t idx) const;
-  
+
   BodyIterator bodies() {
     return BodyIterator(*this);
   }
@@ -331,13 +331,13 @@ class Cell {
 
   //BodyAttrType *body_attrs();
   //const BodyAttrType *body_attrs() const;
-  
+
   BodyAttrType &local_body_attr(index_t idx);
   const BodyAttrType &local_body_attr(index_t idx) const;
-  
+
   BodyAttrType *local_body_attrs();
   const BodyAttrType *local_body_attrs() const;
-  
+
   /**
    * \brief Get number of local particles that belongs to the cell (directly or indirectly)
    * This function is mainly for debugging or checking result and internal use.
@@ -345,13 +345,13 @@ class Cell {
    * because it exposes the underlying implementation details of Tapas runtime.
    * In addition, if the cell spans over multiple processes, lcoal_nb() counts only local bodies
    * and does not return the "true" number.
-   */ 
+   */
   inline size_t local_nb() const {
     return (size_t) local_nb_;
   }
 
   static const constexpr bool Inspector = false;
-  
+
   inline size_t nb() const {
 #ifdef TAPAS_DEBUG
     if (!this->IsLeaf()) {
@@ -382,7 +382,7 @@ class Cell {
   static tapas::Vec<Dim, FP> CalcCenter(KeyType, const Region<TSP>& r);
 
   void Report() const { tapas::hot::Report<Data>(*data_); }
-  
+
 #ifdef DEPRECATED
   typename TSP::BT_ATTR *particle_attrs() const {
     return body_attrs();
@@ -402,7 +402,7 @@ class Cell {
   MPI_Comm GetOptMPIComm() const {
     return data_->mpi_comm_;
   }
-  
+
   MPI_Comm SetOptMPIComm(MPI_Comm) {
     MPI_Comm prev = data_->mpi_comm_;
     data_->mpi_comm_;
@@ -415,7 +415,7 @@ class Cell {
   inline FP Distance(Cell &rhs, tapas::CenterClass) {
     return tapas::Distance<tapas::CenterClass, FP>::Calc(*this, rhs);
   }
-  
+
   //inline FP Distance(Cell &rhs, tapas::Edge) {
   //  return tapas::Distance<tapas::Edge, FP>::Calc(*this, rhs);
   //}
@@ -431,11 +431,11 @@ class Cell {
   KeyType key_; //!< Key of the cell
   bool is_leaf_;
   Data* data_;
-  
+
   int nb_; //!< number of bodies in the local process (not bodies under this cell).
   int local_nb_;
   index_t bid_;
-  
+
   bool is_local_; //!< if it's a local cell or LET cell.
   bool is_local_subtree_; //!< If all of its descendants are local.
 
@@ -470,7 +470,7 @@ void ReportSplitType(typename Cell<TSP>::KeyType trg_key,
                      typename Cell<TSP>::KeyType src_key,
                      SplitType by_pred, SplitType orig) {
   using SFC = typename Cell<TSP>::SFC;
-  
+
   tapas::debug::DebugStream e("check");
   e.out() << SFC::Simplify(trg_key) << " - " << SFC::Simplify(src_key) << "  ";
 
@@ -493,7 +493,7 @@ void ReportSplitType(typename Cell<TSP>::KeyType trg_key,
     case SplitType::None:       e.out() << "None:";      break;
     default: assert(0);
   }
-  
+
   e.out() << " " << (by_pred == orig ? "OK" : "NG") << std::endl;
 }
 
@@ -512,7 +512,7 @@ Region<TSP> ExchangeRegion(const Region<TSP> &r) {
 
   // Exchange min
   tapas::mpi::Allreduce(&r.min()[0], &new_min[0], Dim, MPI_MIN, MPI_COMM_WORLD);
-  
+
   return Region<TSP>(new_min, new_max);
 }
 
@@ -596,7 +596,7 @@ void SortBodies(const typename TSP::Body *b, typename TSP::Body *sorted,
 template <int DIM, class SFC, class T>
 void AppendChildren(typename SFC::KeyType x, T &s) {
   using KeyType = typename SFC::KeyType;
-  
+
   int x_depth = SFC::GetDepth(x);
   int c_depth = x_depth + 1;
   if (c_depth > SFC::MAX_DEPTH) return;
@@ -615,13 +615,13 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
                     typename TSP::SFC::KeyVector &s) {
   typedef typename TSP::SFC SFC;
   typedef typename SFC::KeyType KeyType;
-  
+
   KeyType fa = SFC::FinestAncestor(x, y);
   typename SFC::KeyList w;
-  
+
   AppendChildren<TSP::Dim, KeyType>(fa, w);
   tapas::PrintKeys(w, std::cout);
-  
+
   while (w.size() > 0) {
     KeyType k = w.front();
     w.pop_front();
@@ -650,7 +650,7 @@ void LocalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
               << k << std::endl;
   }
   TAPAS_ASSERT(c.IsLocal());
-      
+
   if (c.IsLeaf()) {
     f(c);
   } else {
@@ -672,12 +672,12 @@ void ExchangeGlobalLeafAttrs(typename Cell<TSP>::CellHashTable &gtree,
   // data.gleaves_ is unnecessary?
   using KeyType = typename Cell<TSP>::KeyType;
   using AttrType = typename Cell<TSP>::AttrType;
-  
+
   std::vector<KeyType> keys_send(lroots.begin(), lroots.end());
   std::vector<KeyType> keys_recv;
   std::vector<AttrType> attr_send;
   std::vector<AttrType> attr_recv;
-  
+
   auto &data = gtree[0]->data();
 
   for(size_t i = 0; i < keys_send.size(); i++) {
@@ -721,7 +721,7 @@ void GlobalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
   }
 
   TAPAS_ASSERT(data.ht_gtree_.count(k) > 0);
-  
+
   // c is not a global leaf.
   int nc = c.nsubcells();
   for (int ci = 0; ci < nc; ci++) {
@@ -729,7 +729,7 @@ void GlobalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
     Cell<TSP> *child = data.ht_gtree_.at(chk);
     GlobalUpwardTraversal(*child, f);
   }
-  
+
   f(c);
 }
 
@@ -745,7 +745,7 @@ void GlobalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
     code;                                             \
     ds.out() << std::endl;                            \
   } while(0)
-    
+
 template<class TSP>
 void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
   auto &data = c.data();
@@ -762,7 +762,7 @@ void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
   //     perform local upward up to c
   //   end if
 
-  
+
   if (data.ht_gtree_.count(c.key()) > 0) {
     // c is in the global tree. We need to
     // 1. calculate local roots in each process,
@@ -780,11 +780,11 @@ void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
 
     GlobalUpwardTraversal(c, f);
   } else {
-    
+
     // c is not in the global tree, which means c's subtree is perfectly local.
     // This means that the user called PostOrderMap not from the root cell.
     // We're not sure yet if such invocation is allowed in Tapas programming model.
-    
+
     assert(false); // for debug
     LocalUpwardTraversal(c, f);
   }
@@ -793,18 +793,18 @@ void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
 template<class TSP>
 void Cell<TSP>::PreOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
   f(c);
-  
+
   if (c.IsLeaf()) return;
-  
+
   auto &data = c.data();
-  
+
   for (auto && ch_key : SFC::GetChildren(c.key())) {
 #ifdef TAPAS_DEBUG
     if (data.ht_gtree_.count(ch_key) > 0 && data.ht_.count(ch_key) > 0) {
       TAPAS_ASSERT(data.ht_gtree_[ch_key] == data.ht_[ch_key]);
     }
 #endif
-    
+
     if      (data.ht_gtree_.count(ch_key) > 0) PreOrderMap(*data.ht_gtree_.at(ch_key), f);
     else if (data.ht_.count(ch_key)       > 0) PreOrderMap(*data.ht_.at(ch_key), f);
   }
@@ -868,7 +868,7 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) {
   // assert c != nullptr
   if (c == nullptr) {
     std::stringstream ss;
-    ss << "In MPI rank " << data_->mpi_rank_ << ": " 
+    ss << "In MPI rank " << data_->mpi_rank_ << ": "
        << "Cell not found for key "
        << SFC::Simplify(child_key) << " "
        << SFC::Decode(child_key) << " "
@@ -882,12 +882,12 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) {
          << SFC::Decode(k) << " "
          << k << std::endl;
     }
-    
+
     TAPAS_LOG_ERROR() << ss.str(); abort();
     TAPAS_ASSERT(c != nullptr);
   }
 #endif // TAPAS_DEBUG
-  
+
   return *c;
 }
 
@@ -897,13 +897,13 @@ inline Cell<TSP> *Cell<TSP>::Lookup(KeyType k) const {
   auto &ht = data_->ht_;
   auto &ht_let = data_->ht_let_;
   auto &ht_gtree = data_->ht_gtree_;
-  
+
   auto i = ht.find(k);
   if (i != ht.end()) {
     assert(i->second != nullptr);
     return i->second;
   }
-  
+
   i = ht_let.find(k);
   // If the key is not in local hash, next try LET hash.
   if (i != ht_let.end()) {
@@ -922,13 +922,13 @@ inline Cell<TSP> *Cell<TSP>::Lookup(KeyType k) const {
     assert(i->second != nullptr);
     return i->second;
   }
-  
+
   return nullptr;
 }
 
 template <class TSP>
 Cell<TSP> &Cell<TSP>::parent() const {
-  
+
 #ifdef TAPAS_DEBUG
   // \todo Split TAPAS_DEBUG and TAPAS_DEV_DEBUG
   if (IsRoot()) {
@@ -936,10 +936,10 @@ Cell<TSP> &Cell<TSP>::parent() const {
     TAPAS_DIE();
   }
 #endif
-  
+
   KeyType parent_key = SFC::Parent(key_);
   auto *c = Lookup(parent_key);
-  
+
 #ifdef TAPAS_DEBUG
   if (c == nullptr) {
     TAPAS_LOG_ERROR() << "Parent (" << parent_key << ") of "
@@ -950,7 +950,7 @@ Cell<TSP> &Cell<TSP>::parent() const {
     TAPAS_DIE();
   }
 #endif
-  
+
   return *c;
 }
 
@@ -973,7 +973,7 @@ inline void Cell<TSP>::CheckBodyIndex(index_t idx) const {
 template <class TSP>
 inline const typename TSP::Body &Cell<TSP>::body(index_t idx) const {
   CheckBodyIndex(idx);
-  
+
   if (is_local_) {
     return data_->local_bodies_[bid_ + idx];
   } else {
@@ -1003,7 +1003,7 @@ typename TSP::Body &Cell<TSP>::local_body(index_t idx) {
 // template <class TSP>
 // const typename TSP::BT_ATTR *Cell<TSP>::body_attrs() const {
 //   CheckBodyIndex(0);
-  
+
 //   if (is_local_) {
 //     return data_->local_body_attrs_.data() + this->bid();
 //   } else {
@@ -1019,7 +1019,7 @@ typename TSP::Body &Cell<TSP>::local_body(index_t idx) {
 template <class TSP>
 const typename TSP::BodyAttr &Cell<TSP>::body_attr(index_t idx) const {
   CheckBodyIndex(idx);
-  
+
   if (is_local_) {
     return this->data_->local_body_attrs_[bid_ + idx];
   } else {
@@ -1034,13 +1034,13 @@ typename TSP::BodyAttr &Cell<TSP>::body_attr(index_t idx) {
 
 /**
  * \brief Returns a pointer to the first element of local bodies.
- * This function breaks the abstraction of Tapas and should be used only for 
+ * This function breaks the abstraction of Tapas and should be used only for
  * debugging / result checking purpose.
  */
 template <class TSP>
 const typename TSP::BodyAttr *Cell<TSP>::local_body_attrs() const {
   TAPAS_ASSERT(this->IsLocal() && "Cell::local_body_attrs() is only allowed for local cells");
-  
+
   return data_->local_body_attrs_.data();
 }
 
@@ -1061,7 +1061,7 @@ template <class TSP>
 const typename TSP::BodyAttr &Cell<TSP>::local_body_attr(index_t idx) const {
   TAPAS_ASSERT(this->IsLocal() && "Cell::local_body_attr(...) is allowed only for local cells.");
   TAPAS_ASSERT(idx < (index_t)data_->local_body_attrs_.size());
-  
+
   return data_->local_body_attrs_[bid_ + idx];
 }
 
@@ -1077,14 +1077,14 @@ template <class TSP> // Tapas static params
 class Partitioner {
  private:
   const int max_nb_;
-  
+
   using BodyType = typename TSP::Body;
   using KeyType = typename Cell<TSP>::KeyType;
   using CellAttrType = typename Cell<TSP>::AttrType;
   using CellHashTable = typename Cell<TSP>::CellHashTable;
-  
+
   using KeySet = typename Cell<TSP>::SFC::KeySet;
-  
+
   using SFC = typename TSP::SFC;
   using HT = typename Cell<TSP>::CellHashTable;
 
@@ -1098,14 +1098,14 @@ class Partitioner {
   //---------------------
   // Supporting functions
   //---------------------
-  
+
   /**
    * @brief Find owner process from a head-key list.
    * The argument head_list contains SFC keys that are the first keys of processes.
    * head_list[P] is the first SFC key belonging to process P.
    * Because the first element is always 0 (by definition of space filling curve),
    * the result must be always >= 0.
-   * 
+   *
    */
   static int
   FindOwnerProcess(const std::vector<KeyType> &head_list, KeyType key) {
@@ -1131,7 +1131,7 @@ class Partitioner {
    * \brief Select cells to be sent as a response in LET::Exchange
    * The request lists are made conservatively, thus not all the requested cells exist in the sender process.
    * Check the requested list and replace non-existing cells with existing cells by the their finest anscestors.
-   * If attribute of a cell is requested but the cell is actually a leaf, 
+   * If attribute of a cell is requested but the cell is actually a leaf,
    * both of the attribut and body must be sent.
    */
   static void SelectResponseCells(std::vector<KeyType> &cell_attr_keys, std::vector<int> &attr_src_pids,
@@ -1164,7 +1164,7 @@ class Partitioner {
         res_body.insert(std::make_pair(src_pid, k));
       }
     }
-        
+
     for (size_t i = 0; i < leaf_keys.size(); i++) {
       KeyType k = leaf_keys[i];
       int src_pid = leaf_src_pids[i];
@@ -1211,7 +1211,7 @@ class Partitioner {
 
     return;
   }
-  
+
   static void KeysToAttrs(const std::vector<KeyType> &keys,
                           std::vector<CellAttrType> &attrs,
                           const HT& hash) {
@@ -1240,7 +1240,7 @@ class Partitioner {
       }
     }
   }
-  
+
 }; // class Partitioner
 
 /**
@@ -1265,7 +1265,7 @@ Region<TSP> Cell<TSP>::CalcRegion(KeyType key, const Region<TSP> &region) {
   if (key == 0) return region;
 
   const int kDim = TSP::Dim;
-  
+
   auto r = region;
   const int kDepth = SFC::GetDepth(key);
 
@@ -1280,7 +1280,7 @@ Region<TSP> Cell<TSP>::CalcRegion(KeyType key, const Region<TSP> &region) {
     }
   }
 #endif
-  
+
   return r;
 }
 
@@ -1323,7 +1323,7 @@ Partitioner<TSP>::Partition(typename TSP::Body *b, index_t num_bodies) {
 #ifdef TAPAS_DEBUG_DUMP
   {
     tapas::debug::DebugStream e("cells");
-    
+
     for (auto&& iter : data->ht_) {
       KeyType k = iter.first;
       Cell<TSP> *c = iter.second;
@@ -1402,7 +1402,7 @@ struct Tapas2 {
   using Cell = hot::Cell<TSP>;
   using BodyIterator = typename Cell::BodyIterator;
   using Body = typename TSP::Body;
-  
+
   /**
    * @brief Partition and build an octree of the target space.
    * @param b Array of body of BT::type.
