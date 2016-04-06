@@ -542,11 +542,16 @@ int main(int argc, char ** argv) {
 
 #ifdef TBB
   if (TBB_INTERFACE_VERSION != TBB_runtime_interface_version()) {
-    std::cerr << "Compile-time and run-time TBB versions do not match." << std::endl;
+    if (args.mpi_rank == 0) {
+      std::cerr << "Compile-time and run-time TBB versions do not match." << std::endl;
+    }
     abort();
   }
-  std::cout << "TBB: version = " << TBB_runtime_interface_version() << std::endl;
-  std::cout << "TBB: Initializing threads = " << args.threads << std::endl;
+
+  if (args.mpi_rank == 0) {
+    std::cout << "TBB: version = " << TBB_runtime_interface_version() << std::endl;
+    std::cout << "TBB: Initializing threads = " << args.threads << std::endl;
+  }
   task_scheduler_init init(args.threads);
 #endif
   
