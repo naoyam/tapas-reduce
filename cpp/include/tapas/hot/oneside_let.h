@@ -261,16 +261,9 @@ struct OptLET {
         , marked_touched_(false), marked_split_(false), marked_body_(false)
           //, cell_(nullptr)
         , bodies_(), body_attrs_(), attr_()
-    {
-#if 0
-      if (key_ == 3242591731706757122) {
-        std::cout << "In ProxyCell(): key=" << key_ << std::endl;
-        std::cout << "In ProxyCell(): max=" << max << std::endl;
-        std::cout << "In ProxyCell(): min=" << min << std::endl;
-        std::cout << "In ProxyCell(): ctr=" << center_ << std::endl;
-      }
-#endif
-    }
+    { }
+
+    ProxyCell() = delete;
 
     inline ProxyCell &cell() { return *this; }
     inline const ProxyCell &cell() const { return *this; }
@@ -342,7 +335,7 @@ struct OptLET {
     }
 
     inline int depth() const {
-      return SFC::GetDepth(key_);
+      return depth_;
     }
 
     /**
