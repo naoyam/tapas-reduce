@@ -968,10 +968,13 @@ struct OptLET {
     MPI_Barrier(MPI_COMM_WORLD);
     bt = MPI_Wtime();
 
-    //if(data.mpi_rank_ == 0) std::cout << "Res Attr keys" << std::endl;
+    if(data.mpi_rank_ == 0) std::cout << "Res Attr keys" << std::endl;
     tapas::mpi::Alltoallv2(attr_keys_send, attr_dest_ranks, req_attr_keys,  attr_src_ranks, MPI_COMM_WORLD);
-    //if(data.mpi_rank_ == 0) std::cout << "Res Attr" << std::endl;
+    if(data.mpi_rank_ == 0) std::cout << "Res Attr keys done." << std::endl;
+    
+    if(data.mpi_rank_ == 0) std::cout << "Res Attr" << std::endl;
     tapas::mpi::Alltoallv2(attr_sendbuf,   attr_dest_ranks, res_cell_attrs, attr_src_ranks, MPI_COMM_WORLD);
+    if(data.mpi_rank_ == 0) std::cout << "Res Attr done." << std::endl;
 
     MPI_Barrier(MPI_COMM_WORLD);
     et = MPI_Wtime();

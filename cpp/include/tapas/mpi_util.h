@@ -11,6 +11,34 @@
 
 #include "tapas/debug_util.h"
 
+namespace {
+static void ErrorHandler(MPI_Comm *comm, int *err, ...) {
+  if (err != MPI_SUCCESS) {
+    char err_str[200];
+    int len;
+    int rank;
+    MPI_Comm_rank(*comm, &rank);
+    MPI_Error_string(*err, err_str, &len);
+    fprintf(stderr, "MPI failed on rank %d: %s\n", rank, err_str);
+    abort();
+  }
+}
+}
+
+#define MPI_SAFE_CALL(stmt, comm) do {                                  \
+    int err = (stmt);                                                   \
+    if (err != MPI_SUCCESS) {                                           \
+      char err_str[200];                                                \
+      int len;                                                          \
+      int rank;                                                         \
+      MPI_Comm_rank(comm, &rank);                                       \
+      MPI_Error_string(err, err_str, &len);                             \
+      fprintf(stderr, "MPI failed on rank %d: %s\n", rank, err_str);    \
+      abort();                                                          \
+    }                                                                   \
+  } while(0)                                                            \
+
+
 namespace tapas {
 namespace util {
 
@@ -40,7 +68,7 @@ inclusive_scan(InputIterator first, InputIterator last,
     result++;
     iter++;
   }
-  
+
   return result;
 }
 
@@ -62,17 +90,17 @@ exclusive_scan(InputIterator first, InputIterator last,
   using value_type = typename InputIterator::value_type;
   value_type tally = value_type();
   InputIterator iter = first;
-  
+
   *result = tally;
   result++;
-  
+
   while (iter + 1 != last) {
     tally = binary_op(tally, *iter);
     *result = tally;
     result++;
     iter++;
   }
-  
+
   return result;
 }
 
@@ -170,10 +198,7 @@ void Allreduce(const T *sendbuf, T *recvbuf, int count, MPI_Op op, MPI_Comm comm
     TAPAS_ASSERT(0 && "Allreduce() is not supported for user-defined types.");
   }
 
-  int ret = MPI_Allreduce(mpi_sendbuf_cast(sendbuf), (void*)recvbuf, count, kType, op, comm);
-
-  (void)ret; // to avoid warnings of 'unused variable'
-  TAPAS_ASSERT(ret == MPI_SUCCESS);
+  MPI_SAFE_CALL(MPI_Allreduce(mpi_sendbuf_cast(sendbuf), (void*)recvbuf, count, kType, op, comm), comm);
 }
 
 template<typename T>
@@ -226,7 +251,11 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
   int mpi_size;
 
   MPI_Comm_size(comm, &mpi_size);
-  
+
+  MPI_Errhandler handler;
+  MPI_SAFE_CALL(MPI_Comm_create_errhandler(&ErrorHandler, &handler), comm);
+  MPI_SAFE_CALL(MPI_Comm_set_errhandler(comm, handler), comm);
+
   TAPAS_ASSERT(send_buf.size() == dest.size());
   SortByKeys(dest, send_buf);
 
@@ -234,6 +263,7 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
   for(int p = 0; p < mpi_size; p++) {
     auto range = std::equal_range(dest.begin(), dest.end(), p);
     send_counts[p] = range.second - range.first;
+    TAPAS_ASSERT(send_counts[p] >= 0); // check overflow
   }
 
   std::vector<int> recv_counts(mpi_size);
@@ -246,17 +276,20 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
     TAPAS_ASSERT(!"MPI_Alltoall failed.");
   }
 
-  std::vector<int> send_disp(mpi_size, 0); // displacement 
+  std::vector<int> send_disp(mpi_size, 0); // displacement
   std::vector<int> recv_disp(mpi_size, 0);
 
   // exclusive scan
   for (int p = 1; p < mpi_size; p++) {
     send_disp[p] = send_disp[p-1] + send_counts[p-1];
     recv_disp[p] = recv_disp[p-1] + recv_counts[p-1];
-  }
 
-  int total_recv_counts = std::accumulate(recv_counts.begin(), recv_counts.end(), 0);
+    TAPAS_ASSERT(send_disp[p] >= 0); // check overflow
+    TAPAS_ASSERT(recv_disp[p] >= 0); // check overflow
+  }
   
+  int total_recv_counts = std::accumulate(recv_counts.begin(), recv_counts.end(), 0);
+
   recv_buf.resize(total_recv_counts);
 
   auto kType = MPI_DatatypeTraits<T>::type();
@@ -274,15 +307,88 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
     }
   }
 
-  err = MPI_Alltoallv((void*)send_buf.data(), send_counts.data(), send_disp.data(), kType,
-                      (void*)recv_buf.data(), recv_counts.data(), recv_disp.data(), kType,
-                      comm);
-  TAPAS_ASSERT(err == MPI_SUCCESS);
+  TAPAS_ASSERT(send_disp.size() == recv_disp.size());
   
+#if 1
+  // debug: print send matrix
+  tapas::debug::BarrierExec([&](int rank, int) {
+      if (rank == 0) { std::cout << "Comm matrix" << std::endl; }
+      std::cout << std::right << std::fixed << std::setw(3) << rank << " ";
+      long total = 0;
+      for (size_t i = 0; i < send_disp.size(); i++) {
+        std::cout << std::right << std::setw(10) << std::fixed << send_counts[i] << " ";
+        total += send_counts[i];
+      }
+      std::cout << "total: " << std::right << std::setw(10) << total;
+      std::cout << std::endl;
+    });
+
+  // debug: print send displacement
+  tapas::debug::BarrierExec([&](int rank, int) {
+      if (rank == 0) { std::cout << "Send disp" << std::endl; }
+      std::cout << std::right << std::fixed << std::setw(3) << rank << " ";
+      for (size_t i = 0; i < send_disp.size(); i++) {
+        std::cout << std::right << std::setw(10) << std::fixed << send_disp[i] << " ";
+      }
+      std::cout << std::endl;
+    });
+
+  // debug: print recv matrix
+  tapas::debug::BarrierExec([&](int rank, int) {
+      if (rank == 0) { std::cout << "Comm matrix" << std::endl; }
+      std::cout << std::right << std::fixed << std::setw(3) << rank << " ";
+      long total = 0;
+      for (size_t i = 0; i < recv_disp.size(); i++) {
+        std::cout << std::right << std::setw(10) << std::fixed << recv_counts[i] << " ";
+        total += recv_counts[i];
+      }
+      std::cout << "total: " << std::right << std::setw(10) << total;
+      std::cout << std::endl;
+    });
+
+  // debug: print recv displacement
+  tapas::debug::BarrierExec([&](int rank, int) {
+      if (rank == 0) { std::cout << "Recv disp" << std::endl; }
+      std::cout << std::right << std::fixed << std::setw(3) << rank << " ";
+      for (size_t i = 0; i < recv_disp.size(); i++) {
+        std::cout << std::right << std::setw(10) << std::fixed << recv_disp[i] << " ";
+      }
+      std::cout << std::endl;
+    });
+
+  tapas::debug::BarrierExec([&](int rank, int) {
+      if (rank == 0) {
+        std::cout << "MPI_Alltoallv() Starting." << std::endl;
+      }
+      
+      if (rank == 2) {
+        std::cout << "send_buf.size() = " << send_buf.size() << std::endl;
+        std::cout << "sizeof(T) = " << sizeof(T) << std::endl;
+        size_t size = send_buf.size() * sizeof(send_buf[0]);
+        std::cout << "total size of send_buf = " << size << " (=" << (size/1024./1024/1024) << " GB)" << std::endl;
+        std::cout << "int max = " << std::numeric_limits<int>::max() << std::endl;
+        std::cout << std::endl;
+        std::cout << "recv_buf.size() = " << recv_buf.size() << std::endl;
+      }
+    });
+#endif
+
+  MPI_SAFE_CALL(MPI_Alltoallv((void*)send_buf.data(), send_counts.data(), send_disp.data(), kType,
+                              (void*)recv_buf.data(), recv_counts.data(), recv_disp.data(), kType,
+                              comm),
+                comm);
+#if 0
+  tapas::debug::BarrierExec([](int rank, int) {
+      if (rank == 0) {
+        std::cout << "MPI_Alltoallv() done." << std::endl;
+      }
+    });
+#endif
+
   // Build src[] array
   src.clear();
   src.resize(total_recv_counts, 0);
-  
+
   int p = 0;
   for (int i = 0; i < total_recv_counts; i++) {
     while (p < mpi_size-1 && i >= recv_disp[p+1]) {
@@ -293,11 +399,11 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
 
   auto src2 = src;
   src2.clear(); src2.resize(src.size(), 0);
-  
+
   index_t pos = 0;
   for (size_t p = 0; p < recv_counts.size(); p++) {
     int num_recv_from_p = recv_counts[p];
-    
+
     if(!MPI_DatatypeTraits<T>::IsEmbType()) {
       num_recv_from_p /= sizeof(T);
     }
@@ -306,7 +412,7 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
       src2[pos] = p;
     }
   }
-  
+
 #if 1
   // TODO: bug? May be src2 is the correct answer?
   src = src2;
@@ -326,7 +432,7 @@ void Alltoallv(const std::vector<T> &send_buf,
                std::vector<T> &recv_buf, std::vector<int> &recv_count,
                MPI_Comm comm) {
   int mpi_size;
-  
+
   MPI_Comm_size(comm, &mpi_size);
 
   recv_count.clear();
@@ -340,7 +446,7 @@ void Alltoallv(const std::vector<T> &send_buf,
     TAPAS_ASSERT(!"MPI_Alltoall failed.");
   }
 
-  std::vector<int> send_disp(mpi_size, 0); // displacement 
+  std::vector<int> send_disp(mpi_size, 0); // displacement
   std::vector<int> recv_disp(mpi_size, 0);
 
   // exclusive scan
@@ -351,7 +457,7 @@ void Alltoallv(const std::vector<T> &send_buf,
   }
 
   int total_recv_count = std::accumulate(recv_count.begin(), recv_count.end(), 0);
-  
+
   recv_buf.resize(total_recv_count);
 
   auto kType = MPI_DatatypeTraits<T>::type();
@@ -390,10 +496,10 @@ void Alltoallv(const std::vector<T> &send_buf,
     }
   }
 
-  err = MPI_Alltoallv((void*)send_buf.data(), send_count2.data(), send_disp2.data(), kType,
-                      (void*)recv_buf.data(), recv_count2.data(), recv_disp2.data(), kType,
-                      comm);
-  TAPAS_ASSERT(err == MPI_SUCCESS);
+  MPI_SAFE_CALL(MPI_Alltoallv((void*)send_buf.data(), send_count2.data(), send_disp2.data(), kType,
+                              (void*)recv_buf.data(), recv_count2.data(), recv_disp2.data(), kType,
+                              comm),
+                comm);
 }
 
 template<class T>
@@ -406,17 +512,17 @@ void Gather(const T& val, std::vector<T> &recvbuf, int root, MPI_Comm comm) {
 
   auto type = MPI_DatatypeTraits<T>::type();
   int count = MPI_DatatypeTraits<T>::count(1);
-  
+
   if (rank == root) {
     recvbuf.clear();
     recvbuf.resize(size);
   } else {
     recvbuf.clear();
   }
-  
+
   int ret = ::MPI_Gather(void_cast(&val), count, type,
                          void_cast(&recvbuf[0]), count, type, root, comm);
-  
+
   TAPAS_ASSERT(ret == MPI_SUCCESS); (void)ret;
 }
 
@@ -437,10 +543,10 @@ void Gather(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, int root, MP
   } else {
     recvbuf.clear();
   }
-  
+
   int ret = ::MPI_Gather(void_cast(&sendbuf[0]), count, type,
                          void_cast(&recvbuf[0]), count, type, root, comm);
-  
+
   TAPAS_ASSERT(ret == MPI_SUCCESS); (void)ret;
 }
 
@@ -450,10 +556,10 @@ void Allgatherv(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, MPI_Comm
 
   MPI_Comm_rank(comm, &rank);
   MPI_Comm_size(comm, &size);
-          
+
   int count = sendbuf.size();
   std::vector<int> recvcounts(size);
-  
+
   auto kType = MPI_DatatypeTraits<T>::type();
 
   // Call allgather and create recvcount & displacements array.
@@ -461,13 +567,13 @@ void Allgatherv(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, MPI_Comm
                             reinterpret_cast<void*>(recvcounts.data()), 1, MPI_INT, comm);
   (void)ret;
   TAPAS_ASSERT(ret == MPI_SUCCESS);
-  
+
   std::vector<int> disp;
   exclusive_scan(recvcounts.begin(), recvcounts.end(), back_inserter(disp));
 
   int recvcount = std::accumulate(recvcounts.begin(), recvcounts.end(), 0);
   recvbuf.resize(recvcount);
-  
+
   if (kType == MPI_BYTE) {
     count *= sizeof(T);
     recvcount *= sizeof(T);

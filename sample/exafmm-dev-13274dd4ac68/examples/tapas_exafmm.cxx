@@ -2,6 +2,7 @@
 #include <mutex>
 #include <thread>
 
+#include <sys/types.h>
 #include <unistd.h> // usleep
 
 #ifdef USE_MPI
@@ -534,10 +535,20 @@ int main(int argc, char ** argv) {
 
   MPI_Comm_rank(MPI_COMM_WORLD, &args.mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &args.mpi_size);
+  //MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
 
   if (args.mpi_rank == 0) {
     std::cout << Now() << " MPI Initialization done." << std::endl;
   }
+#endif
+
+#if 1
+  // debug
+  tapas::debug::BarrierExec([](int rank, int) {
+      char hostname[100];
+      gethostname(hostname, 100);
+      std::cout << "MPI rank " << rank << ": " << hostname << ":" << getpid() << std::endl;
+    });
 #endif
 
 #ifdef TBB
