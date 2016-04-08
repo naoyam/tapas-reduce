@@ -356,7 +356,7 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
                           comm);
   MPI_CHECK(ret, comm);
   
-#if TAPAS_DEBUG_COMM_MATRIX
+#ifdef TAPAS_DEBUG_COMM_MATRIX
   tapas::debug::BarrierExec([](int rank, int) {
       if (rank == 0) {
         std::cout << "MPI_Alltoallv() done." << std::endl;
