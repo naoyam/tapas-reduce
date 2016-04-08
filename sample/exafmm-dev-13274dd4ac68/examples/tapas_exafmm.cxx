@@ -121,42 +121,6 @@ static inline void FMM_Downward(TapasFMM::Cell &c) {
   }
 }
 
-#if 0
-#define SRC_KEY(_k) (_k == 3746994889972252674)
-
-#define IN_LET() (getenv("TAPAS_IN_LET"))
-
-#define RANK(_r) (_r == 3)
-
-#define D(msg) do {                                                   \
-    in2t rank;                                                         \
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);                             \
-    if (RANK(rank) && IN_LET()) {                                     \
-      auto src_key = Cj.key();                                        \
-      if (SRC_KEY(src_key)) {                                         \
-        std::cout << "key " << Cell::SFC::Simplify(src_key) << " : "  \
-                  << msg << std::endl;                                \
-      }                                                               \
-    }                                                                 \
-  } while(0)
-
-
-#define D2(stmt) do {                           \
-    int rank;                                   \
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);       \
-    if (RANK(rank) && IN_LET()) {               \
-      auto src_key = Cj.key();                  \
-      if (SRC_KEY(src_key)) {                   \
-        stmt;                                   \
-      }                                         \
-    }                                           \
-  } while(0)
-#else
-#define D2(stmt)
-#define D(msg)
-#endif
-
-
 // Perform ExaFMM's Dual Tree Traversal (M2L & P2P)
 struct FMM_DTT {
   template<class Cell>
@@ -172,9 +136,7 @@ struct FMM_DTT {
     //if (Ci.nb() == 0 || Cj.nb() == 0) return;
 
     //real_t R2 = (Ci.center() - Cj.center()).norm();
-    D2(setenv("TAPAS_DEBUG_TMP", "1", 1));
     real_t R2 = Ci.Distance(Cj, tapas::Center);
-    D2(unsetenv("TAPAS_DEBUG_TMP"));
     vec3 Xperiodic = 0; // dummy; periodic is not ported
 
     real_t Ri = 0;
@@ -187,47 +149,6 @@ struct FMM_DTT {
     
     Ri = (Ri / 2 * 1.00001) / theta;
     Rj = (Rj / 2 * 1.00001) / theta;
-
-#if 0
-    { // debug begin
-      std::stringstream ss;
-      ss << "R2 > (Ri+Rj)^2 ? " << (R2 > (Ri + Rj) * (Ri + Rj) ? " => Yes => Approx" : " => No  => Split ")
-         << " (where R2=" << R2 << " Ri=" << Ri << " Rj=" << Rj << " (Ri+Rj)^2=" << ((Ri+Rj)*(Ri+Rj)) << ")";
-      D(ss.str());
-
-      // debug for exact
-      if (R2 < 15.0) {
-        ss.str("");
-        ss << "target center=[" << Ci.center() << "]" << " depth=" << Ci.depth() << " key=" << Ci.key();
-        ss << "\n\t\t\tmax=" << Ci.region().max()
-           << "\n\t\t\tmin=" << Ci.region().min()
-           << "\n\t\t\twidth=" << (Ci.region().max() - Ci.region().min());
-        D(ss.str());
-        ss.str("");
-        ss << "source center=[" << Cj.center() << "]" << " depth=" << Cj.depth() << " key=" << Cj.key();
-        ss << "\n\t\t\tmax=" << Cj.region().max()
-           << "\n\t\t\tmin=" << Cj.region().min()
-           << "\n\t\t\twidth=" << (Cj.region().max() - Cj.region().min());
-        D(ss.str());
-      }
-
-      // debug for opt
-      if (R2 < 18) {
-        ss.str("");
-        ss << "target center=[" << Ci.center() << "]" << " depth=" << Ci.depth() << " key=" << Ci.key();
-        ss << "\n\t\t\tmax=" << Ci.region().max()
-           << "\n\t\t\tmin=" << Ci.region().min()
-           << "\n\t\t\twidth=" << (Ci.region().max() - Ci.region().min());
-        D(ss.str());
-        ss.str("");
-        ss << "source center=[" << Cj.center() << "]" << " depth=" << Cj.depth() << " key=" << Cj.key();
-        ss << "\n\t\t\tmax=" << Cj.region().max()
-           << "\n\t\t\tmin=" << Cj.region().min()
-           << "\n\t\t\twidth=" << (Cj.region().max() - Cj.region().min());
-        D(ss.str());
-      }
-    } // debug end
-#endif
     
     if (R2 > (Ri + Rj) * (Ri + Rj)) {                   // If distance is far enough
       // tapas::Apply(M2L, Ci, Cj, Xperiodic, mutual); // \todo

@@ -11,33 +11,24 @@
 
 #include "tapas/debug_util.h"
 
-namespace {
-static void ErrorHandler(MPI_Comm *comm, int *err, ...) {
-  if (err != MPI_SUCCESS) {
-    char err_str[200];
-    int len;
-    int rank;
-    MPI_Comm_rank(*comm, &rank);
-    MPI_Error_string(*err, err_str, &len);
-    fprintf(stderr, "MPI failed on rank %d: %s\n", rank, err_str);
-    abort();
-  }
-}
-}
-
-#define MPI_SAFE_CALL(stmt, comm) do {                                  \
-    int err = (stmt);                                                   \
-    if (err != MPI_SUCCESS) {                                           \
-      char err_str[200];                                                \
-      int len;                                                          \
-      int rank;                                                         \
-      MPI_Comm_rank(comm, &rank);                                       \
-      MPI_Error_string(err, err_str, &len);                             \
-      fprintf(stderr, "MPI failed on rank %d: %s\n", rank, err_str);    \
-      abort();                                                          \
-    }                                                                   \
-  } while(0)                                                            \
-
+#ifdef TAPAS_DEBUG
+#define MPI_CHECK(ret_, comm_) do {                                 \
+    if (ret_ != MPI_SUCCESS) {                                      \
+      int rank = -1;                                                \
+      char err_str[200];                                            \
+      int len;                                                      \
+      MPI_Error_string(ret_, err_str, &len);                        \
+      MPI_Comm_rank(comm_, &rank);                                  \
+      err_str[len] = '\0';                                          \
+      fprintf(stderr, "MPI_SAFE_CALL: MPI failed on rank %d: %s\n", \
+              rank, err_str);                                       \
+      abort();                                                      \
+    }                                                               \
+  } while(0)
+#else
+#define MPI_CHECK(ret_, comm_) (void)ret_; (void)comm_;
+#endif
+    
 
 namespace tapas {
 namespace util {
@@ -198,7 +189,8 @@ void Allreduce(const T *sendbuf, T *recvbuf, int count, MPI_Op op, MPI_Comm comm
     TAPAS_ASSERT(0 && "Allreduce() is not supported for user-defined types.");
   }
 
-  MPI_SAFE_CALL(MPI_Allreduce(mpi_sendbuf_cast(sendbuf), (void*)recvbuf, count, kType, op, comm), comm);
+  int ret = MPI_Allreduce(mpi_sendbuf_cast(sendbuf), (void*)recvbuf, count, kType, op, comm);
+  MPI_CHECK(ret, comm);
 }
 
 template<typename T>
@@ -259,10 +251,6 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
 
   MPI_Comm_size(comm, &mpi_size);
 
-  MPI_Errhandler handler;
-  MPI_SAFE_CALL(MPI_Comm_create_errhandler(&ErrorHandler, &handler), comm);
-  MPI_SAFE_CALL(MPI_Comm_set_errhandler(comm, handler), comm);
-
   TAPAS_ASSERT(send_buf.size() == dest.size());
   SortByKeys(dest, send_buf);
 
@@ -300,7 +288,7 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
   recv_buf.resize(total_recv_counts);
   TAPAS_ASSERT(send_disp.size() == recv_disp.size());
   
-#if 0
+#if 1
   // debug: print send matrix
   tapas::debug::BarrierExec([&](int rank, int) {
       if (rank == 0) { std::cout << "Comm matrix" << std::endl; }
@@ -363,18 +351,19 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
     });
 #endif
 
-  MPI_SAFE_CALL(MPI_Alltoallv((void*)send_buf.data(), send_counts.data(), send_disp.data(), dtype,
-                              (void*)recv_buf.data(), recv_counts.data(), recv_disp.data(), dtype,
-                              comm),
-                comm);
-#if 0
+  int ret = MPI_Alltoallv((void*)send_buf.data(), send_counts.data(), send_disp.data(), dtype,
+                          (void*)recv_buf.data(), recv_counts.data(), recv_disp.data(), dtype,
+                          comm);
+  MPI_CHECK(ret, comm);
+  
+#if 1
   tapas::debug::BarrierExec([](int rank, int) {
       if (rank == 0) {
         std::cout << "MPI_Alltoallv() done." << std::endl;
       }
     });
 #endif
-
+    
   // Build src[] array
   src.clear();
   src.resize(total_recv_counts, 0);
@@ -475,10 +464,10 @@ void Alltoallv(const std::vector<T> &send_buf,
     }
   }
 
-  MPI_SAFE_CALL(MPI_Alltoallv((void*)send_buf.data(), send_count2.data(), send_disp2.data(), kType,
-                              (void*)recv_buf.data(), recv_count2.data(), recv_disp2.data(), kType,
-                              comm),
-                comm);
+  int ret = MPI_Alltoallv((void*)send_buf.data(), send_count2.data(), send_disp2.data(), kType,
+                          (void*)recv_buf.data(), recv_count2.data(), recv_disp2.data(), kType,
+                          comm);
+  MPI_CHECK(ret, comm);
 }
 
 template<class T>
