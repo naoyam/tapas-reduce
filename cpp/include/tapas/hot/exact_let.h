@@ -881,10 +881,8 @@ struct ExactLET {
     MPI_Barrier(MPI_COMM_WORLD);
     bt_comm = MPI_Wtime();
 
-    tapas::mpi::Alltoallv2<KeyType>(keys_attr_send, attr_dest,
-                                    keys_attr_recv, attr_src, MPI_COMM_WORLD);
-    tapas::mpi::Alltoallv2<KeyType>(keys_body_send, body_dest,
-                                    keys_body_recv, body_src, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv2(keys_attr_send, attr_dest, keys_attr_recv, attr_src, data.mpi_type_key_, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv2(keys_body_send, body_dest, keys_body_recv, body_src, data.mpi_type_key_, MPI_COMM_WORLD);
 
     MPI_Barrier(MPI_COMM_WORLD);
     et_comm = MPI_Wtime();
@@ -972,8 +970,8 @@ struct ExactLET {
     MPI_Barrier(MPI_COMM_WORLD);
     bt = MPI_Wtime();
 
-    tapas::mpi::Alltoallv2(attr_keys_send, attr_dest_ranks, req_attr_keys,  attr_src_ranks, MPI_COMM_WORLD);
-    tapas::mpi::Alltoallv2(attr_sendbuf,   attr_dest_ranks, res_cell_attrs, attr_src_ranks, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv2(attr_keys_send, attr_dest_ranks, req_attr_keys,  attr_src_ranks, data.mpi_type_key_, MPI_COMM_WORLD);
+    tapas::mpi::Alltoallv2(attr_sendbuf,   attr_dest_ranks, res_cell_attrs, attr_src_ranks, data.mpi_type_attr_, MPI_COMM_WORLD);
 
     MPI_Barrier(MPI_COMM_WORLD);
     et = MPI_Wtime();

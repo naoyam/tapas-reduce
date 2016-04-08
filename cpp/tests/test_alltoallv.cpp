@@ -34,7 +34,7 @@ void Test_MPI_Alltoallv2_1() {
     dest[i] = i;
   }
 
-  tapas::mpi::Alltoallv2(send_buf, dest, recv_buf, src, MPI_COMM_WORLD);
+  tapas::mpi::Alltoallv2(send_buf, dest, recv_buf, src, MPI_INT, MPI_COMM_WORLD);
 
   std::vector<int> recv_buf_should(mpi_size), src_should(mpi_size);
 
@@ -60,7 +60,7 @@ void Test_MPI_Alltoallv2_2() {
     dest[i] = i;
   }
 
-  tapas::mpi::Alltoallv2(send_buf, dest, recv_buf, src, MPI_COMM_WORLD);
+  tapas::mpi::Alltoallv2(send_buf, dest, recv_buf, src, MPI_INT, MPI_COMM_WORLD);
 
   std::vector<int> recv_buf_should(mpi_size), src_should(mpi_size);
 

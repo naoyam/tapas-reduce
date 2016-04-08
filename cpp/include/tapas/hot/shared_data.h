@@ -19,6 +19,7 @@ struct SharedData {
   using CellType = Cell<TSP>;
   using CellHashTable = typename std::unordered_map<KeyType, CellType*>;
   using KeySet = std::unordered_set<KeyType>;
+  using CellAttr = typename TSP::CellAttr;
   using BodyType = typename TSP::Body;
   using BodyAttrType = typename TSP::BodyAttr;
   using Mapper = typename CellType::Mapper;
@@ -95,6 +96,11 @@ struct SharedData {
 
   std::unordered_map<int, int> let_func_count;
 
+  MPI_Datatype mpi_type_key_;
+  MPI_Datatype mpi_type_attr_;
+  MPI_Datatype mpi_type_body_;
+  MPI_Datatype mpi_type_battr_;
+  
   SharedData()
       : mpi_rank_(0)
       , mpi_size_(1)
@@ -130,7 +136,9 @@ struct SharedData {
       , let_func_count()
   {
     ReadEnv();
+    SetupMPITypes();
   }
+  
   SharedData(const SharedData<TSP, SFC>& rhs) = delete; // no copy
   SharedData(SharedData<TSP, SFC>&& rhs) = delete; // no move
 
@@ -153,6 +161,19 @@ struct SharedData {
         exit(-1);
       }
     }
+  }
+
+  void SetupMPITypes() {
+    // Cell Attributes
+    MPI_Type_contiguous(sizeof(KeyType), MPI_BYTE, &mpi_type_key_);
+    MPI_Type_contiguous(sizeof(CellAttr), MPI_BYTE, &mpi_type_attr_);
+    MPI_Type_contiguous(sizeof(BodyType), MPI_BYTE, &mpi_type_body_);
+    MPI_Type_contiguous(sizeof(BodyAttrType), MPI_BYTE, &mpi_type_battr_);
+    
+    MPI_Type_commit(&mpi_type_key_);
+    MPI_Type_commit(&mpi_type_attr_);
+    MPI_Type_commit(&mpi_type_body_);
+    MPI_Type_commit(&mpi_type_battr_);
   }
 };
 

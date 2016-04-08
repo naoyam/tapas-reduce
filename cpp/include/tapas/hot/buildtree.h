@@ -394,9 +394,9 @@ class SamplingOctree {
     }
   }
 
-  static Vector<BodyType> ExchangeBodies(Vector<BodyType> bodies,
-                                         const std::vector<KeyType> proc_first_keys,
-                                         const Region<TSP> &reg, MPI_Comm comm) {
+  Vector<BodyType> ExchangeBodies(Vector<BodyType> bodies,
+                                  const std::vector<KeyType> proc_first_keys,
+                                  const Region<TSP> &reg, MPI_Comm comm) {
     std::vector<KeyType> body_keys = BodiesToKeys(bodies, reg);
     std::vector<int> dest(body_keys.size()); // destiantion of each body
 
@@ -414,7 +414,7 @@ class SamplingOctree {
     Vector<BodyType> recv_bodies;
     std::vector<int> src;
 
-    tapas::mpi::Alltoallv2<BodyType, Vector<BodyType>>(bodies, dest, recv_bodies, src, comm);
+    tapas::mpi::Alltoallv2(bodies, dest, recv_bodies, src, data_->mpi_type_body_, comm);
 
     return recv_bodies;
   }

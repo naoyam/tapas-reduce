@@ -242,12 +242,19 @@ void Alltoall(const std::vector<T> &sendbuf, std::vector<T> &recvbuf, int count,
  *
  * Caution: send_buf and dest will be sorted in-place.
  */
-template<typename T, typename VectorType>
+template<typename VectorType>
 void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
                 VectorType& recv_buf, std::vector<int>& src,
-                MPI_Comm comm) {
-  static_assert(std::is_same<T, typename VectorType::value_type>::value,
-                "VectorType must be a container of T");
+                MPI_Datatype dtype, MPI_Comm comm) {
+#ifdef TAPAS_DEBUG
+  {
+    // Check type and VectorType::value_type are consistent
+    MPI_Aint extent;
+    MPI_Type_extent(dtype, &extent);
+    TAPAS_ASSERT(extent == sizeof(typename VectorType::value_type));
+  }
+#endif
+  
   int mpi_size;
 
   MPI_Comm_size(comm, &mpi_size);
@@ -291,25 +298,9 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
   int total_recv_counts = std::accumulate(recv_counts.begin(), recv_counts.end(), 0);
 
   recv_buf.resize(total_recv_counts);
-
-  auto kType = MPI_DatatypeTraits<T>::type();
-
-  if(!MPI_DatatypeTraits<T>::IsEmbType()) {
-    kType = MPI_BYTE;
-    // If T is not an embedded type, MPI_BYTE and sizeof(T) is used.
-    for (size_t i = 0; i < recv_disp.size(); i++) {
-      recv_disp[i] *= sizeof(T);
-      recv_counts[i] *= sizeof(T);
-    }
-    for (size_t i = 0; i < send_disp.size(); i++) {
-      send_disp[i] *= sizeof(T);
-      send_counts[i] *= sizeof(T);
-    }
-  }
-
   TAPAS_ASSERT(send_disp.size() == recv_disp.size());
   
-#if 1
+#if 0
   // debug: print send matrix
   tapas::debug::BarrierExec([&](int rank, int) {
       if (rank == 0) { std::cout << "Comm matrix" << std::endl; }
@@ -345,7 +336,7 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
       std::cout << "total: " << std::right << std::setw(10) << total;
       std::cout << std::endl;
     });
-
+  
   // debug: print recv displacement
   tapas::debug::BarrierExec([&](int rank, int) {
       if (rank == 0) { std::cout << "Recv disp" << std::endl; }
@@ -363,7 +354,6 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
       
       if (rank == 2) {
         std::cout << "send_buf.size() = " << send_buf.size() << std::endl;
-        std::cout << "sizeof(T) = " << sizeof(T) << std::endl;
         size_t size = send_buf.size() * sizeof(send_buf[0]);
         std::cout << "total size of send_buf = " << size << " (=" << (size/1024./1024/1024) << " GB)" << std::endl;
         std::cout << "int max = " << std::numeric_limits<int>::max() << std::endl;
@@ -373,8 +363,8 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
     });
 #endif
 
-  MPI_SAFE_CALL(MPI_Alltoallv((void*)send_buf.data(), send_counts.data(), send_disp.data(), kType,
-                              (void*)recv_buf.data(), recv_counts.data(), recv_disp.data(), kType,
+  MPI_SAFE_CALL(MPI_Alltoallv((void*)send_buf.data(), send_counts.data(), send_disp.data(), dtype,
+                              (void*)recv_buf.data(), recv_counts.data(), recv_disp.data(), dtype,
                               comm),
                 comm);
 #if 0
@@ -404,10 +394,6 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
   for (size_t p = 0; p < recv_counts.size(); p++) {
     int num_recv_from_p = recv_counts[p];
 
-    if(!MPI_DatatypeTraits<T>::IsEmbType()) {
-      num_recv_from_p /= sizeof(T);
-    }
-
     for (int i = 0; i < num_recv_from_p; i++, pos++) {
       src2[pos] = p;
     }
@@ -417,13 +403,6 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
   // TODO: bug? May be src2 is the correct answer?
   src = src2;
 #endif
-}
-
-template<typename T>
-inline void Alltoallv2(std::vector<T>& send_buf, std::vector<int>& dest,
-                       std::vector<T>& recv_buf, std::vector<int>& src,
-                       MPI_Comm comm) {
-  Alltoallv2<T, std::vector<T>>(send_buf, dest, recv_buf, src, comm);
 }
 
 template<class T>

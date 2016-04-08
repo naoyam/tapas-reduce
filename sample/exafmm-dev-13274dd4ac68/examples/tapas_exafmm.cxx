@@ -542,7 +542,7 @@ int main(int argc, char ** argv) {
   }
 #endif
 
-#if 1
+#if 0
   // debug
   tapas::debug::BarrierExec([](int rank, int) {
       char hostname[100];

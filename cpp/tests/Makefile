@@ -9,5 +9,4 @@ $(targets): % : %.cpp
 	$(MPICXX) $(CXXFLAGS) $< -o $@
 
 clean:
-	find . -perm -u+x -name "test_*" -print -exec rm {} \;
 	rm -f $(targets)
