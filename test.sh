@@ -151,8 +151,8 @@ echo --------------------------------------------------------------------
 
 SRC_DIR=$SRC_ROOT/cpp/tests
 
-echoCyan make MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" VERBOSE=1 MODE=release -C $SRC_DIR clean all
-make -j MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=release -C $SRC_DIR clean all
+echoCyan make MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" VERBOSE=1 MODE=debug -C $SRC_DIR clean all
+make -j MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=debug -C $SRC_DIR clean all
 
 for t in `find $SRC_DIR -perm -u+x -name "test_*"`; do
     for NP in 1 2 3 4; do
@@ -187,8 +187,8 @@ fi
 SRC_DIR=$SRC_ROOT/sample/barnes-hut
 BIN=$SRC_DIR/bh_mpi
 
-echoCyan make CXX=\"${CXX}\" CC=\"${CC}\" MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" VERBOSE=1 MODE=release -C $SRC_DIR clean all
-make CXX=${CXX} CC=${CC} MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=release -C $SRC_DIR clean all
+echoCyan make CXX=\"${CXX}\" CC=\"${CC}\" MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" VERBOSE=1 MODE=debug -C $SRC_DIR clean all
+make CXX=${CXX} CC=${CC} MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=debug -C $SRC_DIR clean all
 
 for np in ${NP[@]}; do
     for nb in ${NB[@]}; do
@@ -249,12 +249,12 @@ fi
 SRC_DIR=$SRC_ROOT/sample/exafmm-dev-13274dd4ac68/examples
 
 # Build one-side LET version
-echoCyan env CC=${CC} CXX=${CXX} MPICC="${MPICC}" MPICXX="${MPICXX}" TAPAS_ONESIDE_LET=1 make VERBOSE=1 MODE=release -C $SRC_DIR clean tapas
-env CC=${CC} CXX=${CXX} MPICC="${MPICC}" MPICXX="${MPICXX}" TAPAS_ONESIDE_LET=1 make VERBOSE=1 MODE=release -C $SRC_DIR clean tapas
+echoCyan env CC=${CC} CXX=${CXX} MPICC="${MPICC}" MPICXX="${MPICXX}" TAPAS_ONESIDE_LET=1 make VERBOSE=1 MODE=debug -C $SRC_DIR clean tapas
+env CC=${CC} CXX=${CXX} MPICC="${MPICC}" MPICXX="${MPICXX}" TAPAS_ONESIDE_LET=1 make VERBOSE=1 MODE=debug -C $SRC_DIR clean tapas
 mv $SRC_DIR/parallel_tapas $SRC_DIR/parallel_tapas_oneside
 
-echoCyan env CC=${CC} CXX=${CXX} MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" make VERBOSE=1 MODE=release -C $SRC_DIR clean tapas
-env CC=${CC} CXX=${CXX} MPICC="${MPICC}" MPICXX="${MPICXX}" make VERBOSE=1 MODE=release -C $SRC_DIR clean tapas
+echoCyan env CC=${CC} CXX=${CXX} MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" make VERBOSE=1 MODE=debug -C $SRC_DIR clean tapas
+env CC=${CC} CXX=${CXX} MPICC="${MPICC}" MPICXX="${MPICXX}" make VERBOSE=1 MODE=debug -C $SRC_DIR clean tapas
 
 function accuracyCheck() {
     local fname=$1
