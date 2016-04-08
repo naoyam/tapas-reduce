@@ -288,7 +288,7 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
   recv_buf.resize(total_recv_counts);
   TAPAS_ASSERT(send_disp.size() == recv_disp.size());
   
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_COMM_MATRIX
   // debug: print send matrix
   tapas::debug::BarrierExec([&](int rank, int) {
       if (rank == 0) { std::cout << "Comm matrix" << std::endl; }
@@ -356,7 +356,7 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
                           comm);
   MPI_CHECK(ret, comm);
   
-#if TAPAS_DEBUG
+#if TAPAS_DEBUG_COMM_MATRIX
   tapas::debug::BarrierExec([](int rank, int) {
       if (rank == 0) {
         std::cout << "MPI_Alltoallv() done." << std::endl;
@@ -430,7 +430,7 @@ void Alltoallv(const std::vector<T> &send_buf,
 
   auto kType = MPI_DatatypeTraits<T>::type();
 
-#ifdef TAPAS_DEBUG
+#ifdef TAPAS_DEBUG_COMM_MATRIX
   // Print a communication matrix
   tapas::debug::BarrierExec([&](int rank, int) {
       if (rank == 0) {
