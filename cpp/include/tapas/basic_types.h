@@ -13,10 +13,10 @@ FP REAL(const T &x) {
   return (FP)x;
 }   
 
-template <class TSP> // Tapas Static Params (define in common.h)
+template <int _DIM, typename _FP> // Tapas Static Params (define in common.h)
 class Region {
-    static const int Dim = TSP::Dim;
-    typedef typename TSP::FP FP;
+  static const int Dim = _DIM;
+  using FP = _FP;
  private:
   Vec<Dim, FP> min_;
   Vec<Dim, FP> max_;
@@ -86,7 +86,7 @@ class Region {
 };
 
 template <class TSP>
-std::ostream &operator<<(std::ostream &os, const Region<TSP> &r) {
+std::ostream &operator<<(std::ostream &os, const Region<TSP::Dim, typename TSP::FP> &r) {
     return r.Print(os);
 }
 

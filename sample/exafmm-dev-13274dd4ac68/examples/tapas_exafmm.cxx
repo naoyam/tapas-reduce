@@ -421,7 +421,7 @@ void dumpLeaves(TapasFMM::Cell &root) {
   std::function<void(TapasFMM::Cell&)> f = [&](TapasFMM::Cell& cell) {
     if (cell.IsLeaf()) {
       mtx.lock();
-      ofs << std::setw(20) << cell.key() << ", depth=" << cell.depth() << ", nb=" << cell.nb() << ", r=" << cell.region() << std::endl;
+      ofs << std::setw(20) << cell.key() << ", depth=" << cell.depth() << ", nb=" << cell.nb() << std::endl;
       for (int i = 0; i < (int)cell.nb(); i++) {
         ofs << "    body[" << i << "]=(" << cell.body(i).X << ") " << std::endl;
       }

@@ -60,7 +60,7 @@ struct HelperNode {
 template <class TSP>
 std::vector<HelperNode<TSP>>
 CreateInitialNodes(const typename TSP::BT::type *p, index_t np, 
-                   const Region<TSP> &r);
+                   const Region<TSP::Dim, typename TSP::FP> &r);
 
 template <int DIM, class Key, class T>
 void AppendChildren(typename Key::KeyType k, T &s);
@@ -84,6 +84,7 @@ template <class TSP> class Cell;
 template<class TSP>
 class SharedData {
  public:
+  using Reg = Region<TSP::Dim, typename TSP::FP>;
   using CellType = Cell<TSP>;
   using SFC = typename TSP::SFC;
   using KeyType = typename SFC::KeyType;
@@ -137,7 +138,7 @@ class Cell: public tapas::BasicCell<TSP> {
   Mapper mapper_;
  public:
   Cell(std::shared_ptr<SharedData<TSP>> data,
-       const Region<TSP> &region,
+       const Reg &region,
        index_t bid, index_t nb, KeyType key,
        typename TSP::Body *bodies,
        typename TSP::BodyAttr *body_attrs) :
@@ -278,7 +279,7 @@ class Cell: public tapas::BasicCell<TSP> {
 template <class TSP>
 std::vector<HelperNode<TSP>> CreateInitialNodes(const typename TSP::Body *p,
                                                 index_t np,
-                                                const Region<TSP> &r) {
+                                                const Reg &r) {
     const constexpr int Dim = TSP::Dim;
     const constexpr size_t kCoordOfst = TSP::kBodyCoordOffset;
     using SFC = typename TSP::SFC;
@@ -613,7 +614,7 @@ Partitioner<TSP>::Partition(typename TSP::Body *b, index_t nb) {
     const constexpr int kDim = TSP::Dim;
     const constexpr int kPosOffset = TSP::kBodyCoordOffset;
     
-    Region<TSP> r;
+    Reg r;
     // calculate region
     {
       Vec<kDim, FP> local_max, local_min;
@@ -787,8 +788,10 @@ struct HOT_GPU {
 template<class _TSP>
 struct Tapas2 {
   using TSP = _TSP;
+  using FP = typename TSP::FP;
+  static const constexpr int Dim = TSP::Dim;
   using Partitioner = typename TSP::template Partitioner<TSP>;
-  using Region = tapas::Region<TSP>;
+  using Region = tapas::Region<Dim, FP>;
   using Cell = single_node_hot::Cell<TSP>;
   using BodyIterator = typename Cell::BodyIterator;
   using Body = typename TSP::Body;

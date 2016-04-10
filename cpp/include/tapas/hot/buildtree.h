@@ -51,7 +51,7 @@ class SamplingOctree {
   using BodyAttrType = typename TSP::BodyAttr;
   using Data = SharedData<TSP, SFC>;
   template<class T> using Allocator = typename Data::template Allocator<T>;
-  template<class T> using Region = tapas::Region<T>;
+  using Reg = tapas::Region<kDim, FP>;
 
   template<class T> using Vector = std::vector<T, Allocator<T>>;
 
@@ -59,7 +59,7 @@ class SamplingOctree {
   Vector<BodyType> bodies_;
   std::vector<KeyType> body_keys_;
   std::vector<KeyType> proc_first_keys_; // first key of each process's region
-  Region<TSP> region_;
+  Reg region_;
   Data* data_;
   int ncrit_;
 
@@ -90,7 +90,7 @@ class SamplingOctree {
     // Exchange min
     tapas::mpi::Allreduce(&region_.min()[0], &new_min[0], kDim, MPI_MIN, MPI_COMM_WORLD);
 
-    region_ = Region<TSP>(new_min, new_max);
+    region_ = Reg(new_min, new_max);
   }
 
 
@@ -396,7 +396,7 @@ class SamplingOctree {
 
   Vector<BodyType> ExchangeBodies(Vector<BodyType> bodies,
                                   const std::vector<KeyType> proc_first_keys,
-                                  const Region<TSP> &reg, MPI_Comm comm) {
+                                  const Reg &reg, MPI_Comm comm) {
     std::vector<KeyType> body_keys = BodiesToKeys(bodies, reg);
     std::vector<int> dest(body_keys.size()); // destiantion of each body
 
@@ -428,7 +428,7 @@ class SamplingOctree {
   }
 
   template<class VecT>
-  static std::vector<KeyType> BodiesToKeys(const VecT &bodies, const Region<TSP> &region) {
+  static std::vector<KeyType> BodiesToKeys(const VecT &bodies, const Reg &region) {
     return BodiesToKeys(bodies.begin(), bodies.end(), region);
   }
 
@@ -439,7 +439,7 @@ class SamplingOctree {
    * \return           Vector of keys
    */
   template<class Iter>
-  static std::vector<KeyType> BodiesToKeys(Iter beg, Iter end, const Region<TSP> &region) {
+  static std::vector<KeyType> BodiesToKeys(Iter beg, Iter end, const Reg &region) {
     int num_finest_cells = 1 << SFC::MAX_DEPTH; // maximum number of cells in one dimension
 
     std::vector<KeyType> keys; // return value

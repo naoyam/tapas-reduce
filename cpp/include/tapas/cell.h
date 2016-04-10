@@ -21,18 +21,19 @@ class BasicCell {
   typedef typename TSP::Body BT;
   typedef typename TSP::BodyAttr BT_ATTR;
   typedef typename TSP::CellAttr ATTR;
+  using Reg = Region<Dim, FP>;
  protected:
     ATTR attr_; // can be omitted when ATTR=NONE
-    Region<TSP> region_;
+    Reg region_;
     index_t bid_;
     size_t nb_;
   public:
-    BasicCell(const Region<TSP> &region, index_t bid, index_t nb):
+    BasicCell(const Reg &region, index_t bid, index_t nb):
       region_(region), bid_(bid), nb_(nb) {
     }
   index_t bid() const { return bid_; }
   size_t nb() const { return nb_; }
-  const Region<TSP> &region() const {
+  const Reg &region() const {
     return region_;
   }
   FP width(int d) const {

@@ -130,6 +130,7 @@ struct InteractionPred {
 template<class TSP>
 struct ExactLET {
   // typedefs
+  static const constexpr int Dim = TSP::Dim;
   using FP = typename TSP::FP;
   using CellType = Cell<TSP>;
   using KeyType = typename CellType::KeyType;
@@ -141,6 +142,7 @@ struct ExactLET {
   using attr_type = typename CellType::attr_type; // alias for backward compatibility
   using CellAttrType = attr_type;
   using Vec = tapas::Vec<TSP::Dim, typename TSP::FP>;
+  using Reg = Region<Dim, FP>;
 
   class ProxyBodyAttr : public BodyAttrType {
    public:
@@ -345,7 +347,7 @@ struct ExactLET {
     }
 
     // for debug
-    inline Region<TSP> region() const {
+    inline Reg region() const {
       return RealCellType::CalcRegion(key_, data_.region_);
     }
 

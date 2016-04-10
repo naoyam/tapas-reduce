@@ -27,6 +27,7 @@ template<class TSP> class Partitioner;
 template<class TSP>
 struct OptLET {
   // typedefs
+  static const constexpr int Dim = TSP::Dim;
   using FP = typename TSP::FP;
   using CellType = Cell<TSP>;
   using KeyType = typename CellType::KeyType;
@@ -38,6 +39,7 @@ struct OptLET {
   using attr_type = typename CellType::attr_type; // alias for backward compatibility
   using CellAttrType = attr_type;
   using Vec = tapas::Vec<TSP::Dim, typename TSP::FP>;
+  using Reg = Region<Dim, FP>;
 
   class ProxyBodyAttr : public BodyAttrType {
    public:
@@ -343,7 +345,7 @@ struct OptLET {
      */
     inline FP Distance(ProxyCell &rhs, tapas::CenterClass) {
       // TODO
-      Region<TSP> src_reg, trg_reg;
+      Reg src_reg, trg_reg;
       if (source_) {
         src_reg = region_;
         trg_reg = rhs.region_;
@@ -355,7 +357,7 @@ struct OptLET {
                                                                  src_reg.max(), src_reg.min());
     }
 
-    inline const Region<TSP>& region() const {
+    inline const Reg& region() const {
       return region_;
     }
     
@@ -487,7 +489,7 @@ struct OptLET {
     }
 
    private:
-    Region<TSP> region_;
+    Reg region_;
     Vec center_;
     int depth_;
     bool source_; // target cell or source cell

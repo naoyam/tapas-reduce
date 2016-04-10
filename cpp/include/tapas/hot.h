@@ -137,8 +137,7 @@ struct HelperNode {
 
 template <class TSP>
 std::vector<HelperNode<TSP>>
-CreateInitialNodes(const typename TSP::Body *p, index_t np,
-                   const Region<TSP> &r);
+CreateInitialNodes(const typename TSP::Body *p, index_t np, const Region<TSP::Dim, typename TSP::FP> &r);
 
 template <int DIM, class KeyType, class T>
 void AppendChildren(KeyType k, T &s);
@@ -183,11 +182,15 @@ class Cell {
   //========================================================
  public: // public type usings
   static const constexpr int Dim = TSP::Dim;
-  typedef typename TSP::SFC SFC;
-  typedef typename SFC::KeyType KeyType;
+  using FP = typename TSP::FP;
+  using SFC = typename TSP::SFC;
+  using Reg = Region<Dim, FP>;
+  using KeyType = typename SFC::KeyType;
   using CellType = Cell<TSP>;
+  using Vec = tapas::Vec<Dim, FP>;
 
-  typedef std::unordered_map<KeyType, Cell*> CellHashTable;
+  using Data = SharedData<TSP, SFC>;
+  using CellHashTable = std::unordered_map<KeyType, Cell*>;
   using KeySet = std::unordered_set<KeyType>;
 
   typedef typename TSP::CellAttr attr_type;
@@ -202,9 +205,6 @@ class Cell {
 
   using BodyIterator = iter::BodyIterator<Cell>;
   using SubCellIterator = iter::SubCellIterator<Cell>;
-
-  using FP = typename TSP::FP;
-  using Data = SharedData<TSP, SFC>;
 
   friend void FindLocalRoots<TSP>(KeyType, const CellHashTable&, KeySet&);
 
@@ -228,7 +228,7 @@ class Cell {
   /**
    * \brief Constuctor
    */
-  Cell(KeyType key, const Region<TSP> &region, index_t bid, index_t nb)
+  Cell(KeyType key, const Reg &region, index_t bid, index_t nb)
       : key_(key)
       , nb_(nb)
       , bid_(bid)
@@ -281,11 +281,11 @@ class Cell {
   /**
    *
    */
-  Vec<Dim, FP> center() const {
+  Vec center() const {
     return center_;
   }
 
-  Vec<Dim, FP> width() const {
+  Vec width() const {
     return region_.width();
   }
 
@@ -378,8 +378,16 @@ class Cell {
     return depth() < 4;
   }
 
-  static Region<TSP>  CalcRegion(KeyType, const Region<TSP>& r);
-  static tapas::Vec<Dim, FP> CalcCenter(KeyType, const Region<TSP>& r);
+  static Reg CalcRegion(KeyType key, const Reg& R) {
+    auto ret = R;
+    SFC::template CalcRegion<FP>(key, R.max(), R.min(), ret.max(), ret.min());
+    return ret;
+  }
+  
+  static Vec CalcCenter(KeyType key, const Reg& region) {
+    auto r = CalcRegion(key, region);
+    return r.min() + r.width() / 2;
+  }
 
   void Report() const { tapas::hot::Report<Data>(*data_); }
 
@@ -392,7 +400,7 @@ class Cell {
     return SubCellIterator(*this);
   }
 
-  const Region<TSP> &region() const { return region_; }
+  const Reg &region() const { return region_; }
 
   bool GetOptMutual() const { return data_->opt_mutual_; }
   bool SetOptMutual(bool b) {
@@ -439,8 +447,8 @@ class Cell {
   bool is_local_; //!< if it's a local cell or LET cell.
   bool is_local_subtree_; //!< If all of its descendants are local.
 
-  const Region<TSP> region_; //!< Local region
-  const Vec<Dim, FP> center_; //!< The center of the cell
+  const Reg region_; //!< Local region
+  const Vec center_; //!< The center of the cell
 
   Mapper mapper_;
 
@@ -501,7 +509,7 @@ void ReportSplitType(typename Cell<TSP>::KeyType trg_key,
  * @brief Return a new Region object that covers all Regions across multiple MPI processes
  */
 template<class TSP>
-Region<TSP> ExchangeRegion(const Region<TSP> &r) {
+Region<TSP::Dim, typename TSP::FP> ExchangeRegion(const Region<TSP::Dim, typename TSP::FP> &r) {
   const int Dim = TSP::Dim;
   typedef typename TSP::FP FP;
 
@@ -513,7 +521,7 @@ Region<TSP> ExchangeRegion(const Region<TSP> &r) {
   // Exchange min
   tapas::mpi::Allreduce(&r.min()[0], &new_min[0], Dim, MPI_MIN, MPI_COMM_WORLD);
 
-  return Region<TSP>(new_min, new_max);
+  return Region<Dim, FP>(new_min, new_max);
 }
 
 /**
@@ -526,8 +534,8 @@ Region<TSP> ExchangeRegion(const Region<TSP> &r) {
  */
 template <class TSP>
 std::vector<HelperNode<TSP>> CreateInitialNodes(const typename TSP::Body *bodies,
-                                                     index_t nb,
-                                                     const Region<TSP> &r) {
+                                                index_t nb,
+                                                const Region<TSP::Dim, typename TSP::FP> &r) {
     const int Dim = TSP::Dim;
     typedef typename TSP::FP FP;
     typedef typename TSP::BT BT;
@@ -1088,11 +1096,18 @@ class Partitioner {
   using SFC = typename TSP::SFC;
   using HT = typename Cell<TSP>::CellHashTable;
 
-  public:
-    Partitioner(unsigned max_nb): max_nb_(max_nb) {}
+ public:
+  Partitioner(unsigned max_nb): max_nb_(max_nb) {}
 
   Cell<TSP> *Partition(typename TSP::Body *b, index_t nb);
-  Cell<TSP> *Partition(std::vector<typename TSP::Body> &b);
+  
+  /**
+   * @brief Overloaded version of Partitioner::Partition
+   */
+  Cell<TSP>* Partition(std::vector<BodyType> &b) {
+    return Partition(b.data(), b.size());
+  }
+
 
  public:
   //---------------------
@@ -1244,53 +1259,6 @@ class Partitioner {
 }; // class Partitioner
 
 /**
- * @brief Overloaded version of Partitioner::Partition
- */
-template <class TSP>
-Cell<TSP>*
-Partitioner<TSP>::Partition(std::vector<typename TSP::Body> &b) {
-  return Partitioner<TSP>::Partition(b.data(), b.size());
-}
-
-template <class TSP>
-Region<TSP> Cell<TSP>::CalcRegion(KeyType key, const Region<TSP> &region) {
-  using SFC = typename TSP::SFC;
-  using FP = typename TSP::FP;
-
-  auto r = region;
-
-  SFC::template CalcRegion<FP>(key, region.max(), region.min(), r.max(), r.min());
-
-#if 0
-  if (key == 0) return region;
-
-  const int kDim = TSP::Dim;
-
-  auto r = region;
-  const int kDepth = SFC::GetDepth(key);
-
-  for (int dep = 1; dep <= kDepth; dep++) {
-    for (int dim = 0; dim < kDim; dim++) {
-      FP center = r.min(dim) + r.width(dim) / 2;
-      if (SFC::GetDirOnDepth(key, dim, dep) == 1) {
-        r.min(dim) = center;
-      } else {
-        r.max(dim) = center;
-      }
-    }
-  }
-#endif
-
-  return r;
-}
-
-template <class TSP>
-Vec<Cell<TSP>::Dim, typename TSP::FP> Cell<TSP>::CalcCenter(KeyType key, const Region<TSP> &region) {
-  auto r = CalcRegion(key, region);
-  return r.min() + r.width() / 2;
-}
-
-/**
  * @brief Partition the simulation space and build SFC key based octree
  * @tparam TSP Tapas static params
  * @param b Array of particles
@@ -1395,14 +1363,15 @@ struct HOT {
 
 template<class _TSP>
 struct Tapas2 {
-  using FP = typename _TSP::FP;
   using TSP = _TSP;
+  static const constexpr int Dim = TSP::Dim;
+  using FP = typename TSP::FP;
   using Partitioner = typename TSP::template Partitioner<TSP>;
-  using Region = tapas::Region<TSP>;
+  using Region = tapas::Region<Dim, FP>;
   using Cell = hot::Cell<TSP>;
   using BodyIterator = typename Cell::BodyIterator;
   using Body = typename TSP::Body;
-
+  
   /**
    * @brief Partition and build an octree of the target space.
    * @param b Array of body of BT::type.

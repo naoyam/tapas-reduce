@@ -13,9 +13,11 @@ template<class TSP> class DummyCell;
  */
 template<class TSP, class SFC_>
 struct SharedData {
-  using SFC = SFC_;
+  static const constexpr int Dim = TSP::Dim;
   using FP = typename TSP::FP;
+  using SFC = SFC_;
   using KeyType = typename SFC::KeyType;
+  using Reg = Region<Dim, FP>;
   using CellType = Cell<TSP>;
   using CellHashTable = typename std::unordered_map<KeyType, CellType*>;
   using KeySet = std::unordered_set<KeyType>;
@@ -23,17 +25,18 @@ struct SharedData {
   using BodyType = typename TSP::Body;
   using BodyAttrType = typename TSP::BodyAttr;
   using Mapper = typename CellType::Mapper;
-  static const constexpr int Dim = SFC::Dim;
 
   template<class T> using Allocator = typename TSP::template Allocator<T>;
 
   CellHashTable ht_;
   CellHashTable ht_let_;
-  CellHashTable ht_gtree_;  // Hsah table of the global tree.
-  KeySet        gleaves_;   // set of global leaves, which are a part of ht_gtree_.keys and ht_.keys
-  KeySet        lroots_;    // set of local roots. It must be a subset of gleaves_. gleaves_ is "Allgatherv-ed" lroots.
-  std::mutex ht_mtx_;  //!< mutex to protect ht_
-  Region<TSP> region_; //!< global bouding box
+  CellHashTable ht_gtree_; // Hsah table of the global tree.
+  KeySet        gleaves_;  // set of global leaves, which are a part of ht_gtree_.keys and ht_.keys
+  KeySet        lroots_;   // set of local roots. It must be a subset of gleaves_. gleaves_ is "Allgatherv-ed" lroots.
+  std::mutex    ht_mtx_;   //!< mutex to protect ht_
+  
+  Reg region_;   //!< global bouding box
+  
   Mapper mapper_;
   
   int mpi_rank_;
