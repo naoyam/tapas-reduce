@@ -54,3 +54,8 @@ script:
   - export PATH=$HOME/mpich/bin:$PATH
   - export LD_LIBRARY_PATH=$HOME/mpich/lib:$LD_LIBRARY_PATH
   - env SCALE=s bash ./test.sh
+
+notifications:
+  slack: tapas-dev:OwLgVsyfrKZD1RVsI1b8hQkG
+  on_failure: always
+  on_success: never
