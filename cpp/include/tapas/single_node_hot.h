@@ -120,9 +120,11 @@ class Cell: public tapas::BasicCell<TSP> {
   typedef typename TSP::BodyAttr BodyAttr;
   typedef typename TSP::Threading Threading;
 
+  static const constexpr int Dim = TSP::Dim;
   using FP = typename TSP::FP;
   using SFC = typename TSP::SFC;
   using KeyType = typename SFC::KeyType;
+  using Reg = Region<Dim, FP>;
 
   using HashTable = typename SharedData<TSP>::HashTable;
   using CellType = Cell<TSP>;
@@ -279,7 +281,7 @@ class Cell: public tapas::BasicCell<TSP> {
 template <class TSP>
 std::vector<HelperNode<TSP>> CreateInitialNodes(const typename TSP::Body *p,
                                                 index_t np,
-                                                const Reg &r) {
+                                                const Region<TSP::Dim, typename TSP::FP> &r) {
     const constexpr int Dim = TSP::Dim;
     const constexpr size_t kCoordOfst = TSP::kBodyCoordOffset;
     using SFC = typename TSP::SFC;
@@ -606,13 +608,14 @@ Partitioner<TSP>::Partition(std::vector<typename TSP::Body> &b) {
 template <class TSP> // TSP : Tapas Static Params
 Cell<TSP>*
 Partitioner<TSP>::Partition(typename TSP::Body *b, index_t nb) {
+    const constexpr int kDim = TSP::Dim;
+    const constexpr int kPosOffset = TSP::kBodyCoordOffset;
     using SFC = typename TSP::SFC;
     using FP = typename TSP::FP;
+    using Reg = Region<kDim, FP>;
     typedef typename TSP::Body Body;
     typedef typename TSP::BodyAttr BodyAttr;
     typedef Cell<TSP> CellType;
-    const constexpr int kDim = TSP::Dim;
-    const constexpr int kPosOffset = TSP::kBodyCoordOffset;
     
     Reg r;
     // calculate region
