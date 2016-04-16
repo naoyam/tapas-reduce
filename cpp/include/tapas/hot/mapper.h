@@ -223,6 +223,8 @@ struct CPUMapper {
     SCOREP_USER_REGION_DEFINE(trav_handle)
     using Time = decltype(clock::now());
     Time net_bt, net_et;
+
+    c2.data().trav_used_src_key_.insert(c2.key());
     
     if (c1.IsRoot() && c2.IsRoot()) {
       // Pre-traverse procedure

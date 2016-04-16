@@ -317,7 +317,7 @@ void Test_Morton_CalcRegion() {
     ASSERT_TRUE(Close(max, max_ans));
     ASSERT_TRUE(Close(min, min_ans));
   }
-  
+
   // Depth 2
   {
     typename K::KeyType k = GenKey<K>({3, 3});

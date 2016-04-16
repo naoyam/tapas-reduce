@@ -421,7 +421,7 @@ class Cell {
   const Mapper &mapper() const { return data_->mapper; }
 
   inline FP Distance(Cell &rhs, tapas::CenterClass) {
-    return tapas::Distance<tapas::CenterClass, FP>::Calc(*this, rhs);
+    return tapas::Distance<Dim, tapas::CenterClass, FP>::Calc(*this, rhs);
   }
 
   //inline FP Distance(Cell &rhs, tapas::Edge) {
@@ -930,7 +930,7 @@ inline Cell<TSP> *Cell<TSP>::Lookup(KeyType k) const {
     assert(i->second != nullptr);
     return i->second;
   }
-
+  
   return nullptr;
 }
 

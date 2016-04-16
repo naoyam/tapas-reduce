@@ -11,51 +11,71 @@ namespace tapas {
 template <class FP, class T>
 FP REAL(const T &x) {
   return (FP)x;
-}   
+}
 
 template <int _DIM, typename _FP> // Tapas Static Params (define in common.h)
 class Region {
-  static const int Dim = _DIM;
+ public:
+  static const constexpr int Dim = _DIM;
   using FP = _FP;
+
  private:
   Vec<Dim, FP> min_;
   Vec<Dim, FP> max_;
+
  public:
   Region(const Vec<Dim, FP> &min, const Vec<Dim, FP> &max):
-      min_(min), max_(max) {}
+      min_(min), max_(max) {
+#ifdef TAPAS_DEBUG
+    for (int i = 0; i < Dim; i++) {
+      if (!(min_[i] <= max_[i])) {
+        std::cerr << "min_ = " << min_[i] << ", max_ = " << max_[i] << std::endl;
+      }
+      TAPAS_ASSERT(min_[i] <= max_[i]);
+    }
+#endif
+  }
+
   Region() {}
 
-  Vec<Dim, FP> &min() {
+  inline Vec<Dim, FP> &min() {
     return min_;
   }
-  FP min(int d) const {
+  inline FP min(int d) const {
     return min_[d];
   }
-  FP &min(int d) {
+  inline FP &min(int d) {
     return min_[d];
   }
-  Vec<Dim, FP> &max() {
-    return max_;
-  }
-  FP max(int d) const {
-    return max_[d];
-  }
-  FP &max(int d) {
-    return max_[d];
-  }
-  const Vec<Dim, FP> &min() const {
+  inline const Vec<Dim, FP> &min() const {
     return min_;
   }
-  const Vec<Dim, FP> &max() const {
+  inline Vec<Dim, FP> &max() {
     return max_;
   }
-  FP width(int d) const {
+  inline const Vec<Dim, FP> &max() const {
+    return max_;
+  }
+  inline FP max(int d) const {
+    return max_[d];
+  }
+  inline FP &max(int d) {
+    return max_[d];
+  }
+  inline FP width(int d) const {
+    TAPAS_ASSERT(max_[d] >= min_[d]);
     return max_[d] - min_[d];
   }
-  const Vec<Dim, FP> width() const {
+  inline const Vec<Dim, FP> width() const {
     return max_ - min_;
   }
-  
+  inline const Vec<Dim, FP> center() const {
+    return (max_ + min_) / 2;
+  }
+  inline const FP center(int d) const {
+    return (max_[d] + min_[d]) / 2;
+  }
+
   Region PartitionBSP(int pos) const {
     Region sr = *this;
     for (int i = 0; i < Dim; ++i) {
@@ -69,16 +89,6 @@ class Region {
     }
     return sr;
   }
-#if 0  
-  Region PartitionBSP(const Vec<Dim, int> &pos) const {
-    int p = 0;
-    for (int i = 0; i < Dim; ++i) {
-      p <<= 1;
-      if (pos[i]) p |= 1;
-    }
-    return PartitionBSP(p);
-  }
-#endif
   std::ostream &Print(std::ostream &os) const {
     os << "{" << min_ << ", " << max_ << "}";
     return os;

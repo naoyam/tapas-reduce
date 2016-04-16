@@ -87,7 +87,7 @@ static inline void FMM_Upward(TapasFMM::Cell &c, real_t /* theta */) {
   c.attr().R = 0;
   c.attr().M = 0;
   c.attr().L = 0;
-  
+
 #ifdef TAPAS_DEBUG_DUMP
   {
     tapas::debug::DebugStream e("FMM_Upward");
@@ -96,14 +96,14 @@ static inline void FMM_Upward(TapasFMM::Cell &c, real_t /* theta */) {
     e.out() << std::endl;
   }
 #endif
-  
+
   if (c.IsLeaf()) {
     P2M(c);
   } else {
     M2M(c);
   }
 
-#if 0 // to be removed 
+#if 0 // to be removed
   for (int i = 0; i < 3; ++i) {
     c.attr().R = std::max(c.width(i), c.attr().R);
   }
@@ -120,6 +120,72 @@ static inline void FMM_Downward(TapasFMM::Cell &c) {
     tapas::Map(L2P, c.bodies(), &c);
   }
 }
+
+#define RANK 0
+#define KEY 2522015791327477762
+
+template<class Cell, class L>
+void Debug(Cell &Ci, Cell &Cj, L lambda) {
+  int rank = 0;
+  (void) Ci;
+  (void) Cj;
+#ifdef USE_MPI
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+#endif
+  if (getenv("TAPAS_IN_LET")) {
+    lambda(rank);
+  }
+}
+
+
+#ifdef TAPAS_DEBUG
+
+template<class Cell>
+void DebugWatchCell(Cell &Ci, Cell &Cj, real_t Ri, real_t Rj, real_t R2) {
+  using KeyType = typename Cell::SFC::KeyType;
+  const KeyType C4 = 221802281647996932; // the problematic cell
+  const KeyType C3 = 216172782113783811;
+  const KeyType C2 = 216172782113783811;
+  const KeyType C1 = 1;
+
+  const KeyType watched_cell = C3;
+  const int watched_rank = 1;
+
+  using SFC = typename Cell::SFC;
+
+  if (tapas::debug::MPI_Rank() == watched_rank) {
+    if (Cj.key() == watched_cell) {
+      if (getenv("TAPAS_IN_LET")) {
+        std::cout << "In LET: Found src_key = " << Cj.key() << std::endl;
+      } else {
+        std::cout << "In Main Traverse: Found src_key = " << Cj.key() << std::endl;
+      }
+      std::cout << "\tCi.key() = " << SFC::Describe(Ci.key()) << std::endl;
+      std::cout << "\tCj.key() = " << SFC::Describe(Cj.key()) << std::endl;
+      std::cout << "\tRi = " << Ri << std::endl;
+      std::cout << "\tRj = " << Rj << std::endl;
+      std::cout << "\tR2 = " << R2 << std::endl;
+      std::cout << "\t(Ri + Rj) * (Ri + Rj) = " << ((Ri + Rj) * (Ri + Rj)) << std::endl;
+      std::cout << "\t" << "target width  = " << Ci.region().width() << std::endl;
+      std::cout << "\t" << "target center = " << Ci.region().center() << std::endl;
+      std::cout << "\t" << "source width  = " << Cj.region().width() << std::endl;
+      std::cout << "\t" << "source center = " << Cj.region().center() << std::endl;
+      if (R2 > (Ri + Rj) * (Ri + Rj)) {                   // If distance is far enough
+        std::cout << "\tApprox" << std::endl;
+      } else if (Ci.IsLeaf() && Cj.IsLeaf()) {            // Else if both cells are bodies
+        std::cout << "\tP2P" << std::endl;
+      } else {                                                    // Else if cells are close but not bodies
+        std::cout << "\tSplit" << ", "
+                  << "Ci.IsLeaf() = " << Ci.IsLeaf() << ", "
+                  << "Cj.IsLeaf() = " << Cj.IsLeaf() << std::endl;
+      }                                                           // End if for multipole acceptance
+      std::cout << std::endl;
+    }
+  }
+}
+
+#endif
+
 
 // Perform ExaFMM's Dual Tree Traversal (M2L & P2P)
 struct FMM_DTT {
@@ -146,9 +212,11 @@ struct FMM_DTT {
       Ri = std::max(Ri, Ci.width(d));
       Rj = std::max(Rj, Cj.width(d));
     }
-    
+
     Ri = (Ri / 2 * 1.00001) / theta;
     Rj = (Rj / 2 * 1.00001) / theta;
+
+    //DebugWatchCell(Ci, Cj, Ri, Rj, R2);
     
     if (R2 > (Ri + Rj) * (Ri + Rj)) {                   // If distance is far enough
       // tapas::Apply(M2L, Ci, Cj, Xperiodic, mutual); // \todo
@@ -159,9 +227,10 @@ struct FMM_DTT {
       tapas_splitCell(Ci, Cj, Ri, Rj, mutual, nspawn, theta);   //  Split cell and call function recursively for child
     }                                                           // End if for multipole acceptance
   }
-  
+
   template<class Cell>
   inline void tapas_splitCell(Cell &Ci, Cell &Cj, real_t Ri, real_t Rj, int mutual, int nspawn, real_t theta) {
+    bool Ci_IsLeaf = Ci.IsLeaf();
     if (Cj.IsLeaf()) {
       assert(!Ci.IsLeaf());                                   //  Make sure Ci is not leaf
       //for (C_iter ci=Ci0+Ci->ICHILD; ci!=Ci0+Ci->ICHILD+Ci->NCHILD; ci++) {// Loop over Ci's children
@@ -169,7 +238,8 @@ struct FMM_DTT {
       //}                                                         //
       //End loop over Ci's children
       tapas::Map(*this, tapas::Product(Ci.subcells(), Cj), mutual, nspawn, theta);
-    } else if (Ci.IsLeaf()) {                               // Else if Ci is leaf
+    } else if (Ci_IsLeaf) {                               // Else if Ci is leaf
+      //} else if (Ci.IsLeaf()) {                               // Else if Ci is leaf
       assert(!Cj.IsLeaf());                                   //  Make sure Cj is not leaf
       //for (C_iter cj=Cj0+Cj->ICHILD; cj!=Cj0+Cj->ICHILD+Cj->NCHILD; cj++) {// Loop over Cj's children
       //  traverse(Ci, cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
@@ -210,7 +280,7 @@ void CheckResult(Bodies &bodies, int numSamples, real_t cycle, int images) {
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 #endif
-  
+
   numSamples = std::min(numSamples, (int)bodies.size());
 
   Bodies targets(numSamples);
@@ -225,7 +295,7 @@ void CheckResult(Bodies &bodies, int numSamples, real_t cycle, int images) {
     }
     Dataset().initTarget(samples);
   }
-  
+
   int prange = 0;
   for (int i=0; i<images; i++) {
     prange += int(std::pow(3.,i));
@@ -275,7 +345,7 @@ void CheckResult(Bodies &bodies, int numSamples, real_t cycle, int images) {
   for (auto b = samples.begin(); b != samples.end(); b++) {
     b->TRG /= b->SRC;
   }
-  
+
   Verify verify;
   double potDif = verify.getDifScalar(samples, targets);
   double potNrm = verify.getNrmScalar(samples);
@@ -357,7 +427,7 @@ void dumpL(TapasFMM::Cell &root) {
 
       if (-1e-8 < real && real < 0) real = +0.0;
       if (-1e-8 < imag && imag < 0) imag = +0.0;
-      
+
       ofs << "("
           << std::fixed << std::setprecision(5) << std::showpos << real << ","
           << std::fixed << std::setprecision(5) << std::showpos << imag
@@ -417,7 +487,7 @@ void dumpLeaves(TapasFMM::Cell &root) {
 #endif
   std::mutex mtx;
   std::ofstream ofs(ss.str().c_str(), std::ios_base::app);
-  
+
   std::function<void(TapasFMM::Cell&)> f = [&](TapasFMM::Cell& cell) {
     if (cell.IsLeaf()) {
       mtx.lock();
@@ -428,9 +498,9 @@ void dumpLeaves(TapasFMM::Cell &root) {
       mtx.unlock();
     }
   };
-  
+
   tapas::UpwardMap(f, root);
-  
+
   ofs.close();
 }
 
@@ -450,7 +520,7 @@ std::string Now() {
 
 int main(int argc, char ** argv) {
   Args args(argc, argv);
-  
+
 #ifdef USE_MPI
   MPI_Init(&argc, &argv);
 
@@ -470,6 +540,7 @@ int main(int argc, char ** argv) {
       gethostname(hostname, 100);
       std::cout << "MPI rank " << rank << ": " << hostname << ":" << getpid() << std::endl;
     });
+  sleep(10);
 #endif
 
 #ifdef TBB
@@ -486,7 +557,7 @@ int main(int argc, char ** argv) {
   }
   task_scheduler_init init(args.threads);
 #endif
-  
+
   // Dummy CUDA call to initialize the runtime
   // (for performance measurement)
 #ifdef __CUDACC__
@@ -502,7 +573,7 @@ int main(int argc, char ** argv) {
 #ifdef MTHREADS
   FMM_Threading::init();
 #endif
-  
+
   Bodies bodies, bodies2, bodies3, jbodies;
   Cells cells, jcells;
   Dataset data;
@@ -524,7 +595,7 @@ int main(int argc, char ** argv) {
     exit(-1);
   }
 #endif
-  
+
   //UpDownPass upDownPass(args.theta, args.useRmax, args.useRopt);
   Verify verify;
   (void) verify;
@@ -544,7 +615,7 @@ int main(int argc, char ** argv) {
     }
   }
 #endif
-  
+
   const real_t cycle = 2 * M_PI;
   logger::verbose = args.verbose && (args.mpi_rank == 0);
   if (args.mpi_rank == 0) {
@@ -557,7 +628,7 @@ int main(int argc, char ** argv) {
   if (args.mpi_rank == 0) {
     std::cout << "Starting FMM timesteps" << std::endl;
   }
-  
+
   for (int t=0; t<args.repeat; t++) {
     double total_bt = GetTime();
     logger::printTitle("FMM Profiling");
@@ -571,7 +642,7 @@ int main(int argc, char ** argv) {
       MPI_Barrier(MPI_COMM_WORLD);
 #endif
       double bt = GetTime();
-      
+
       root = TapasFMM::Partition(bodies.data(), bodies.size(), args.ncrit);
 
       double et = GetTime();
@@ -579,7 +650,7 @@ int main(int argc, char ** argv) {
     }
 
     root->SetOptMutual(args.mutual);
-    
+
 #ifdef USE_MPI
     int rank = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -592,15 +663,15 @@ int main(int argc, char ** argv) {
 #endif
       logger::startTimer("Upward pass");
       double bt = GetTime();
-      
+
       tapas::UpwardMap(FMM_Upward, *root, args.theta);
-      
+
       double et = GetTime();
       logger::stopTimer("Upward pass");
 
       time_upw = et - bt;
     }
-    
+
 #ifdef TAPAS_DEBUG_DUMP
     dumpM(*root);
 #endif
@@ -612,14 +683,14 @@ int main(int argc, char ** argv) {
       logger::startTimer("Traverse");
       double bt = GetTime();
       ResetCount();
-      
+
       tapas::Map(FMM_DTT(), tapas::Product(*root, *root), args.mutual, args.nspawn, args.theta);
 
       double et = GetTime();
       logger::stopTimer("Traverse");
       time_dtt = et - bt;
     }
-    
+
     TAPAS_LOG_DEBUG() << "Dual Tree Traversal done\n";
     jbodies = bodies;
 
@@ -633,20 +704,20 @@ int main(int argc, char ** argv) {
 #endif
       logger::startTimer("Downward pass");
       double bt = GetTime();
-      
+
       tapas::DownwardMap(FMM_Downward, *root);
-      
+
       double et = GetTime();
       logger::stopTimer("Downward pass");
       time_dwn = et - bt;
     }
-    
+
     TAPAS_LOG_DEBUG() << "L2P done\n";
 
 #ifdef TAPAS_DEBUG_DUMP
     dumpBodies(*root);
 #endif
-    
+
     CopyBackResult(bodies, root);
     //CopyBackResult(bodies, root->body_attrs(), args.numBodies);
 
@@ -655,7 +726,7 @@ int main(int argc, char ** argv) {
     logger::stopPAPI();
     logger::stopTimer("Total FMM");
     logger::resetTimer("Total FMM");
-    
+
     double time_total = total_et - total_bt;
     tapas::util::RankCSV csv {"total", "upward", "traverse", "downward", "tree"
 #ifdef COUNT
@@ -671,20 +742,20 @@ int main(int argc, char ** argv) {
     csv.At("numP2P") = numP2P;
     csv.At("numM2L") = numM2L;
 #endif
-    
+
     std::string report_prefix;
     std::string report_suffix;
-    
+
     if (getenv("TAPAS_REPORT_PREFIX")) {
       report_prefix = getenv("TAPAS_REPORT_PREFIX");
     }
-    
+
     if (getenv("TAPAS_REPORT_SUFFIX")) {
       report_suffix = getenv("TAPAS_REPORT_SUFFIX");
     }
 
     csv.Dump(report_prefix + "main" + report_suffix + ".csv");
-    
+
 #if WRITE_TIME
     logger::writeTime();
 #endif
@@ -695,7 +766,7 @@ int main(int argc, char ** argv) {
       CheckResult(bodies, numTargets, cycle, args.images);
       logger::stopTimer("Total Direct");
     }
-    
+
     //buildTree.printTreeData(cells);
     logger::printPAPI();
     logger::stopDAG();
@@ -706,7 +777,7 @@ int main(int argc, char ** argv) {
       std::cout << "M2L calls" << " : " << numM2L << std::endl;
     }
 #endif
-    
+
     bodies = bodies3;
     data.initTarget(bodies);
 
@@ -716,8 +787,6 @@ int main(int argc, char ** argv) {
 #ifdef USE_MPI
   MPI_Finalize();
 #endif
-  
+
   return 0;
 }
-
-

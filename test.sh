@@ -133,7 +133,7 @@ else
     # mpich family (mpich and mvapich)
     MPICC="env MPICH_CXX=${CXX} MPICH_CC=${CC} mpicc"
     MPICXX="env MPICH_CXX=${CXX} MPICH_CC=${CC} mpicxx"
-    MPI=mpirun
+    MPI=mpiexec
     echo Looks like Mpich.
 fi
 
@@ -151,13 +151,17 @@ echo --------------------------------------------------------------------
 
 SRC_DIR=$SRC_ROOT/cpp/tests
 
-echoCyan make MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" VERBOSE=1 MODE=debug -C $SRC_DIR clean all
-make -j MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=debug -C $SRC_DIR clean all
+echoCyan make MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" VERBOSE=1 MODE=debug -C $SRC_DIR clean
+make -j MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=debug -C $SRC_DIR clean
 
-for t in `find $SRC_DIR -perm -u+x -name "test_*"`; do
+echoCyan make MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" VERBOSE=1 MODE=debug -C $SRC_DIR all
+make -j MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=debug -C $SRC_DIR all
+
+TEST_TARGETS=$(make -C $SRC_DIR list | grep -v make | grep -v echo | grep test_)
+for t in $TEST_TARGETS; do
     for NP in 1 2 3 4; do
-        echoCyan ${MPI} -np $NP $t
-        ${MPI} -np $NP $t
+        echoCyan ${MPI} -np $NP $SRC_DIR/$t
+        ${MPI} -np $NP $SRC_DIR/$t
     done
 done
 
@@ -234,7 +238,7 @@ elif echo $SCALE | grep -Ei "^s(mall)?" >/dev/null ; then
 elif echo $SCALE | grep -Ei "^m(edium)?" >/dev/null ; then
     NP=(1 2 3 4 5 6)
     NB=(10000 20000)
-    DIST=(l s p c)
+    DIST=(s c)
     NCRIT=(16 64)
 elif echo $SCALE | grep -Ei "^l(arge)?" >/dev/null ; then
     NP=(1 2 4 8 16 32)
@@ -275,9 +279,9 @@ function accuracyCheck() {
     fi
 }
 
-for dist in ${DIST[@]}; do
-    for nb in ${NB[@]}; do
-        for ncrit in ${NCRIT[@]}; do
+for nb in ${NB[@]}; do
+    for ncrit in ${NCRIT[@]}; do
+        for dist in ${DIST[@]}; do
             for mutual in 0 1; do
                 rm -f $TMPFILE; sleep 1s
 

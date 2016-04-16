@@ -81,6 +81,78 @@ class SamplingOctree {
     region_.max() = local_max;
   }
 
+  static void ShowHistogram(const Data &data) {
+    using tapas::debug::BarrierExec;
+    const int d = data.max_depth_;
+    TAPAS_ASSERT(d <= SFC::MaxDepth());
+
+    // Show "level-#cells" histogram
+
+    const long ncells = data.ht_.size();
+    const long nall   = (pow(8.0, d+1) - 1) / 7;
+    BarrierExec([&](int,int) {
+        std::cout << "Cells: " << ncells << std::endl;
+        std::cout << "depth: " << d << std::endl;
+        std::cout << "filling rate: " << ((double)ncells / nall) << std::endl;
+      });
+
+    std::vector<int> hist(d + 1, 0);
+    for (auto p : data.ht_) {
+      const auto *cell = p.second;
+      if (cell->IsLeaf()) {
+        hist[cell->depth()]++;
+      }
+    }
+
+    BarrierExec([&](int, int) {
+        std::cout << "Depth histogram" << std::endl;
+        for (int i = 0; i <= d; i++) {
+          std::cout << i << " " << hist[i] << std::endl;
+        }
+      });
+
+    // Show "Region-#cells" histogram to show how biased the distribution is.
+    const KeyType kRoot = 0;
+    const int N1 = 1 << (TSP::Dim);
+    const int N2 = 1 << (TSP::Dim * 2);
+    const std::vector<KeyType> level1 = SFC::GetChildren(kRoot);
+    std::vector<KeyType> level2;
+    std::vector<int> count(N2);
+
+    for (KeyType k: level1) {
+      for (KeyType c : SFC::GetChildren(k)) {
+        level2.push_back(c);
+      }
+    }
+
+    TAPAS_ASSERT(level1.size() == N1);
+    TAPAS_ASSERT(level2.size() == N2);
+
+    for (auto kk : data.ht_) {
+      KeyType key = kk.first;
+      for (size_t i = 0; i < level2.size(); i++) {
+        if (SFC::GetDepth(key) >= 2) {
+          if (SFC::IsDescendant(level2[i], key)) {
+            count[i]++;
+            break;
+          }
+        }
+      }
+    }
+
+    std::vector<int> recv_buf(N2);
+    MPI_Reduce(&count[0], &recv_buf[0], count.size(), MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    if (data.mpi_rank_ == 0) {
+      std::cout << "Total cells: " << data.ht_.size() << std::endl;
+      std::cout << "Region Histogram: ";
+      for(int i = 0; i < N2; i++) {
+        std::cout << recv_buf[i] << " ";
+      }
+      std::cout << std::endl;
+    }
+  }
+  
   void ExchangeRegion() {
     Vec<kDim, FP> new_max, new_min;
 
@@ -300,6 +372,10 @@ class SamplingOctree {
 
     double end = MPI_Wtime();
     data_->time_tree_all = end - beg;
+
+#ifdef TAPAS_DEBUG_HISTOGRAM
+    ShowHistogram(*data_);
+#endif
   }
 
   /**

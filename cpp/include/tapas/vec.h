@@ -206,11 +206,29 @@ class Vec {
   }
   
   std::ostream &print(std::ostream &os) const {
-    StringJoin sj(", ");
+    std::ios::fmtflags f(os.flags());
+    
     for (int i = 0; i < Dim; ++i) {
-      sj << x_[i];
+      if (i == 0) {
+        os << "[";
+      }
+
+      if (x_[i] > +1000000) {
+        os << std::scientific;
+      } else {
+        os << std::fixed << std::setprecision(6) << std::showpos;
+      }
+      
+      os << x_[i];
+      
+      if (i == Dim-1) {
+        os << "]";
+      } else {
+        os << ", ";
+      }
     }
-    return os << sj;
+    os.flags(f);
+    return os;
   }
 
   inline void SetMax(const Vec &rhs) {

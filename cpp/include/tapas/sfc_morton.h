@@ -140,12 +140,12 @@ template<int _Dim, class _type>
 class Morton {
  public:
   using KeyType = _type;
-  
+
   typedef std::list<KeyType> KeyList;
   typedef std::vector<KeyType> KeyVector;
   typedef std::unordered_set<KeyType> KeySet;
   typedef std::pair<KeyType, KeyType> KeyPair;
-  
+
   static const constexpr int Dim = _Dim;
 
   /**
@@ -191,20 +191,20 @@ class Morton {
    */
   static inline CONSTEXPR
   KeyType GetNext(KeyType k, int n = 1) noexcept {
-    
+
 #ifdef TAPAS_DEBUG
     index_t L = GetDepth(k);
     index_t W = pow(1 << Dim, L);
     TAPAS_ASSERT((index_t)n <= W);
     // there are W cells in level L so n < W. However, it is sometimes necessary to get the 'next of the last' key
-    // of level L like std::end. 
+    // of level L like std::end.
 #endif
-    
+
     int d = GetDepth(k);
     KeyType inc = (KeyType)n << (Dim * (MaxDepth() - d) + DepthBits());
     return k + inc;
   }
-  
+
   static inline CONSTEXPR
   KeyType AppendDepth(KeyType k, int depth) {
     return (k << DepthBits()) | depth;
@@ -228,9 +228,9 @@ class Morton {
   static inline CONSTEXPR
   KeyType IncrDepth(KeyType k, int inc) {
     int d = GetDepth(k) + inc;
-    
+
     TAPAS_ASSERT(0 <= d && d <= MaxDepth());
-    
+
     return AppendDepth(RemoveDepth(k), d);
   }
 
@@ -279,10 +279,11 @@ class Morton {
 
   static inline CONSTEXPR
   KeyType Child(KeyType k, int child_idx) {
-    TAPAS_ASSERT(child_idx < (1 << Dim));
+    TAPAS_ASSERT(0 <= child_idx && child_idx < (1 << Dim));
     k = IncrementDepth(k, 1);
     int d = GetDepth(k);
-    return k | ((KeyType)child_idx << ((MaxDepth() - d) * Dim + DepthBits()));
+    int shift_bits = ((MaxDepth() - d) * Dim + DepthBits());
+    return k | ((KeyType)child_idx << shift_bits);
   }
 
   static CONSTEXPR
@@ -291,10 +292,10 @@ class Morton {
    */
   std::vector<KeyType> GetChildren(KeyType parent) {
     std::vector<KeyType> ret;
-  
+
     //KeyType child_key = FirstChild(parent);
     int nchild = (1 << Dim);
-    
+
     for (int child_idx = 0; child_idx < nchild; child_idx++) {
       ret.push_back(Child(parent, child_idx));
       //ret.push_back(child_key);
@@ -346,12 +347,41 @@ class Morton {
     return ss.str();
   }
 
+    /**
+   * \brief returns a simplified, human-readable string representation of the key.
+   * The returned string cannot be converted to the original key back.
+   * NOTE: It might be useful to make this function constexpr, but
+   *       we use stringstream in the current implementation.
+   * Example: "0461...7906"
+   */
+  static
+  std::string Simplify(KeyType k) {
+    const constexpr int W=4;
+    std::stringstream ss;
+    ss << std::setw(20) << std::setfill('0') << k;
+    std::string s = ss.str();
+    s.replace(s.begin()+W, s.end()-W, "...");
+    return s;
+  }
+
+  /**
+   * \brief Returns a long string in "xxxx...xxxx [y]-yyy-yyy...yyy zzzzzz" format.
+   * xxxx...xxxx is a result from Simplify(), [y]-yyy-yyy...yyy is a from Decode(),
+   * and zzzzz is a simply-printed integer.
+   */
+  static
+  std::string Describe(KeyType k) {
+    std::stringstream ss;
+    ss << Simplify(k) << " " << Decode(k) << " " << k;
+    return ss.str();
+  }
+
   static
   KeyType CalcFinestKey(const tapas::Vec<Dim, int> &anchor) {
     for (int d = Dim-1; d >= 0; --d) {
       assert(anchor[d] <= pow(2, MaxDepth()));
     }
-  
+
     KeyType k = 0;
     int mask = 1 << (MaxDepth() - 1);
     for (int i = 0; i < MaxDepth(); ++i) {
@@ -406,7 +436,7 @@ class Morton {
       std::cerr << "Y2 = " << Decode(Y2) << std::endl;
     }
     TAPAS_ASSERT(Y1 < Y2);
-    
+
     if (X1 <= Y1 && Y1 <  X2) {
       //std::cout << "(1)" << std::endl;
       return true;
@@ -419,7 +449,7 @@ class Morton {
       //std::cout << "(3)" << std::endl;
       return true;
     }
-    
+
     return false;
   }
 
@@ -431,7 +461,7 @@ class Morton {
   bool Includes(KeyType beg, KeyType end, KeyType c) {
     beg = RemoveDepth(beg);
     end = RemoveDepth(end);
-    
+
     auto c1 = RemoveDepth(c);
     auto c2 = RemoveDepth(GetNext(c));
 
@@ -444,7 +474,7 @@ class Morton {
   static inline
   bool Includes(KeyType k1, KeyType k2) {
     if (GetDepth(k1) > GetDepth(k2)) return false;
-    
+
     k1 = RemoveDepth(k1);
     k2 = RemoveDepth(k2);
     return k1 == (k1 & k2);
@@ -454,7 +484,7 @@ class Morton {
    * @brief Find the range(beg,end) of cells/bodies that the cell owns
    */
   template<class T>
-  static inline 
+  static inline
   void FindRangeByKey(const T& vec, KeyType k, index_t &range_beg, index_t &range_end) {
     auto beg = std::begin(vec);
     auto end = std::end(vec);
@@ -463,34 +493,17 @@ class Morton {
   }
 
   /**
-   * \brief returns a simplified, human-readable string representation of the key.
-   * The returned string cannot be converted to the original key back.
-   * NOTE: It might be useful to make this function constexpr, but 
-   *       we use stringstream in the current implementation.
-   * Example: "0461...7906"
-   */
-  static
-  std::string Simplify(KeyType k) {
-    const constexpr int W=4;
-    std::stringstream ss;
-    ss << std::setw(20) << std::setfill('0') << k;
-    std::string s = ss.str();
-    s.replace(s.begin()+W, s.end()-W, "...");
-    return s;
-  }
-
-  /**
    * \brief Returns direction (0/1) of the dim-th dimension on the depth-th level.
    * In octree's space decomposition, each dimension is divided into two region on each level.
    * This function returns 0 if the cell of key k resides in the smaller half of dim-th dimension, 1 otherwise.
-   * Ex. 
+   * Ex.
    * In 2-dimensional space, let key = 00-01-11-10
    * GetDirOnDepth(k, 0, 1) => 0  ; dimension 0(X), depth 1
    *              (k, 0, 2) => 1  ; dimension 0(X), depth 2
    *              (k, 1, 3) => 1  ; dimension 1(Y), depth 3
    *
    * In Morton key, on each level, directions are ordered in a straightforward way.
-   * i.e. '001' means the first dimension is 0, the second dimension is 0, and the last 
+   * i.e. '001' means the first dimension is 0, the second dimension is 0, and the last
    * dimension is 1 in 3-dimensional space.
    *
    * NOTE: the root cell is at depth 0, thus the argument must be > 0.
@@ -503,6 +516,13 @@ class Morton {
     // dim-bits direction on depth d
     int dir = RemoveDepth(k) >> ((MAX_DEPTH - depth) * Dim);
     return (dir >> dim) & 1;
+  }
+
+  template<class FP>
+  static inline Region<Dim, FP> CalcRegion(KeyType key, const Region<Dim,FP> &root) {
+    Region<Dim, FP> reg;
+    CalcRegion(key, root.max(), root.min(), reg.max(), reg.min());
+    return reg;
   }
 
   template<class FP>
@@ -534,4 +554,3 @@ class Morton {
 
 
 #endif // _SFC_MORTON_H_
-

@@ -26,6 +26,7 @@ class GlobalTree {
  public:
 
   using CellType = Cell<TSP>;
+  using Reg = typename CellType::Reg;
   using SFC = typename CellType::SFC;
   using Data = SharedData<TSP, SFC>;
   using KeyType = typename CellType::KeyType;
@@ -33,7 +34,7 @@ class GlobalTree {
   using KeySet = typename CellType::KeySet;
   using FP = typename TSP::FP;
   static const constexpr int Dim = TSP::Dim;
-  
+
   /**
    * \brief Build global tree
    * 1. Traverse recursively from the root and identify global leaves
@@ -44,7 +45,7 @@ class GlobalTree {
    */
   static void Build(Data &data) {
     double beg = MPI_Wtime();
-    
+
     HashTable &ltree = data.ht_;       // hash table for the local tree
     HashTable &gtree = data.ht_gtree_; // hash table for the global tree
     KeySet &gleaves = data.gleaves_;
@@ -67,40 +68,20 @@ class GlobalTree {
   }
 
   /**
-   * \brief Calculate local bouding box;
+   * \brief Calculate local bouding box
+   * Used in one-sided (conservative, approximate) LET traversal
    */
   static void GetLocalBB(Data &data) {
-    auto &bb_max = data.local_bb_max_;
-    auto &bb_min = data.local_bb_min_;
+    using T = decltype(data.local_br_);
 
-    for (int d = 0; d < Dim; d++) {
-      bb_max[d] = std::numeric_limits<FP>::min();
-      bb_min[d] = std::numeric_limits<FP>::max();
-    }
-
-    for (auto k : data.lroots_) {
-      CellType *c = data.ht_[k];
-
-      auto &r = c->region();
-      bb_max.SetMax(r.max());
-      bb_min.SetMin(r.min());
-
-    }
-    
-#if 0
-#ifdef TAPAS_DEBUG
-    // check local bb_max / bb_min
-    tapas::debug::BarrierExec([&](int, int) {
-        std::cout << "bb_max = " << data.local_bb_max_ << std::endl;
-        std::cout << "bb_min = " << data.local_bb_min_ << std::endl;
-        for (int d = 0; d < Dim; d++) {
-          TAPAS_ASSERT(bb_max[d] > bb_min[d]);
-        }
-      });
-#endif
-#endif
+    std::transform(data.lroots_.begin(),
+                   data.lroots_.end(),
+                   std::insert_iterator<T>(data.local_br_, data.local_br_.begin()),
+                   [&data](KeyType k) {
+                     return data.ht_[k]->region();
+                   });
   }
-  
+
   /**
    * \brief A reducing function used with LocalUpwardReduce, to check if a cell is a local subtree.
    */
@@ -125,12 +106,12 @@ class GlobalTree {
         return true;
       }
     };
-  
+
     // Find all local subtree roots.
     LocalPreOrderTraverse(c, local_root_collector);
   }
 
-  
+
   /**
    * \brief Performs pre-order traversal for local cells.
    * \tparam TSP TSP.
@@ -157,7 +138,7 @@ class GlobalTree {
       }
     }
   }
-  
+
   /**
    * \brief A functional utility that provides upward reudce of a local tree for internal use.
    *
@@ -165,13 +146,13 @@ class GlobalTree {
    * Values of member variables (memvp) of child cells are reduce using function f and
    * assigned into parent's memvp value.
    * If c is a leaf, c.*memvp is set to `init`
-   * 
+   *
    * \tparam T    Type of target member values.
    * \tparam Funct Type of the reducing function f. It is expected to be T(T, KeType, const CellType*c).
    * \param c     Starting root cell
    * \param memvp A member variable pointer (obtained by &Class::member)
    * \param init  Initial value
-   * \param f     A reducing function of type (T, KeyType, const Cell*) -> T. If a child cell is local, 
+   * \param f     A reducing function of type (T, KeyType, const Cell*) -> T. If a child cell is local,
    *              KeyType and Cell* are both given. If a child is not local, the pointer is nullptr.
    */
   template<class T, class Funct>
@@ -186,7 +167,7 @@ class GlobalTree {
       auto children_keys = SFC::GetChildren(key);
 
       T val = init;
-    
+
       for (auto chk : children_keys) {
         if (data.ht_.count(chk) > 0) {
           Cell<TSP> *cc = data.ht_.at(chk);
@@ -196,7 +177,7 @@ class GlobalTree {
           val = f(val, chk, nullptr);
         }
       }
-    
+
       c->*memvp = val; // assign reduced value.
     }
   }
@@ -206,18 +187,6 @@ class GlobalTree {
     std::vector<KeyType> gl_keys_recv;
     tapas::mpi::Allgatherv(gl_keys_send, gl_keys_recv, MPI_COMM_WORLD);
 
-#if 0
-    // Dump local roots
-    tapas::debug::BarrierExec([&](int rank, int) {
-        if (rank == 0) {
-          std::cout << "Local roots:" << std::endl;
-        }
-        for (auto &&key : lroots) {
-          std::cout << rank << " " << SFC::Decode(key) << std::endl;
-        }
-      });
-#endif
-  
     gleaves.insert(gl_keys_recv.begin(), gl_keys_recv.end());
   }
 
@@ -239,8 +208,7 @@ class GlobalTree {
   }
 };
 
-} // namespace hot 
+} // namespace hot
 } // namespace tapas
 
 #endif // TAPAS_HOT_GLOBAL_TREE_H
-

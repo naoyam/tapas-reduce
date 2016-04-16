@@ -105,6 +105,8 @@ endif
 ### PAPI flags : set environment value to (export EXAFMM_PAPI_EVENTS="PAPI_L2_DCM,PAPI_L2_DCA,PAPI_TLB_DM") or something else
 #LFLAGS	+= -DPAPI -lpapi
 
+#MPICXX += -DTAPAS_DEBUG_COMM_MATRIX
+
 ### Trace flags : This tracing tool is part of ExaFMM
 #LFLAGS	+= -DTRACE
 

@@ -61,6 +61,11 @@
 #include <sys/syscall.h> // for gettid()
 #include <sys/types.h>   // for gettid()
 
+#ifdef TAPAS_DEBUG
+#include <execinfo.h> // for backtrace() & backtrace_symbols()
+#include <cxxabi.h>   // for __cxa_demangle()
+#endif
+
 #ifdef USE_MPI
 #include <mpi.h>
 #endif
@@ -92,11 +97,78 @@ inline void Exit(int status, const char *file, const char *func, int line) {
   if (status) {
     std::cerr << "Exiting at " << file << "@" << func << "#" << line << std::endl;
   }
-  std::exit(status);  
+  std::exit(status);
 }
 
 #ifdef TAPAS_DEBUG
-#define TAPAS_ASSERT(c) assert(c)
+
+// Get backtrace information as strings
+std::vector<std::string> get_backtrace10() {
+  const int trace_size = 10;
+  void* trace[trace_size];
+  int size = backtrace(trace, trace_size);
+
+  char** symbols = backtrace_symbols(trace, size);
+
+  std::vector<string> result(symbols, symbols + size);
+
+  free(symbols);
+
+  return result;
+}
+
+/**
+ * \brief Get function names from the backtrace vector
+ */
+std::string cut_function_name_part(const std::string& raw_text) {
+  std::string::size_type left = raw_text.find("(");
+  std::string::size_type right = raw_text.find("+", left + 1);
+      return
+          (left == raw_text.npos || right == raw_text.npos)
+                  ? ""
+          : raw_text.substr(left + 1, right - left - 1);
+}
+
+/**
+ * \brief Demangle a function name
+ */
+std::string demangle_function_name(const std::string& mangled) {
+  int status = 0;
+  char* demangled = abi::__cxa_demangle(mangled.c_str(), 0, 0, &status);
+
+  std::string result = demangled ? demangled : mangled;
+  free(demangled);
+
+  if (status != 0) {
+    std::ostringstream oss;
+    oss << " [error:status=" << status << "]";
+    result += oss.str();
+  }
+
+  return result;
+}
+
+#endif
+
+#ifdef TAPAS_DEBUG
+#define TAPAS_ASSERT(c) do {                                            \
+    if(!(c)) {                                                          \
+      auto bt = tapas::get_backtrace10();                               \
+      std::cerr << "Tapas: Assertion failed: '" << #c << "' == 0"       \
+                << std::endl;                                           \
+      std::cerr << "Backtrace:" << std::endl;                           \
+      for (auto &&it : bt) {                                            \
+        std::string mangled_func_name = tapas::cut_function_name_part(it); \
+        std::cout << ((!mangled_func_name.empty())                      \
+                      ? tapas::demangle_function_name(mangled_func_name) \
+                      : "???")                                          \
+                  << ": " << it << std::endl;                           \
+                                                                        \
+      }                                                                 \
+      abort();                                                          \
+    }                                                                   \
+                                                                        \
+  } while(0)
 #else
 #define TAPAS_ASSERT(c) do {} while (0)
 #endif
@@ -105,7 +177,7 @@ inline void Exit(int status, const char *file, const char *func, int line) {
     Exit(1, __FILE__, __FUNCTION__, __LINE__);   \
   } while (0)
 
-// Special class to indicate none 
+// Special class to indicate none
 class NONE {};
 
 class StringJoin {
@@ -119,7 +191,7 @@ class StringJoin {
     ss_ << s;
     first_ = false;
   }
-        
+
   template <class T>
   std::ostringstream &operator<< (const T &s) {
     if (!first_) ss_ << sep_;
@@ -176,7 +248,7 @@ struct Type2Int {
 template<class C1, class C2>
 void SortByKeys(C1 &keys, C2 &vals) {
   assert(keys.size() == vals.size());
-  
+
   auto len = keys.size();
 
   std::vector<size_t> perm(len); // Permutation
@@ -195,7 +267,7 @@ void SortByKeys(C1 &keys, C2 &vals) {
     vals2[i] = vals[idx];
     keys2[i] = keys[idx];
   }
-  
+
   keys = keys2;
   vals = vals2;
 }
@@ -214,7 +286,7 @@ void SortByKeys(C1 &keys, C2 &vals) {
   } while(0)
 
 #endif
-  
+
 #ifdef USE_SCOREP
 # include <scorep/SCOREP_User.h>
 #else

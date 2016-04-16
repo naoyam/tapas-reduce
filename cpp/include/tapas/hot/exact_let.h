@@ -17,113 +17,9 @@ namespace hot {
 template<class TSP> class Cell;
 template<class TSP> class Partitioner;
 
-template<class TSP>
-struct InteractionPred {
-  using FP = typename TSP::FP;
-  using CT = Cell<TSP>;
-  using BT = typename CT::BodyType;
-  using KT = typename Cell<TSP>::KeyType;
-  using DT = typename Cell<TSP>::Data;
-  using VT = Vec<TSP::Dim, FP>;
-  using SFC = typename Cell<TSP>::SFC;
-
-  const DT &data_;
-
-  InteractionPred(const DT &data) : data_(data) {}
-
-  INLINE static FP distR2(const VT& v1, const VT& v2) {
-    FP dx = v1[0] - v2[0];
-    FP dy = v1[1] - v2[1];
-    FP dz = v1[2] - v2[2];
-    return dx * dx + dy * dy + dz * dz;
-  }
-
-  INLINE FP distR2(const BT &p, const VT &v2) {
-    VT v1(p.x, p.y, p.z);
-    return distR2(v1, v2);
-  }
-
-  template<class T1>
-  INLINE FP distR2(const T1 &t, const CT &c) {
-    return distR2(t, c.center());
-  }
-
-  template<class T2>
-  INLINE FP distR2(const CT &c, const T2 &t) {
-    return distR2(c.center(), t);
-  }
-
-  template<class T1>
-  INLINE FP distR2(const T1 &v1, KT k2) {
-    const auto &r = data_.region_;
-    return distR2(v1, CT::CalcCenter(k2, r));
-  }
-
-  template<class T2>
-  INLINE FP distR2(KT k1, const T2 &v2) {
-    return distR2(CT::CalcCenter(k1, data_.region_), v2);
-  }
-
-  INLINE FP distR2(KT k1, KT k2) {
-    return distR2(CT::CalcCenter(k1, data_.region_),
-                  CT::CalcCenter(k2, data_.region_));
-  }
-
-  INLINE bool IsLeaf(KT k) {
-    if (data_.ht_.count(k) > 0) {
-      return data_.ht_.at(k)->IsLeaf();
-    } else {
-      return data_.max_depth_ <= SFC::GetDepth(k);
-    }
-  }
-
-  INLINE size_t nb(KT) { return 1; } // nb() method for remote cell always returns '1' in LET mode
-
-  INLINE SplitType operator() (KT trg_key, KT src_key) {
-    const constexpr FP theta = 0.5;
-    const auto &ht = data_.ht_;
-    TAPAS_ASSERT(data_.ht_.count(trg_key) > 0);
-    const auto &c1 = *(ht.at(trg_key));
-
-    if (!c1.IsLeaf()) {
-      return SplitType::SplitLeft;
-    }
-
-    if (c1.nb() == 0) {
-      return SplitType::None;
-    }
-
-    //bool is_src_local = ht.count(src_key) != 0;
-    //bool is_src_local_leaf = is_src_local && ht.at(src_key)->IsLeaf();
-    //bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= data_.max_depth_;
-
-    if (IsLeaf(src_key)) { // c2.IsLeaf()
-      return SplitType::Body;
-    }
-
-    // else
-    const auto &p1 = c1.body(0);
-    real_t d = std::sqrt(distR2(p1, src_key));
-    real_t s = CT::CalcRegion(src_key, data_.region_).width(0);
-
-    // tapas::debug::DebugStream("traverse_count").out() << "particle(" << SFC::Simplify(trg_key) << ") [" << p1.x << "," << p1.y << "," << p1.z << "]"
-    //                                << " " << SFC::Simplify(src_key) << " s=" << s << " d=" << d << " "
-    //                                << (s/d > theta ? "SplitRight" : "Approx")
-    //                                << std::endl;
-
-    // tapas::debug::DebugStream("comp_count_manual").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " "
-    //                                   << "s=" << s << " d=" << d << std::endl;
-    if ((s/d) < theta) {
-      return SplitType::Approx;
-    } else {
-      return SplitType::SplitRight;
-    }
-  }
-};
-
 /**
  * A set of static functions to construct LET (Locally Essential Tree)
- * 
+ *
  * ExactLET puts no assumption on user's function but has more overhead instead.
  * It emulates all the behavior of user's function.
  */
@@ -418,13 +314,13 @@ struct ExactLET {
      * \brief Distance Function
      */
     inline FP Distance(ProxyCell &rhs, tapas::CenterClass) {
-      return tapas::Distance<tapas::CenterClass, FP>::Calc(*this, rhs);
+      return tapas::Distance<Dim, tapas::CenterClass, FP>::Calc(*this, rhs);
     }
-  
+
     //inline FP Distance(Cell &rhs, tapas::Edge) {
     //  return tapas::Distance<tapas::Edge, FP>::Calc(*this, rhs);
     //}
-    
+
     /**
      * \fn FP ProxyCell::width(FP d) const
      */
@@ -770,7 +666,7 @@ struct ExactLET {
       }
     }
 
-#if TAPAS_DEBUG
+#ifdef TAPAS_DEBUG
     BarrierExec([&](int, int) {
         std::cout << "Depth histogram" << std::endl;
         for (int i = 0; i <= d; i++) {
@@ -978,6 +874,19 @@ struct ExactLET {
     MPI_Barrier(MPI_COMM_WORLD);
     et = MPI_Wtime();
     data.time_let_res_attr_comm = et - bt;
+
+#if 0
+    // Dump request keys
+    {
+      tapas::debug::DebugStream e("attr_res_exa");
+      for (size_t i = 0; i < attr_keys_send.size(); i++) {
+        auto k = attr_keys_send[i];
+        e.out() << SFC::Decode(k)
+                << " (" << k << ")"
+                << " to " << attr_dest_ranks[i] << std::endl;
+      }
+    }
+#endif
 
     // ===== 3. Post-comm computation =====
     // Preapre all bodies to send to <leaf_src_ranks> processes

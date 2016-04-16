@@ -26,6 +26,27 @@ void PrintBodies(const typename BT::type *b, int nb, std::ostream &os) {
   }
 }
 
+#ifdef USE_MPI
+
+int MPI_Rank(MPI_Comm comm) {
+  int rank;
+  MPI_Comm_rank(comm, &rank);
+  return rank;
+}
+
+int MPI_Rank() {
+  return MPI_Rank(MPI_COMM_WORLD);
+}
+
+#else
+
+int MPI_Rank() {
+  return 0;
+}
+
+#endif // ifdef USE_MPI
+
+
 template <class T>
 std::string ToStr(T v) {
   std::stringstream ss;
@@ -59,6 +80,29 @@ void BarrierExec(F func) {
 }
 
 #endif
+
+
+#ifdef USE_MPI
+
+template<class F>
+void Once(F func) {
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  if (rank == 0) {
+    func();
+  }
+}
+
+#else
+
+template<class F>
+void Once(F func) {
+  func();
+}
+
+#endif
+
+
 
 /**
  * \class DebugStream

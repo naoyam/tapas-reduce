@@ -28,7 +28,7 @@
 #else
 #define MPI_CHECK(ret_, comm_) (void)ret_; (void)comm_;
 #endif
-    
+
 
 namespace tapas {
 namespace util {
@@ -246,7 +246,7 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
     TAPAS_ASSERT(extent == sizeof(typename VectorType::value_type));
   }
 #endif
-  
+
   int mpi_size;
 
   MPI_Comm_size(comm, &mpi_size);
@@ -282,15 +282,17 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
     TAPAS_ASSERT(send_disp[p] >= 0); // check overflow
     TAPAS_ASSERT(recv_disp[p] >= 0); // check overflow
   }
-  
+
   int total_recv_counts = std::accumulate(recv_counts.begin(), recv_counts.end(), 0);
 
   recv_buf.resize(total_recv_counts);
   TAPAS_ASSERT(send_disp.size() == recv_disp.size());
-  
+
 #ifdef TAPAS_DEBUG_COMM_MATRIX
   // debug: print send matrix
   tapas::debug::BarrierExec([&](int rank, int) {
+      std::ios::fmtflags f (std::cout.flags());
+
       if (rank == 0) { std::cout << "Comm matrix" << std::endl; }
       std::cout << std::right << std::fixed << std::setw(3) << rank << " ";
       long total = 0;
@@ -300,20 +302,25 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
       }
       std::cout << "total: " << std::right << std::setw(10) << total;
       std::cout << std::endl;
+
+      std::cout.flags(f);
     });
 
   // debug: print send displacement
   tapas::debug::BarrierExec([&](int rank, int) {
+      std::ios::fmtflags f (std::cout.flags());
       if (rank == 0) { std::cout << "Send disp" << std::endl; }
       std::cout << std::right << std::fixed << std::setw(3) << rank << " ";
       for (size_t i = 0; i < send_disp.size(); i++) {
         std::cout << std::right << std::setw(10) << std::fixed << send_disp[i] << " ";
       }
       std::cout << std::endl;
+      std::cout.flags(f);
     });
 
   // debug: print recv matrix
   tapas::debug::BarrierExec([&](int rank, int) {
+      std::ios::fmtflags f (std::cout.flags());
       if (rank == 0) { std::cout << "Comm matrix" << std::endl; }
       std::cout << std::right << std::fixed << std::setw(3) << rank << " ";
       long total = 0;
@@ -323,23 +330,27 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
       }
       std::cout << "total: " << std::right << std::setw(10) << total;
       std::cout << std::endl;
+      std::cout.flags(f);
     });
-  
+
   // debug: print recv displacement
   tapas::debug::BarrierExec([&](int rank, int) {
+      std::ios::fmtflags f (std::cout.flags());
       if (rank == 0) { std::cout << "Recv disp" << std::endl; }
       std::cout << std::right << std::fixed << std::setw(3) << rank << " ";
       for (size_t i = 0; i < recv_disp.size(); i++) {
         std::cout << std::right << std::setw(10) << std::fixed << recv_disp[i] << " ";
       }
       std::cout << std::endl;
+      std::cout.flags(f);
     });
 
   tapas::debug::BarrierExec([&](int rank, int) {
+      std::ios::fmtflags f (std::cout.flags());
       if (rank == 0) {
         std::cout << "MPI_Alltoallv() Starting." << std::endl;
       }
-      
+
       if (rank == 2) {
         std::cout << "send_buf.size() = " << send_buf.size() << std::endl;
         size_t size = send_buf.size() * sizeof(send_buf[0]);
@@ -348,6 +359,7 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
         std::cout << std::endl;
         std::cout << "recv_buf.size() = " << recv_buf.size() << std::endl;
       }
+      std::cout.flags(f);
     });
 #endif
 
@@ -355,7 +367,7 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
                           (void*)recv_buf.data(), recv_counts.data(), recv_disp.data(), dtype,
                           comm);
   MPI_CHECK(ret, comm);
-  
+
 #ifdef TAPAS_DEBUG_COMM_MATRIX
   tapas::debug::BarrierExec([](int rank, int) {
       if (rank == 0) {
@@ -363,7 +375,7 @@ void Alltoallv2(VectorType& send_buf, std::vector<int>& dest,
       }
     });
 #endif
-    
+
   // Build src[] array
   src.clear();
   src.resize(total_recv_counts, 0);
@@ -433,16 +445,20 @@ void Alltoallv(const std::vector<T> &send_buf,
 #ifdef TAPAS_DEBUG_COMM_MATRIX
   // Print a communication matrix
   tapas::debug::BarrierExec([&](int rank, int) {
+      std::ios::fmtflags f(std::cout.flags());
+
       if (rank == 0) {
         std::cout << "MPI_Alltoallv comm. matrix" << std::endl;
         std::cout << " ";
       }
 
-      std::cout << std::setw(2) << rank << " ";
+      std::cout << std::setw(3) << rank << " ";
       for (int p = 0; p < mpi_size; p++) {
-        std::cout << std::setw(5) << send_count[p] << " ";
+        std::cout << std::right << std::setw(10) << std::fixed << send_count[p] << " ";
       }
+
       std::cout << std::endl;
+      std::cout.flags(f);
     });
 #endif
 

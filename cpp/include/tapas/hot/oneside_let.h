@@ -235,15 +235,17 @@ struct OptLET {
     /**
      * \brief Constructor for target pseudo cells
      */
-    ProxyCell(const Vec &max, const Vec &min, int depth, const Vec& src_width, const Data &data)
-        : region_(min, max)
-        , center_((region_.max() + region_.min()) / 2)
+    ProxyCell(int depth, const Vec& src_width, bool isleaf, const Data &data)
+        : center_() // TODO: target center must be calculated from source region and local BB.
+          //: center_((region_.max() + region_.min()) / 2) // TODO: target center must be calculated from source region and local BB.
         , depth_(depth)
+        , isleaf_(isleaf)
         , source_(false)
         , src_width_(src_width)
         , key_(0)
         , data_(data)
         , marked_touched_(false), marked_split_(false), marked_body_(false)
+        , isleaf_called_(false)
           //, cell_(nullptr)
         , bodies_(), body_attrs_(), attr_()
     {
@@ -252,18 +254,21 @@ struct OptLET {
     /**
      * \brief Constructor for source pseudo cells
      */
-    ProxyCell(const Vec &max, const Vec &min, KeyType key, const Data &data)
-        : region_(min, max)
-        , center_((region_.max() + region_.min()) / 2)
-        , depth_(SFC::GetDepth(key_))
+    ProxyCell(const Reg &src_reg, KeyType key, const Data &data)
+        : region_(src_reg)
+        , center_((region_.max() + region_.min()) / 2) // necessary?
+        , depth_(SFC::GetDepth(key))
+        , isleaf_(false)
         , source_(true)
-        , src_width_(max - min)
+        , src_width_(region_.max() - region_.min())
         , key_(key)
         , data_(data)
         , marked_touched_(false), marked_split_(false), marked_body_(false)
+        , isleaf_called_(false)
           //, cell_(nullptr)
         , bodies_(), body_attrs_(), attr_()
-    { }
+    {
+    }
 
     ProxyCell() = delete;
 
@@ -281,31 +286,27 @@ struct OptLET {
 
     /**
      * bool ProxyCell::operator==(const ProxyCell &rhs) const
-     * 
+     *
      */
     bool operator==(const ProxyCell &rhs) const {
       if (source_) return key_ == 0;
       else         return rhs.key_ == 0;
     }
-    
+
     // bool operator<(const ProxyCell &rhs) const {
     //   return key_ < rhs.key_;
     // }
 
     template<class UserFunct, class...Args>
-    static SplitType Pred(KeyType src_key, const Data &data, UserFunct f, Args...args) {
-      int depth = SFC::GetDepth(src_key);
+    static SplitType Pred(ProxyCell &trg_cell, KeyType src_key, const Data &data, bool *isleaf_called, UserFunct f, Args...args) {
       const auto src_region = CellType::CalcRegion(src_key, data.region_);
-      const auto &src_max = src_region.max();
-      const auto &src_min = src_region.min();
-
-      // Create target proxy cell
-      ProxyCell trg_cell(data.local_bb_max_, data.local_bb_min_, depth, src_max - src_min, data);
 
       // Create source proxy cell
-      ProxyCell src_cell(src_max, src_min, src_key, data);
+      ProxyCell src_cell(src_region, src_key, data);
 
       f(trg_cell, src_cell, args...);
+
+      if (isleaf_called != nullptr) *isleaf_called = trg_cell.IsLeafCalled();
 
       if (trg_cell.marked_split_ && src_cell.marked_split_) {
         return SplitType::SplitBoth;
@@ -320,6 +321,18 @@ struct OptLET {
       } else {
         return SplitType::Approx;
       }
+    }
+    
+    template<class UserFunct, class...Args>
+    static SplitType Pred(KeyType src_key, const Data &data, bool *isleaf_called, UserFunct f, Args...args) {
+      const auto src_region = CellType::CalcRegion(src_key, data.region_);
+      int depth = SFC::GetDepth(src_key);
+      
+      // Create target proxy cell
+      // TODO: target cell should be reused.
+      ProxyCell trg_cell(depth, src_region.max() - src_region.min(), false, data);
+
+      return Pred(trg_cell, src_key, data, isleaf_called, f, args...);
     }
 
     // TODO
@@ -344,23 +357,27 @@ struct OptLET {
      * \brief Distance Function
      */
     inline FP Distance(ProxyCell &rhs, tapas::CenterClass) {
-      // TODO
-      Reg src_reg, trg_reg;
+#ifdef TAPAS_DEBUG
+      // In LET traversal, when disatance of two cells is calculated,
+      // one of the cells must be target and the other is source,
+      // which means this->source_ XOR rhs.source_ must be true.
+      TAPAS_ASSERT(source_ ^ rhs.source_);
+#endif
+
+      Reg src_reg;
       if (source_) {
         src_reg = region_;
-        trg_reg = rhs.region_;
       } else {
         src_reg = rhs.region_;
-        trg_reg = region_;
       }
-      return tapas::Distance<tapas::CenterClass, FP>::CalcApprox(trg_reg.max(), trg_reg.min(),
-                                                                 src_reg.max(), src_reg.min());
+
+      return tapas::Distance<Dim, tapas::CenterClass, FP>::CalcApprox(data_.local_br_.begin(), data_.local_br_.end(), src_reg);
     }
 
     inline const Reg& region() const {
       return region_;
     }
-    
+
     //inline FP Distance(Cell &rhs, tapas::Edge) {
     //  return tapas::Distance<tapas::Edge, FP>::Calc(*this, rhs);
     //}
@@ -376,9 +393,15 @@ struct OptLET {
     /**
      * \fn bool ProxyCell::IsLeaf() const
      */
-    inline bool IsLeaf() const {
+    inline bool IsLeaf() {
+      isleaf_called_ = true;
       Touched();
-      return data_.max_depth_ <= depth_;
+      return isleaf_ || (data_.max_depth_ <= depth_);
+    }
+
+    //! Returns if IsLeaf() was called
+    inline bool IsLeafCalled() const {
+      return isleaf_called_;
     }
 
     // inline bool IsLocal() const {
@@ -469,6 +492,13 @@ struct OptLET {
 
     bool GetOptMutual() const { return data_.opt_mutual_; }
 
+    inline void Reset() {
+      marked_touched_ = false;
+      marked_split_   = false;
+      marked_body_    = false;
+      isleaf_called_  = false;
+    }
+
    protected:
     void Touched() const { marked_touched_ = true; }
     void Split()   { marked_split_ = true; }
@@ -492,16 +522,26 @@ struct OptLET {
     Reg region_;
     Vec center_;
     int depth_;
+    
+    //! The proxy cell is a leaf or not.
+    /*
+     * When a type of interaction between two cells is 'approx' and IsLeaf() member function is used,
+     * isleaf_ is used. When isleaf_ flag is 1, the width() is fixed to the src_width, and IsLeaf()
+     * returns 1.
+     */
+    bool isleaf_;
+    
     bool source_; // target cell or source cell
     Vec src_width_; // if this cell is traget cell, save the width of the source cell
-    
+
     KeyType key_;
     const Data &data_;
 
     mutable bool marked_touched_;
     bool marked_split_;
-    bool marked_body_;
-
+    bool marked_body_;  //<! nb() is called for this cell
+    bool isleaf_called_; // IsLeaf() is called.
+    
     bool is_local_;
 
     CellType *cell_;
@@ -619,14 +659,12 @@ struct OptLET {
     // necessary cells required by the local process.
     auto &ht = data.ht_; // hash table
 
-    const auto &trg_max = data.local_bb_max_;
-    const auto &trg_min = data.local_bb_min_;
-
     const auto src_region = CellType::CalcRegion(src_key, data.region_);
 
-    if (data.lroots_.count(src_key) != 0) {
-      // src_key and all its descendants are local. Need not to traverse.
-      return;
+    for (auto k : data.lroots_) {
+      if (SFC::IsDescendant(k, src_key)) {
+        return;
+      }
     }
 
     list_attr.insert(src_key);
@@ -648,30 +686,35 @@ struct OptLET {
     }
 
     TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
+
+    bool split_src = false; // if the source cell is to be split.
+    bool isleaf_called = false;
     
-    list_attr.insert(src_key);
-
-    bool split_src = false; // if the source cell is split.
-
-    if (!tapas::Separated(trg_max, trg_min, src_region.max(), src_region.min())) {
-      // if the source cell overlaps the target region (BB of the target process)
+    if (!tapas::Separated(data.local_br_.begin(), data.local_br_.end(), src_region)) {
+      // if the source cell overlaps the target region (BB/BR of the local process)
       // the source cell must be split.
       split_src = true;
     } else {
       // Approx/Split branch
       int depth = SFC::GetDepth(src_key);
       data.let_func_count[depth]++;
-      SplitType split = OptLET<TSP>::ProxyCell::Pred(src_key, data, f, args...); // predicator object
-      
-      if (split == SplitType::SplitBoth ||
-          split == SplitType::SplitLeft ||
-          split == SplitType::SplitRight) {
-        split_src = true;
-      } else {
-        split_src = false;
-      }
-    }
+      SplitType split = OptLET<TSP>::ProxyCell::Pred(src_key, data, &isleaf_called, f, args...); // predicator object
 
+      // Even if the flag is 'SplitLeft', which means only the target (local) cell is to be split,
+      // the source cell may also be split because target.width() == source.width().
+      split_src = (split == SplitType::SplitBoth
+                   || split == SplitType::SplitLeft
+                   || split == SplitType::SplitRight);
+    }
+    
+    // If Cell::IsLocal() member function is called for the target leaf,
+    // Check Pred() function again with the target cell be a leaf,
+    // because even if the target cell (T)  is large than the source cell (S),
+    // S is possibly split if T is a leaf.
+    if (isleaf_called) {
+      TraverseWithLeaf(src_region.width(), src_key, data, list_attr, list_body, f, args...);
+    }
+    
     if (split_src) {
       Traverse(SFC::GetChildren(src_key), data, list_attr, list_body, f, args...);
     }
@@ -679,10 +722,72 @@ struct OptLET {
     return;
   }
 
+  template<class UserFunct, class...Args>
+  static void TraverseWithLeaf(const Vec &trg_leaf_width, KeyType src_key,
+                               Data &data, KeySet &list_attr, KeySet &list_body,
+                               UserFunct f, Args...args) {
+    std::stack<KeyType> stk;
+    int depth = SFC::GetDepth(src_key);
+    ProxyCell trg_leaf(depth, trg_leaf_width, true, data);
+
+    stk.push(src_key);
+    
+    while (!stk.empty()) {
+      src_key = stk.top();
+      stk.pop();
+      trg_leaf.Reset();
+
+      list_attr.insert(src_key);
+
+      bool is_src_local = data.ht_.count(src_key) != 0; // CAUTION: even if is_src_local, the children are not necessarily all local.
+      bool is_src_local_leaf = is_src_local && data.ht_[src_key]->IsLeaf();
+      bool is_src_remote_leaf = !is_src_local && SFC::GetDepth(src_key) >= data.max_depth_;
+
+      if (is_src_local_leaf) {
+        // Target cell is local and source cell is a local leaf. done.
+        continue;
+      }
+
+      if (is_src_remote_leaf) {
+        // If the source cell is a remote leaf, we need it (with it's bodies).
+        list_attr.insert(src_key);
+        list_body.insert(src_key);
+        continue;
+      }
+      
+      auto split = OptLET<TSP>::ProxyCell::Pred(trg_leaf, src_key, data, nullptr, f, args...);
+      
+      switch(split) {
+        case SplitType::SplitBoth:
+        case SplitType::SplitRight:
+          {
+            auto children = SFC::GetChildren(src_key);
+            for (KeyType k : children) {
+              if (list_attr.count(k) == 0 && list_body.count(k) == 0) {
+                stk.push(k);
+              }
+            }
+          }
+          break;
+        case SplitType::SplitLeft:
+          std::cerr << "tapas: Error: user function tried to split a leaf cell." << std::endl;
+          exit(-1);
+          break;
+        case SplitType::Approx:
+          break;
+        case SplitType::Body:
+          list_body.insert(src_key);
+          break;
+        default:
+          assert(0);
+      }
+    }
+  }
+
   /**
    * Under the assumption, approximate computations happen between cells in the same level.
    * BB of each process is computed from local roots.
-   * Let 
+   * Let
    *   LL : minimum level of local roots
    *   GL : maximum level of global leaves (excluding the local roots)
    * If
@@ -697,7 +802,7 @@ struct OptLET {
                           UserFunct, Args...) {
     int gtree_dep_min = std::numeric_limits<int>::max(); // minimum depth (closest to the root) of the global tree
     int lroot_dep_max = 0; // The maximum level of local roots
-    
+
     for (KeyType k : data.gleaves_) {
       gtree_dep_min = std::min(gtree_dep_min, SFC::GetDepth(k));
     }
@@ -734,43 +839,11 @@ struct OptLET {
     }
   }
 
-  static void ShowHistogram(const Data &data) {
-    const int d = data.max_depth_;
-    TAPAS_ASSERT(d <= SFC::MaxDepth());
-
-#ifdef TAPAS_DEBUG
-    const long ncells = data.ht_.size();
-    const long nall   = (pow(8.0, d+1) - 1) / 7;
-    BarrierExec([&](int,int) {
-        std::cout << "Cells: " << ncells << std::endl;
-        std::cout << "depth: " << d << std::endl;
-        std::cout << "filling rate: " << ((double)ncells / nall) << std::endl;
-      });
-#endif
-
-    std::vector<int> hist(d + 1, 0);
-    for (auto p : data.ht_) {
-      const auto *cell = p.second;
-      if (cell->IsLeaf()) {
-        hist[cell->depth()]++;
-      }
-    }
-
-#if TAPAS_DEBUG
-    BarrierExec([&](int, int) {
-        std::cout << "Depth histogram" << std::endl;
-        for (int i = 0; i <= d; i++) {
-          std::cout << i << " " << hist[i] << std::endl;
-        }
-      });
-#endif
-  }
-
   /**
    * \brief Traverse hypothetical global tree and construct a cell list.
    *
    * First, list necessary cells using the local process' boundary box.
-   * The boundary box is max/min of 
+   * The boundary box is max/min of
    */
   template<class UserFunct, class...Args>
   static void DoTraverse(CellType &root,
@@ -786,7 +859,18 @@ struct OptLET {
     // Construct a request list by traversing from local roots
     req_keys_attr.insert(root.key());
     Traverse(root.key(), root.data(), req_keys_attr, req_keys_body, f, args...);
-    
+
+#if 0
+    size_t num_attr_keys = req_keys_attr.size();
+    size_t num_body_keys = req_keys_body.size();
+
+    tapas::debug::BarrierExec([&](int rank, int) {
+        std::cout << "Rank " << rank << " : Traverse() added "
+                  << num_attr_keys << " keys, "
+                  << num_body_keys << " keys" << std::endl;
+      });
+#endif
+
     MPI_Barrier(MPI_COMM_WORLD);
     double end = MPI_Wtime();
     root.data().time_let_trav_main = end - beg;
@@ -794,7 +878,7 @@ struct OptLET {
     beg = MPI_Wtime();
     // Construct a request list by traversing local parts of the global tree
     AddGapCells(root.data(), req_keys_attr, req_keys_body, f, args...);
-    
+
     MPI_Barrier(MPI_COMM_WORLD);
     end = MPI_Wtime();
     root.data().time_let_trav_sub = end - beg;
@@ -968,16 +1052,12 @@ struct OptLET {
     MPI_Barrier(MPI_COMM_WORLD);
     bt = MPI_Wtime();
 
-    if(data.mpi_rank_ == 0) std::cout << "Res Attr keys" << std::endl;
     tapas::mpi::Alltoallv2(attr_keys_send, attr_dest_ranks, req_attr_keys,  attr_src_ranks,
                            data.mpi_type_key_, MPI_COMM_WORLD);
-    if(data.mpi_rank_ == 0) std::cout << "Res Attr keys done." << std::endl;
-    
-    if(data.mpi_rank_ == 0) std::cout << "Res Attr" << std::endl;
+
     tapas::mpi::Alltoallv2(attr_sendbuf,   attr_dest_ranks, res_cell_attrs, attr_src_ranks,
                            data.mpi_type_attr_, MPI_COMM_WORLD);
-    if(data.mpi_rank_ == 0) std::cout << "Res Attr done." << std::endl;
-    
+
     MPI_Barrier(MPI_COMM_WORLD);
     et = MPI_Wtime();
     data.time_let_res_attr_comm = et - bt;
@@ -1142,10 +1222,6 @@ struct OptLET {
     }
     SCOREP_USER_REGION("LET-All", SCOREP_USER_REGION_TYPE_FUNCTION);
     double beg = MPI_Wtime();
-
-#ifdef TAPAS_DEBUG_DUMP
-    ShowHistogram(root.data());
-#endif
 
     // Traverse
     KeySet req_cell_attr_keys; // cells of which attributes are to be transfered from remotes to local

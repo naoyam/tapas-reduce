@@ -13,4 +13,6 @@ This software is released under the MIT License, see LICENSE.txt
 |TAPAS_REPORT_PREFIX    | filename prefix  | unset         | Prefix of performance report file names                   |
 |TAPAS_REPORT_SUFFIX    | part of filename | unset         | Suffix of performance report file names                   |
 |TAPAS_DEBUG_COMM_MATRIX| unset/any        | unset         | Print Communication Matrix in MPI_Alltoallv()             |
+|TAPAS_DEBUG_HISTOGRAM  | unset/any        | unset         | Print depth histogram of the tree                         |
+
 

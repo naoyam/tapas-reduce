@@ -42,6 +42,8 @@ typedef vec<NTERM,real_t> vecP;                                 //!< Multipole/l
 #elif Spherical
 const int NTERM = P*(P+1)/2;                                    //!< Number of Spherical multipole/local terms
 typedef vec<NTERM,complex_t> vecP;                              //!< Multipole/local coefficient type for spherical
+#else
+#error "Please define Spherical or Cartesian"
 #endif
 
 //! Center and radius of bounding box
@@ -66,7 +68,7 @@ struct Source {
 struct Body : public Source {
   int      IBODY;                                               //!< Initial body numbering for sorting back
   int      IRANK;                                               //!< Initial rank numbering for partitioning back
-  uint64_t ICELL;                                               //!< Cell index   
+  uint64_t ICELL;                                               //!< Cell index
   real_t   WEIGHT;                                              //!< Weight for partitioning
   kvec4    TRG;                                                 //!< Scalar+vector3 target values
 };

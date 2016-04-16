@@ -173,11 +173,11 @@ class Cell: public tapas::BasicCell<TSP> {
   INLINE const Mapper& mapper() const { return mapper_; }
 
   inline FP Distance(Cell &rhs, tapas::CenterClass) {
-    return tapas::Distance<tapas::CenterClass, FP>::Calc(*this, rhs);
+    return tapas::Distance<Dim, tapas::CenterClass, FP>::Calc(*this, rhs);
   }
   
   //inline FP Distance(Cell &rhs, tapas::Edge) {
-  //  return tapas::Distance<tapas::Edge, FP>::Calc(*this, rhs);
+  //  return tapas::Distance<Dim, tapas::Edge, FP>::Calc(*this, rhs);
   //}
 
 #ifdef DEPRECATED
@@ -612,12 +612,11 @@ Partitioner<TSP>::Partition(typename TSP::Body *b, index_t nb) {
     const constexpr int kPosOffset = TSP::kBodyCoordOffset;
     using SFC = typename TSP::SFC;
     using FP = typename TSP::FP;
-    using Reg = Region<kDim, FP>;
     typedef typename TSP::Body Body;
     typedef typename TSP::BodyAttr BodyAttr;
     typedef Cell<TSP> CellType;
     
-    Reg r;
+    Region<kDim, FP> r;
     // calculate region
     {
       Vec<kDim, FP> local_max, local_min;

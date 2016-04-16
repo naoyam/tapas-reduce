@@ -30,34 +30,43 @@ struct SharedData {
 
   CellHashTable ht_;
   CellHashTable ht_let_;
+
   CellHashTable ht_gtree_; // Hsah table of the global tree.
   KeySet        gleaves_;  // set of global leaves, which are a part of ht_gtree_.keys and ht_.keys
   KeySet        lroots_;   // set of local roots. It must be a subset of gleaves_. gleaves_ is "Allgatherv-ed" lroots.
   std::mutex    ht_mtx_;   //!< mutex to protect ht_
-  
+  KeySet        let_used_key_;
+
+  std::vector<Reg> local_br_; // Bounding Region of the local process. local_br_ = [ C.region() for C in lroots_ ]
+  // std::set might be better, but Region needs to have operator<() for that.
+
   Reg region_;   //!< global bouding box
-  
+
   Mapper mapper_;
-  
+
+  // debug LET comm
+  KeySet        trav_used_src_key_;
+
   int mpi_rank_;
   int mpi_size_;
   MPI_Comm mpi_comm_;
   int max_depth_; //!< Actual maximum depth of the tree
 
-  Vec<Dim, FP> local_bb_max_; //!< Coordinates of the bounding box of the local process
-  Vec<Dim, FP> local_bb_min_; //!< Coordinates of the bounding box of the local process
-  
+  // removed
+  //Vec<Dim, FP> local_bb_max_; //!< Coordinates of the bounding box of the local process
+  //Vec<Dim, FP> local_bb_min_; //!< Coordinates of the bounding box of the local process
+
   std::vector<KeyType> leaf_keys_; //!< SFC keys of (all) leaves
   std::vector<index_t> leaf_nb_;   //!< Number of bodies in each leaf cell
   std::vector<int>     leaf_owners_; //!< Owner process of leaf[i]
-  
+
   std::vector<BodyType, Allocator<BodyType>> local_bodies_; //!< Bodies that belong to the local process
   std::vector<BodyType, Allocator<BodyType>> let_bodies_; //!< Bodies sent from remote processes
   std::vector<BodyAttrType, Allocator<BodyAttrType>> local_body_attrs_; //!< Local body attributes
   std::vector<BodyAttrType, Allocator<BodyAttrType>> let_body_attrs_; //!< Local body attributes
-  
+
   std::vector<KeyType>  local_body_keys_; //!< SFC keys of local bodies
-  
+
   std::vector<KeyType> proc_first_keys_; //!< first SFC key of each process
 
   int opt_task_spawn_threshold_;
@@ -70,7 +79,7 @@ struct SharedData {
   index_t nb_after;  // local bodies after tree construction  (actuall)
   index_t nleaves;   // number of leaves assigned to the local process
   index_t ncells;    // number of cells (note: some non-leaf cells are shared between processes)
-  
+
   double time_tree_all;
   double time_tree_sample;     // Tree construction / sampling phase
   double time_tree_exchange;   // Tree construction / body exchange
@@ -103,7 +112,7 @@ struct SharedData {
   MPI_Datatype mpi_type_attr_;
   MPI_Datatype mpi_type_body_;
   MPI_Datatype mpi_type_battr_;
-  
+
   SharedData()
       : mpi_rank_(0)
       , mpi_size_(1)
@@ -141,7 +150,7 @@ struct SharedData {
     ReadEnv();
     SetupMPITypes();
   }
-  
+
   SharedData(const SharedData<TSP, SFC>& rhs) = delete; // no copy
   SharedData(SharedData<TSP, SFC>&& rhs) = delete; // no move
 
@@ -172,7 +181,7 @@ struct SharedData {
     MPI_Type_contiguous(sizeof(CellAttr), MPI_BYTE, &mpi_type_attr_);
     MPI_Type_contiguous(sizeof(BodyType), MPI_BYTE, &mpi_type_body_);
     MPI_Type_contiguous(sizeof(BodyAttrType), MPI_BYTE, &mpi_type_battr_);
-    
+
     MPI_Type_commit(&mpi_type_key_);
     MPI_Type_commit(&mpi_type_attr_);
     MPI_Type_commit(&mpi_type_body_);
@@ -185,4 +194,3 @@ struct SharedData {
 } // namespace tapas
 
 #endif // TAPAS_HOT_DATA_H_
-

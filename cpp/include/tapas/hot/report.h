@@ -6,6 +6,7 @@
 #include <ostream>
 #include <iostream>
 #include <iomanip>
+#include <algorithm>
 
 #include "tapas/hot.h"
 #include "tapas/util.h"
@@ -104,6 +105,34 @@ void Report(const Data &data) {
     csv.At("LET-Reg") = data.time_let_register;
     csv.Dump(report_prefix + "let_construction" + report_suffix + ".csv");
   }
+
+#if 0
+  // Report how many keys are used from ht_let_
+  tapas::debug::BarrierExec([&data](int rank, int) {
+      if (rank == 0) {
+        std::cout << "LET density" << std::endl;
+      }
+
+      int total = data.ht_let_.size();
+      int used = 0;
+      for (auto k : data.trav_used_src_key_) {
+        if (data.ht_let_.count(k) > 0) {
+          used++;
+        }
+      }
+      //int used  = data.let_used_key_.size();
+      //double r = used * 1.0 / total;
+      std::cout << "Rank " << rank << ": Used = " << used << " / "
+                << total
+                << std::endl;
+    });
+#endif
+
+#if 0
+  if (data.mpi_rank_ == 0) {
+    std::cout << "Max Depth = " << data.max_depth_ << std::endl;
+  }
+#endif
 
   // Map2 breakdown
   {
