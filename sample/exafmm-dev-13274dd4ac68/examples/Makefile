@@ -33,6 +33,9 @@ ifneq (,$(COUNT))
 	MPICXX += -DCOUNT
 endif
 
+CXX += -DTAPAS_DEBUG_HISTOGRAM
+MPICXX += -DTAPAS_DEBUG_HISTOGRAM
+
 # Test for tree construction
 tree: tree.o $(OBJECTS)
 	$(CXX) $? $(LFLAGS)

@@ -338,6 +338,29 @@ void Test_Morton_CalcRegion() {
     ASSERT_TRUE(Close(min, min_ans));
   }
 }
+
+
+void Test_Morton_GetMSBits() {
+  const constexpr int Dim = 3;
+  using K = tapas::sfc::Morton<Dim, uint64_t>;
+  using KeyType = typename K::KeyType;
+
+  const KeyType Root = 0;
+  auto children = K::GetChildren(Root);
+
+  for (int i = 0; i < 1 << Dim; i++) {
+    ASSERT_EQ(i, K::GetMSBits(children[i], Dim));
+  }
+
+  for (int i = 0; i < 1 << Dim; i++) {
+    KeyType c = children[i];
+    for (int j = 0; j < 1 << Dim; j++) {
+      auto gchild = K::GetChildren(c);
+      ASSERT_EQ(i * (1<<Dim) + j, K::GetMSBits(gchild[j], Dim*2));
+    }
+  }
+}
+
 int main(int argc, char **argv) {
   MPI_Init(&argc, &argv);
 
@@ -349,6 +372,7 @@ int main(int argc, char **argv) {
   Test_Morton_Overlapped();
   Test_Morton_Includes();
   Test_Morton_CalcRegion();
+  Test_Morton_GetMSBits();
 
   TEST_REPORT_RESULT();
 

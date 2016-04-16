@@ -235,6 +235,14 @@ class Morton {
   }
 
   /**
+   * \brief Returns the most significant bits of the key
+   */
+  static inline CONSTEXPR
+  KeyType GetMSBits(KeyType k, int bits) {
+    return k >> (DepthBits() + Dim * MaxDepth() - bits);
+  }
+
+  /**
    * \brief Returns if asc is an ancestor of dsc.
    */
   static inline CONSTEXPR

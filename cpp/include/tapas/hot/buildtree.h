@@ -112,41 +112,23 @@ class SamplingOctree {
       });
 
     // Show "Region-#cells" histogram to show how biased the distribution is.
-    const KeyType kRoot = 0;
-    const int N1 = 1 << (TSP::Dim);
-    const int N2 = 1 << (TSP::Dim * 2);
-    const std::vector<KeyType> level1 = SFC::GetChildren(kRoot);
-    std::vector<KeyType> level2;
-    std::vector<int> count(N2);
 
-    for (KeyType k: level1) {
-      for (KeyType c : SFC::GetChildren(k)) {
-        level2.push_back(c);
-      }
-    }
-
-    TAPAS_ASSERT(level1.size() == N1);
-    TAPAS_ASSERT(level2.size() == N2);
-
+    int bits = SFC::Dim * 2;
+    int num_classes = 1 << bits;
+    std::vector<int> count(num_classes);
     for (auto kk : data.ht_) {
       KeyType key = kk.first;
-      for (size_t i = 0; i < level2.size(); i++) {
-        if (SFC::GetDepth(key) >= 2) {
-          if (SFC::IsDescendant(level2[i], key)) {
-            count[i]++;
-            break;
-          }
-        }
-      }
+      KeyType n = SFC::GetMSBits(key, bits);
+      count[n]++;
     }
-
-    std::vector<int> recv_buf(N2);
+    
+    std::vector<int> recv_buf(num_classes);
     MPI_Reduce(&count[0], &recv_buf[0], count.size(), MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
     if (data.mpi_rank_ == 0) {
       std::cout << "Total cells: " << data.ht_.size() << std::endl;
       std::cout << "Region Histogram: ";
-      for(int i = 0; i < N2; i++) {
+      for(int i = 0; i < num_classes; i++) {
         std::cout << recv_buf[i] << " ";
       }
       std::cout << std::endl;
