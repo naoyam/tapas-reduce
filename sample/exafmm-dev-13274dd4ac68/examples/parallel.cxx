@@ -135,6 +135,8 @@ int main(int argc, char ** argv) {
 
     logger::stopPAPI();
     logger::stopTimer("Total FMM", 0);
+    logger::printTitle("Total runtime");
+    logger::printTime("Total FMM");
 #if DIRECT
     logger::printTitle("MPI direct sum");
     const int numTargets = 100;
@@ -149,8 +151,6 @@ int main(int argc, char ** argv) {
       traversal.direct(bodies, jbodies, cycle);
     }
     traversal.normalize(bodies);
-    logger::printTitle("Total runtime");
-    logger::printTime("Total FMM");
     logger::stopTimer("Total Direct");
     logger::resetTimer("Total Direct");
     double potDif = verify.getDifScalar(bodies, bodies2);
