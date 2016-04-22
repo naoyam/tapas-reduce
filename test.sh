@@ -127,13 +127,21 @@ if mpicxx --showme:version 2>/dev/null | grep "Open MPI"; then
     # Opne MPI
     MPICC="env OMPI_CC=${CC} mpicc"
     MPICXX="env OMPI_CXX=${CXX} mpicxx"
-    MPI=mpiexec
+
+    if [[ -z "${MPIEXEC:-}" ]]; then
+        MPIEXEC=mpiexec
+    fi
+    
     echo Looks like Open MPI.
 else
     # mpich family (mpich and mvapich)
     MPICC="env MPICH_CXX=${CXX} MPICH_CC=${CC} mpicc"
     MPICXX="env MPICH_CXX=${CXX} MPICH_CC=${CC} mpicxx"
-    MPI=mpiexec
+    
+    if [[ -z "${MPIEXEC:-}" ]]; then
+        MPIEXEC=mpiexec
+    fi
+    
     echo Looks like Mpich.
 fi
 
@@ -160,8 +168,8 @@ make -j MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=debug -C $SRC_DIR all
 TEST_TARGETS=$(make -C $SRC_DIR list | grep -v make | grep -v echo | grep test_)
 for t in $TEST_TARGETS; do
     for NP in 1 2 3 4; do
-        echoCyan ${MPI} -np $NP $SRC_DIR/$t
-        ${MPI} -np $NP $SRC_DIR/$t
+        echoCyan ${MPIEXEC} -np $NP $SRC_DIR/$t
+        ${MPIEXEC} -np $NP $SRC_DIR/$t
     done
 done
 
@@ -196,8 +204,8 @@ make CXX=${CXX} CC=${CC} MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=debu
 
 for np in ${NP[@]}; do
     for nb in ${NB[@]}; do
-        echoCyan ${MPI} -n $np $SRC_DIR/bh_mpi -w $nb
-        ${MPI} -n $np $SRC_DIR/bh_mpi -w $nb | tee $TMPFILE
+        echoCyan ${MPIEXEC} -n $np $SRC_DIR/bh_mpi -w $nb
+        ${MPIEXEC} -n $np $SRC_DIR/bh_mpi -w $nb | tee $TMPFILE
 
         PERR=$(grep "P ERR" $TMPFILE | grep -oE "[0-9.e+-]+")
         FERR=$(grep "F ERR" $TMPFILE | grep -oE "[0-9.e+-]+")
@@ -298,16 +306,16 @@ for nb in ${NB[@]}; do
                 for np in ${NP[@]}; do
                     # run Exact LET TapasFMM
                     rm -f $TMPFILE; sleep 1s
-                    echoCyan ${MPI} -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
-                    ${MPI} -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
+                    echoCyan ${MPIEXEC} -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
+                    ${MPIEXEC} -n $np $SRC_DIR/parallel_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
                     cat $TMPFILE
 
                     accuracyCheck $TMPFILE
 
                     # run One-side LET TapasFMM
                     rm -f $TMPFILE; sleep 1s
-                    echoCyan ${MPI} -n $np $SRC_DIR/parallel_tapas_oneside -n $nb -c $ncrit -d $dist --mutual $mutual
-                    ${MPI} -n $np $SRC_DIR/parallel_tapas_oneside -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
+                    echoCyan ${MPIEXEC} -n $np $SRC_DIR/parallel_tapas_oneside -n $nb -c $ncrit -d $dist --mutual $mutual
+                    ${MPIEXEC} -n $np $SRC_DIR/parallel_tapas_oneside -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
                     cat $TMPFILE
 
                     accuracyCheck $TMPFILE
@@ -348,8 +356,8 @@ if which nvcc >/dev/null 2>&1; then
     for dist in ${DIST[@]}; do
         for nb in ${NB[@]}; do
             for ncrit in ${NCRIT[@]}; do
-                echoCyan ${MPI} -n 1 ./$BIN --numBodies 1000
-                ${MPI} -n 1 ./$BIN --numBodies 10000 > $TMPFILE
+                echoCyan ${MPIEXEC} -n 1 ./$BIN --numBodies 1000
+                ${MPIEXEC} -n 1 ./$BIN --numBodies 10000 > $TMPFILE
                 cat $TMPFILE
                 accuracyCheck $TMPFILE
             done

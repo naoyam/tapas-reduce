@@ -1,3 +1,4 @@
+
 #include <chrono>
 #include <mutex>
 #include <thread>
@@ -518,6 +519,39 @@ std::string Now() {
   return ss.str();
 }
 
+void PrintProcInfo() {
+  const constexpr int HOSTNAME_LEN = 20;
+  char hostname[HOSTNAME_LEN];
+  gethostname(hostname, HOSTNAME_LEN);
+
+  int pid = getpid();
+
+#ifdef USE_MPI
+  int rank = 0;
+  int size = 1;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+  char *rbuf_hn = (rank == 0) ? new char[HOSTNAME_LEN * size] : nullptr;
+  MPI_Gather(hostname, HOSTNAME_LEN, MPI_BYTE, rbuf_hn, HOSTNAME_LEN, MPI_BYTE, 0, MPI_COMM_WORLD);
+
+  int *rbuf_pid = (rank == 0) ? new int[size] : nullptr;
+  MPI_Gather(&pid, 1, MPI_INT, rbuf_pid, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  if (rank == 0) {
+    for (int i = 0; i < size; i++) {
+      std::string hn(rbuf_hn + HOSTNAME_LEN * i);
+      std::cout << "MPI Rank " << i << " " << hn << ":" << rbuf_pid[i] << std::endl;
+    }
+  }
+
+  //sleep(10); // for gdb attach
+  MPI_Barrier(MPI_COMM_WORLD);
+#else
+  std::cout << "MPI Rank 0" << hostname << ":" << pid << std::endl;
+#endif
+}
+
 int main(int argc, char ** argv) {
   Args args(argc, argv);
 
@@ -534,13 +568,7 @@ int main(int argc, char ** argv) {
 #endif
 
 #if 0
-  // debug
-  tapas::debug::BarrierExec([](int rank, int) {
-      char hostname[100];
-      gethostname(hostname, 100);
-      std::cout << "MPI rank " << rank << ": " << hostname << ":" << getpid() << std::endl;
-    });
-  sleep(10);
+  PrintProcInfo();
 #endif
 
 #ifdef TBB
