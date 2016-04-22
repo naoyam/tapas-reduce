@@ -25,14 +25,14 @@ template<class Cell, class Body, class LET>struct CPUMapper;
 
 /**
  * @brief Helper subroutine called from Mapper::Map
- */ 
+ */
 template<class Mapper, class T1_Iter, class T2_Iter, class Funct, class...Args>
 static void ProductMapImpl(Mapper &mapper,
                            T1_Iter iter1, int beg1, int end1,
                            T2_Iter iter2, int beg2, int end2,
                            Funct f, Args... args) {
   TAPAS_ASSERT(beg1 < end1 && beg2 < end2);
-  
+
   using CellType = typename T1_Iter::CellType;
   using Th = typename CellType::Threading;
 
@@ -62,7 +62,7 @@ static void ProductMapImpl(Mapper &mapper,
     free(t2_demangled);
   }
 #endif
-  
+
   if (!iter1.SpawnTask()
       || (end1 - beg1 == 1)
       || (end1 - beg1 <= kT1 && end2 - beg2 <= kT2)) {
@@ -79,7 +79,7 @@ static void ProductMapImpl(Mapper &mapper,
         // if i and j are mutually interactive, f(i,j) is evaluated only once.
 
         //bool am = lhs.AllowMutualInteraction(rhs);
-        
+
         if ((am && i <= j) || !am) {
           if (lhs.IsLocal()) {
 #ifdef TAPAS_COMPILER_INTEL
@@ -94,7 +94,7 @@ static void ProductMapImpl(Mapper &mapper,
     // Source side (iter2) can be split and paralleilzed.
     // target side cannot paralleize due to accumulation
     int mid1 = (end1 + beg1) / 2;
-        
+
     typename Th::TaskGroup tg;
     tg.createTask([&]() { ProductMapImpl(mapper, iter1, beg1, mid1, iter2, beg2, end2, f, args...); });
     ProductMapImpl(mapper, iter1, mid1, end1, iter2, beg2, end2, f, args...);
@@ -176,7 +176,7 @@ struct CPUMapper {
   bool opt_mutual_;
 
   CPUMapper() : opt_mutual_(false) { }
-  
+
   /**
    * @brief Map function f over product of two iterators
    */
@@ -189,7 +189,7 @@ struct CPUMapper {
                      f, args...);
     }
   }
-  
+
   template <class Funct, class T1_Iter, class ...Args>
   inline void MapP1(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
     if (prod.size() > 0) {
@@ -209,11 +209,11 @@ struct CPUMapper {
     typename Th::TaskGroup tg;
 
     TAPAS_ASSERT(iter.index() == 0);
-    
+
     for (int i = 0; i < iter.size(); i++) {
       tg.createTask([=]() mutable { this->Map(f, *iter, args...); });
       iter++;
-    } 
+    }
     tg.wait();
   }
 
@@ -225,13 +225,14 @@ struct CPUMapper {
     Time net_bt, net_et;
 
     c2.data().trav_used_src_key_.insert(c2.key());
-    
+
     if (c1.IsRoot() && c2.IsRoot()) {
       // Pre-traverse procedure
       // All Map() function traverse starts from (root, root)
       // for LET construction and GPU init/finalize
+
       auto bt = clock::now();
-      
+
       if (c1.data().mpi_size_ > 1) {
 #ifdef TAPAS_DEBUG
         char t[] = "TAPAS_IN_LET=1";
@@ -244,18 +245,18 @@ struct CPUMapper {
       }
 
       SCOREP_USER_REGION_BEGIN(trav_handle, "NetTraverse", SCOREP_USER_REGION_TYPE_COMMON);
-      
+
       auto et = clock::now();
       c1.data().time_map2_let = duration_cast<milliseconds>(et - bt).count() * 1e-3;
-      
+
       net_bt = clock::now();
     }
-    
+
     // myth_start_papi_counter("PAPI_FP_OPS");
-    // Body of traverse 
+    // Body of traverse
     f(c1, c2, args...);
     // myth_stop_papi_counter();
-    
+
     if (c1.IsRoot() && c2.IsRoot()) {
       // Post-traverse procedure
       net_et = clock::now();
@@ -269,7 +270,7 @@ struct CPUMapper {
   inline void Map(Funct f, Cell &c1, CellIterator<Cell> &c2, Args...args) {
     Map(f, c1, *c2, args...);
   }
-  
+
   // cell iter x cell iter
   template <class Funct, class...Args>
   inline void Map(Funct f, CellIterator<Cell> &c1, CellIterator<Cell> &c2, Args...args) {
@@ -308,8 +309,8 @@ struct CPUMapper {
       iter++;
     }
   }
-  
-  // body x body 
+
+  // body x body
   template<class Funct, class...Args>
   void Map(Funct f, BodyIterator<Cell> b1, BodyIterator<Cell> b2, Args...args) {
 #ifdef TAPAS_COMPILER_INTEL
@@ -319,7 +320,7 @@ struct CPUMapper {
   }
 
   inline void Setup() {  }
-  
+
   inline void Start() {  }
 
   inline void Finish() {  }
@@ -353,7 +354,7 @@ struct GPUMapper {
                      f, args...);
     }
   }
-  
+
   /**
    * @brief Map function f over product of two iterators
    */
@@ -398,11 +399,11 @@ struct GPUMapper {
     typename Th::TaskGroup tg;
 
     TAPAS_ASSERT(iter.index() == 0);
-    
+
     for (int i = 0; i < iter.size(); i++) {
       tg.createTask([=]() mutable { this->Map(f, *iter, args...); });
       iter++;
-    } 
+    }
     tg.wait();
   }
 
@@ -411,7 +412,7 @@ struct GPUMapper {
    *
    * - Setup CUDA device and variables
    * - Construct & exchange LET
-   */ 
+   */
   template <class Funct, class...Args>
   void Map2Init(Funct f, Cell&c1, Cell&c2, Args...args) {
     auto &data = c1.data();
@@ -424,7 +425,7 @@ struct GPUMapper {
       putenv(t); // to avoid warning "convertion from const char* to char*"
 #endif
       LET::Exchange(c1, f, args...);
-        
+
 #ifdef TAPAS_DEBUG
       unsetenv("TAPAS_IN_LET");
 #endif
@@ -453,7 +454,7 @@ struct GPUMapper {
    *
    * - Execute CUDA kernel on the interaction list
    * - Collect time information
-   */ 
+   */
   template <class Funct, class...Args>
   void Map2Finish(Funct, Cell &c1, Cell &c2, Args...) {
     auto &data = c1.data();
@@ -462,23 +463,23 @@ struct GPUMapper {
     // collect runtime information
     map2_all_end_  = std::chrono::high_resolution_clock::now();
     auto d = map2_all_end_ - map2_all_beg_;
-    
+
     data.time_map2_dev = vmap_.time_device_call_;
     data.time_map2_all = std::chrono::duration_cast<std::chrono::microseconds>(d).count() * 1e-6;
   }
-  
+
   // GPUMapper::Map
   // cell x cell
   template <class Funct, class...Args>
   inline void Map(Funct f, Cell &c1, Cell &c2, Args... args) {
     static std::chrono::high_resolution_clock::time_point t1, t2;
-    
+
     if (c1.IsRoot() && c2.IsRoot()) {
       Map2Init(f, c1, c2, args...);
     }
-    
+
     f(c1, c2, args...);
-    
+
     if (c1.IsRoot() && c2.IsRoot()) {
       Map2Finish(f, c1, c2, args...);
     }
@@ -489,7 +490,7 @@ struct GPUMapper {
   inline void Map(Funct f, Cell &c1, CellIterator<Cell> &c2, Args...args) {
     Map(f, c1, *c2, args...);
   }
-  
+
   // cell iter x cell iter
   template <class Funct, class...Args>
   inline void Map(Funct f, CellIterator<Cell> &c1, CellIterator<Cell> &c2, Args...args) {
@@ -528,8 +529,8 @@ struct GPUMapper {
       iter++;
     }
   }
-  
-  // body x body 
+
+  // body x body
   template<class Funct, class...Args>
   inline void Map(Funct f, BodyIterator<Cell> b1, BodyIterator<Cell> b2, Args...args) {
 #ifdef TAPAS_COMPILER_INTEL
@@ -546,4 +547,3 @@ struct GPUMapper {
 } // namespace tapas
 
 #endif // TAPAS_HOT_MAPPER_H_
-

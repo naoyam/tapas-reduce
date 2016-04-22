@@ -106,6 +106,10 @@ struct SharedData {
   double time_map2_dev;  // CUDA kernel runtime
 #endif
 
+#ifdef TAPAS_DEBUG
+#endif
+  
+
   std::unordered_map<int, int> let_func_count;
 
   MPI_Datatype mpi_type_key_;

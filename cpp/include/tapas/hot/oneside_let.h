@@ -993,12 +993,11 @@ struct OptLET {
     data.time_let_req_all = et_all - bt_all;
   }
 
-
   /**
    * \brief Select cells and send response to the requesters.
    * \param data Data structure
-   * \param [in,out] req_attr_keys Vector of SFC keys of cells of which attributes are sent in response
-   * \param [in,out] attr_src      Vector of process ranks which requested req_attr_keys[i]
+   * \param [in,out] req_attr_keys Vector of SFC keys of cells, of which attributes are sent in response.
+   * \param [in,out] attr_src      Vector of MPI ranks which requested req_attr_keys[i]
    * \param [in,out] req_leaf_keys Vector of SFC keys of leaf cells of which bodies are sent in response
    * \param [in,out] leaf_src      Vector of process ranks which requested req_leaf_keys[i]
    * \param [out] res_cell_attrs Vector of cell attributes which are recieved from remote ranks
@@ -1034,7 +1033,7 @@ struct OptLET {
     Partitioner<TSP>::SelectResponseCells(req_attr_keys, attr_src_ranks,
                                           req_leaf_keys, leaf_src_ranks,
                                           data.ht_);
-
+    
     const auto &ht = data.ht_;
     int mpi_size = data.mpi_size_;
 
@@ -1054,13 +1053,17 @@ struct OptLET {
 
     tapas::mpi::Alltoallv2(attr_keys_send, attr_dest_ranks, req_attr_keys,  attr_src_ranks,
                            data.mpi_type_key_, MPI_COMM_WORLD);
-
+    
     tapas::mpi::Alltoallv2(attr_sendbuf,   attr_dest_ranks, res_cell_attrs, attr_src_ranks,
                            data.mpi_type_attr_, MPI_COMM_WORLD);
 
     MPI_Barrier(MPI_COMM_WORLD);
     et = MPI_Wtime();
     data.time_let_res_attr_comm = et - bt;
+
+    attr_keys_send.clear(); // no longer used
+    attr_sendbuf.clear();
+    attr_dest_ranks.clear();
 
     // ===== 3. Post-comm computation =====
     // Preapre all bodies to send to <leaf_src_ranks> processes
@@ -1110,8 +1113,8 @@ struct OptLET {
 
     // This information is not necessary because source ranks of boides can be computed from
     // leaf_src_ranks_ranks and res_nb.
-    std::vector<int> leaf_recvcnt; // we don't use this
-    std::vector<int> body_recvcnt; // we don't use this
+    std::vector<int> leaf_recvcnt;
+    std::vector<int> body_recvcnt;
 
     MPI_Barrier(MPI_COMM_WORLD);
     bt = MPI_Wtime();
@@ -1137,13 +1140,20 @@ struct OptLET {
 
     // TODO: send body attributes
     // Now we assume body_attrs from remote process is all "0" data.
+    
+    leaf_recvcnt.clear(); // we don't use these values
+    body_recvcnt.clear();
+    body_sendbuf.clear();
+    leaf_nb_sendbuf.clear();
+    leaf_keys_sendbuf.clear();
 
-    data.let_bodies_.assign(std::begin(res_bodies), std::end(res_bodies));
-    data.let_body_attrs_.resize(res_bodies.size());
-    bzero(&data.let_body_attrs_[0], data.let_body_attrs_.size() * sizeof(data.let_body_attrs_[0]));
-
-    TAPAS_ASSERT(data.let_bodies_.size() == res_bodies.size());
-
+    data.let_bodies_ = std::move(res_bodies);
+    res_bodies.clear();
+    
+    data.let_body_attrs_.resize(data.let_bodies_.size());
+    bzero(&data.let_body_attrs_[0],
+          data.let_body_attrs_.size() * sizeof(data.let_body_attrs_[0]));
+    
     MPI_Barrier(MPI_COMM_WORLD);
     et_all = MPI_Wtime();
     data.time_let_res_all = et_all - bt_all;
@@ -1218,7 +1228,7 @@ struct OptLET {
   template<class UserFunct, class...Args>
   static void Exchange(CellType &root, UserFunct f, Args...args) {
     if (root.data().mpi_rank_ == 0) {
-      std::cout << "Using OptLET" << std::endl;
+      std::cout << "Using Oneside-LET" << std::endl;
     }
     SCOREP_USER_REGION("LET-All", SCOREP_USER_REGION_TYPE_FUNCTION);
     double beg = MPI_Wtime();
@@ -1231,7 +1241,7 @@ struct OptLET {
 
     std::vector<KeyType> res_cell_attr_keys; // cell keys of which attributes are requested
     std::vector<KeyType> res_leaf_keys; // leaf cell keys of which bodies are requested
-
+    
     std::vector<int> attr_src; // Process IDs that requested attr_keys_recv[i] (output from Request())
     std::vector<int> leaf_src; // Process IDs that requested attr_body_recv[i] (output from Request())
 
