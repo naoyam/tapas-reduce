@@ -171,13 +171,6 @@ public:
 		<< std::setw(stringLength)                      //  Set format
 		<< "nspawn" << " : " << nspawn << std::endl     //  Print nspawn
 		<< std::setw(stringLength)                      //  Set format
-		<< "threading mode" << " : "
-#if MTHREAD
-		<< "MassiveThreads" << std::endl
-#else
-		<< "N/A" << std::endl
-#endif
-		<< std::setw(stringLength)                      //  Set format
 		<< "threads" << " : " << threads << std::endl   //  Print threads
 		<< std::setw(stringLength)                      //  Set format
 		<< "images" << " : " << images << std::endl     //  Print images

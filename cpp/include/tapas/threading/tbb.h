@@ -20,10 +20,12 @@ class IntelTBB { // NOTE: we avoid naming the class "TBB", because it often conf
   static const constexpr bool Concurrent = false;
   static const constexpr bool Preemptive = false;
 
+  static const char *name() { return "Intel TBB"; }
+
   using Task = tbb::task;
 
   static void init() { }
-  
+
   template<class F>
   class CallableTask : public Task {
     F f_;

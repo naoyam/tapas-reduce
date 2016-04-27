@@ -21,6 +21,8 @@ class MassiveThreads {
   static const constexpr bool Concurrent = false;
   static const constexpr bool Preemptive = false;
   
+  static const char *name() { return "MassiveThreads"; }
+  
   static void init() {
     myth_init();
   }

@@ -597,6 +597,10 @@ int main(int argc, char ** argv) {
   }
 #endif
 
+  if (args.mpi_rank == 0) {
+    std::cout << "Threading model " << FMM_Threading::name() << std::endl;
+  }
+
   // ad-hoc code for MassiveThreads when used with mvapich.
 #ifdef MTHREADS
   FMM_Threading::init();

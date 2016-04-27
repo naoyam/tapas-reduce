@@ -11,6 +11,8 @@ class Serial {
   static const constexpr bool Concurrent = false;
   static const constexpr bool Preemptive = false;
 
+  static const char *name() { return "Serial"; }
+  
   static void init() { }
 
   class Task {
