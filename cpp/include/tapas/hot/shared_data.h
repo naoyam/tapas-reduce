@@ -45,7 +45,7 @@ struct SharedData {
   Mapper mapper_;
 
   // debug LET comm
-  KeySet        trav_used_src_key_;
+  //KeySet        trav_used_src_key_;
 
   int mpi_rank_;
   int mpi_size_;

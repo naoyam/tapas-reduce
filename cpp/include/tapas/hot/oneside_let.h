@@ -46,6 +46,7 @@ struct OptLET {
     ProxyBodyAttr(BodyAttrType &rhs) : BodyAttrType(rhs) {
     }
 
+#if 0
     template <class T>
     inline ProxyBodyAttr& operator=(const T &) {
       return *this;
@@ -55,6 +56,7 @@ struct OptLET {
     inline const ProxyBodyAttr& operator=(const T &) const {
       return *this;
     }
+#endif
   }; // class ProxyBodyAttr
 
   class ProxyAttr : public CellAttrType {
@@ -62,6 +64,7 @@ struct OptLET {
     ProxyAttr() : CellAttrType() { }
     ProxyAttr(CellAttrType &rhs) : CellAttrType(rhs) { }
 
+#if 0
     template<class T>
     inline ProxyAttr& operator=(const T&) {
       return *this;
@@ -71,6 +74,7 @@ struct OptLET {
     inline const ProxyAttr& operator=(const T&) const {
       return *this;
     }
+#endif
   }; // class ProxyAttr
 
   /**
@@ -205,6 +209,9 @@ struct OptLET {
     }
 
     const ProxyBodyAttr &attr() const {
+      return c_->body_attr(idx_);
+    }
+    ProxyBodyAttr &attr() {
       return c_->body_attr(idx_);
     }
 
@@ -437,6 +444,10 @@ struct OptLET {
      * \fn ProxyCell::attr
      */
     const attr_type &attr() const {
+      Touched();
+      return attr_;
+    }
+    attr_type &attr() {
       Touched();
       return attr_;
     }
