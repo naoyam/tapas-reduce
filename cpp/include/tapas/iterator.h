@@ -201,7 +201,7 @@ class SubCellIterator {
   static const constexpr int kThreadSpawnThreshold = 2;
 #endif
   inline bool SpawnTask() const {
-    return c_.local_nb() >= 2000; // FIXME: make the number configurable
+    return c_.local_nb() >= 1000; // FIXME: make the number configurable
   }
   
   inline int size() const {
