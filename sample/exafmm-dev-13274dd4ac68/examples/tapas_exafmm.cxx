@@ -249,12 +249,9 @@ struct FMM_DTT {
       tapas::Map(*this, tapas::Product(Ci, Cj.subcells()), mutual, nspawn, theta);
     } else if (mutual && Ci == Cj) {
       tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
-#if 0
-    } else if (Ci.nb() + Cj.nb() >= (tapas::index_t)nspawn || (mutual && Ci == Cj)) {// Else if cells are still large
-      //TraverseRange traverseRange(this, Ci0+Ci->ICHILD, Ci0+Ci->ICHILD+Ci->NCHILD,// Instantiate recursive functor
-      //Cj0+Cj->ICHILD, Cj0+Cj->ICHILD+Cj->NCHILD, Xperiodic, mutual, remote);
-      //traverseRange();                                          //
-      //Traverse for range of cell pairs
+#if 1
+    } else if (Ci.local_nb() >= nspawn) {
+      // +nspawn_cond
       tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
 #endif
     } else if (Ri >= Rj) {                                // Else if Ci is larger than Cj
