@@ -251,20 +251,21 @@ struct FMM_DTT {
       tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
 #if 1
     } else if (Ci.local_nb() >= nspawn) {
-      // +nspawn_cond
+      // split both
       tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
-#endif
     } else if (Ri >= Rj) {                                // Else if Ci is larger than Cj
-      //for (C_iter ci=Ci0+Ci->ICHILD; ci!=Ci0+Ci->ICHILD+Ci->NCHILD; ci++) {// Loop over Ci's children
-      //  traverse(ci, Cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
-      //}                                                         //  End loop over Ci's children
+      // split target(left)
       tapas::Map(*this, tapas::Product(Ci.subcells(), Cj), mutual, nspawn, theta);
     } else {                                                    // Else if Cj is larger than Ci
-      //for (C_iter cj=Cj0+Cj->ICHILD; cj!=Cj0+Cj->ICHILD+Cj->NCHILD; cj++) {// Loop over Cj's children
-      //  traverse(Ci, cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
-      //}                                                         //  End loop over Cj's children
+      // split source(right)
       tapas::Map(*this, tapas::Product(Ci, Cj.subcells()), mutual, nspawn, theta);
     }
+#else
+    } else {
+      // Split both side
+      tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
+    }
+#endif
   }
 };
 
