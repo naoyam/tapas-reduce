@@ -285,10 +285,6 @@ struct OptLET {
     inline Mapper &mapper() { return mapper_; }
     inline const Mapper &mapper() const { return mapper_; }
 
-    inline size_t local_nb() const {
-      return 1;
-    }
-
     static const constexpr bool Inspector = true;
 
     /**
@@ -415,6 +411,10 @@ struct OptLET {
     //   return is_local_;
     //   //return data_.ht_.count(key_) > 0;
     // }
+
+    inline size_t local_nb() const {
+      return cell_ ? cell_->local_nb() : 0;
+    }
 
     inline size_t nb() {
       Body();
