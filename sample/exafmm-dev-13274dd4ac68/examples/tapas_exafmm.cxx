@@ -193,11 +193,11 @@ struct FMM_DTT {
   template<class Cell>
   inline void operator()(Cell &Ci, Cell &Cj, int mutual, int nspawn, real_t theta) {
 
-#ifdef COUNT
-    if (Ci.IsRoot() && Cj.IsRoot()) { // ad-hoc
-      ResetCount();
-    }
-#endif
+// #ifdef COUNT
+//     if (Ci.IsRoot() && Cj.IsRoot()) { // ad-hoc
+//       ResetCount();
+//     }
+// #endif
 
     // TODO:
     //if (Ci.nb() == 0 || Cj.nb() == 0) return;
