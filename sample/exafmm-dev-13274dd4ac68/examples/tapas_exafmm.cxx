@@ -249,9 +249,9 @@ struct FMM_DTT {
       tapas::Map(*this, tapas::Product(Ci, Cj.subcells()), mutual, nspawn, theta);
     } else if (mutual && Ci == Cj) {
       tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
-#if 1
+#if 0
     // } else if (Ci.local_nb() >= nspawn) {
-    //   // split both
+    //   //split both
     //   tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
     } else if (Ri >= Rj) {                                // Else if Ci is larger than Cj
       // split target(left)
