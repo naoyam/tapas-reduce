@@ -123,8 +123,7 @@ inline void Map(Funct f, Iterator iter, Args...args) {
 
 template<class Funct, class T, class...Args>
 inline void PostOrderMap(Funct f, T &x, Args...args) {
-  auto lambda = [=](T& x) { f(x, args...); };
-  T::PostOrderMap(x, lambda);
+  T::PostOrderMap(x, f, args...);
 }
 
 template<class Funct, class T, class...Args>
@@ -132,10 +131,10 @@ inline void UpwardMap(Funct f, T &x, Args...args) {
   PostOrderMap(f, x, args...);
 }
 
+//! PreOrderMap = Downward map
 template<class Funct, class T, class...Args>
 void PreOrderMap(Funct f, T &x, Args...args) {
-  auto lambda = [=] (T& x) { f(x, args...); };
-  T::PreOrderMap(x, lambda);
+  T::PreOrderMap(x, f, args...);
 }
 
 template<class Funct, class T, class...Args>

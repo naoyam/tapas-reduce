@@ -251,7 +251,9 @@ class Cell {
   bool IsRoot() const;
   bool IsLocalSubtree() const;
 
-  static void PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
+  template<class Funct, class ...Args>
+  static void PostOrderMap(Cell<TSP> &c, Funct f, Args...args);
+  
   static void PreOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
 
   inline CellType &cell() { return *this; }
@@ -648,8 +650,8 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
 /**
  * \brief PostOrderMap starting from a local cell. The subtree under c must be completely local.
  */
-template<class TSP>
-void LocalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
+template<class TSP, class Funct, class...Args>
+void LocalUpwardTraversal(Cell<TSP> &c, Funct f, Args...args) {
   if (!c.IsLocal()) {
     using SFC = typename Cell<TSP>::SFC;
     auto k = c.key();
@@ -660,14 +662,14 @@ void LocalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
   TAPAS_ASSERT(c.IsLocal());
 
   if (c.IsLeaf()) {
-    f(c);
+    f(c, args...);
   } else {
     int nc = c.nsubcells();
     for (int ci = 0; ci < nc; ci++) {
       Cell<TSP> &child = c.subcell(ci);
-      LocalUpwardTraversal(child, f);
+      LocalUpwardTraversal(child, f, args...);
     }
-    f(c);
+    f(c, args...);
   }
 }
 
@@ -706,8 +708,8 @@ void ExchangeGlobalLeafAttrs(typename Cell<TSP>::CellHashTable &gtree,
   TAPAS_ASSERT(keys_recv.size() == attr_recv.size());
 }
 
-template<class TSP>
-void GlobalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
+template<class TSP, class Funct, class...Args>
+void GlobalUpwardTraversal(Cell<TSP> &c, Funct f, Args...args) {
   using KeyType = typename Cell<TSP>::KeyType;
   using SFC = typename Cell<TSP>::SFC;
   auto &data = c.data();
@@ -735,10 +737,10 @@ void GlobalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
   for (int ci = 0; ci < nc; ci++) {
     KeyType chk = SFC::Child(c.key(), ci);
     Cell<TSP> *child = data.ht_gtree_.at(chk);
-    GlobalUpwardTraversal(*child, f);
+    GlobalUpwardTraversal(*child, f, args...);
   }
 
-  f(c);
+  f(c, args...);
 }
 
 
@@ -755,7 +757,8 @@ void GlobalUpwardTraversal(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
   } while(0)
 
 template<class TSP>
-void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
+template<class Funct, class ...Args>
+void Cell<TSP>::PostOrderMap(Cell<TSP> &c, Funct f, Args...args) {
   auto &data = c.data();
 
   // perform post-order (upward) traverse
@@ -781,12 +784,12 @@ void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
     for (auto && key_lr : data.lroots_) {
       TAPAS_ASSERT(data.ht_.count(key_lr) == 1);
       auto *cell = data.ht_[key_lr];
-      LocalUpwardTraversal(*cell, f);
+      LocalUpwardTraversal(*cell, f, args...);
     }
 
     ExchangeGlobalLeafAttrs<TSP>(data.ht_gtree_, data.lroots_);
 
-    GlobalUpwardTraversal(c, f);
+    GlobalUpwardTraversal(c, f, args...);
   } else {
 
     // c is not in the global tree, which means c's subtree is perfectly local.
@@ -794,7 +797,7 @@ void Cell<TSP>::PostOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
     // We're not sure yet if such invocation is allowed in Tapas programming model.
 
     assert(false); // for debug
-    LocalUpwardTraversal(c, f);
+    LocalUpwardTraversal(c, f, args...);
   }
 }
 
