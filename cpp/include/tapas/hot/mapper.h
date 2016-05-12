@@ -319,6 +319,11 @@ struct CPUMapper {
     f(*b1, b1.attr(), *b2, b2.attr(), args...);
   }
 
+  // 1-parameter map
+  //template<class Funct, class...Args>
+  //void UpwardMap(Funct f, Cell &c, Args...args) {
+  //}
+
   inline void Setup() {  }
 
   inline void Start() {  }

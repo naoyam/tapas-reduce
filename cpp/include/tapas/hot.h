@@ -251,10 +251,8 @@ class Cell {
   bool IsRoot() const;
   bool IsLocalSubtree() const;
 
-  template<class Funct, class ...Args>
-  static void PostOrderMap(Cell<TSP> &c, Funct f, Args...args);
-  
-  static void PreOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f);
+  template<class Funct, class...Args> static void UpwardMap(Funct f, Cell<TSP> &c, Args...args);
+  template<class Funct, class...Args> static void DownwardMap(Funct f, Cell<TSP> &c, Args...args);
 
   inline CellType &cell() { return *this; }
   inline const CellType &cell() const { return *this; }
@@ -648,7 +646,7 @@ void CompleteRegion(typename TSP::SFC::KeyType x,
 }
 
 /**
- * \brief PostOrderMap starting from a local cell. The subtree under c must be completely local.
+ * \brief UpwardMap starting from a local cell. The subtree under c must be completely local.
  */
 template<class TSP, class Funct, class...Args>
 void LocalUpwardTraversal(Cell<TSP> &c, Funct f, Args...args) {
@@ -743,7 +741,6 @@ void GlobalUpwardTraversal(Cell<TSP> &c, Funct f, Args...args) {
   f(c, args...);
 }
 
-
 #define LOG(k_, code) do {                            \
     using SFC = typename TSP::SFC;                    \
     typename SFC::KeyType k = (k_);                   \
@@ -758,7 +755,7 @@ void GlobalUpwardTraversal(Cell<TSP> &c, Funct f, Args...args) {
 
 template<class TSP>
 template<class Funct, class ...Args>
-void Cell<TSP>::PostOrderMap(Cell<TSP> &c, Funct f, Args...args) {
+void Cell<TSP>::UpwardMap(Funct f, Cell<TSP> &c, Args...args) {
   auto &data = c.data();
 
   // perform post-order (upward) traverse
@@ -793,7 +790,7 @@ void Cell<TSP>::PostOrderMap(Cell<TSP> &c, Funct f, Args...args) {
   } else {
 
     // c is not in the global tree, which means c's subtree is perfectly local.
-    // This means that the user called PostOrderMap not from the root cell.
+    // This means that the user called UpwardMap not from the root cell.
     // We're not sure yet if such invocation is allowed in Tapas programming model.
 
     assert(false); // for debug
@@ -802,8 +799,9 @@ void Cell<TSP>::PostOrderMap(Cell<TSP> &c, Funct f, Args...args) {
 }
 
 template<class TSP>
-void Cell<TSP>::PreOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
-  f(c);
+template<class Funct, class...Args>
+void Cell<TSP>::DownwardMap(Funct f, Cell<TSP> &c, Args...args) {
+  f(c, args...);
 
   if (c.IsLeaf()) return;
 
@@ -816,8 +814,8 @@ void Cell<TSP>::PreOrderMap(Cell<TSP> &c, std::function<void(Cell<TSP>&)> f) {
     }
 #endif
 
-    if      (data.ht_gtree_.count(ch_key) > 0) PreOrderMap(*data.ht_gtree_.at(ch_key), f);
-    else if (data.ht_.count(ch_key)       > 0) PreOrderMap(*data.ht_.at(ch_key), f);
+    if      (data.ht_gtree_.count(ch_key) > 0) DownwardMap(f, *data.ht_gtree_.at(ch_key), args...);
+    else if (data.ht_.count(ch_key)       > 0) DownwardMap(f, *data.ht_.at(ch_key), args...);
   }
 }
 

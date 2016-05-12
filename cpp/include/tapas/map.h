@@ -122,24 +122,13 @@ inline void Map(Funct f, Iterator iter, Args...args) {
 }
 
 template<class Funct, class T, class...Args>
-inline void PostOrderMap(Funct f, T &x, Args...args) {
-  T::PostOrderMap(x, f, args...);
-}
-
-template<class Funct, class T, class...Args>
 inline void UpwardMap(Funct f, T &x, Args...args) {
-  PostOrderMap(f, x, args...);
-}
-
-//! PreOrderMap = Downward map
-template<class Funct, class T, class...Args>
-void PreOrderMap(Funct f, T &x, Args...args) {
-  T::PreOrderMap(x, f, args...);
+  T::UpwardMap(f, x, args...);
 }
 
 template<class Funct, class T, class...Args>
 inline void DownwardMap(Funct f, T &x, Args...args) {
-  PreOrderMap(f, x, args...);
+  T::DownwardMap(f, x, args...);
 }
 
 } // namespace tapas
