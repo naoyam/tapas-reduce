@@ -46,6 +46,9 @@ struct ExactLET {
     MAP1_UNKNOWN
   };
 
+  struct ProxyMapper;
+  class ProxyCell;
+
   class ProxyBodyAttr : public BodyAttrType {
    public:
     ProxyBodyAttr(BodyAttrType &rhs) : BodyAttrType(rhs) {
@@ -64,18 +67,29 @@ struct ExactLET {
 
   class ProxyAttr : public CellAttrType {
    public:
-    ProxyAttr() : CellAttrType() { }
-    ProxyAttr(CellAttrType &rhs) : CellAttrType(rhs) { }
+    ProxyAttr(ProxyCell *cell) : CellAttrType(), cell_(cell) { }
+    ProxyAttr(ProxyCell *cell, CellAttrType &rhs) : CellAttrType(rhs), cell_(cell) { }
+    
+    ProxyAttr &operator=(const ProxyAttr &rhs) {
+      this->CellAttrType::operator=(rhs);
+      cell_ = rhs.cell_;
+      return *this;
+    }
 
     template<class T>
     inline ProxyAttr& operator=(const T&) {
+      cell_.MarkModified();
       return *this;
     }
 
     template<class T>
     inline const ProxyAttr& operator=(const T&) const {
+      cell_->MarkModified();
       return *this;
     }
+
+   private:
+    ProxyCell *cell_;
   }; // class ProxyAttr
 
   /**
@@ -86,10 +100,6 @@ struct ExactLET {
     ProxyBody(BodyAttrType &rhs) : BodyType(rhs) {
     }
   };
-
-  struct ProxyMapper;
-
-  class ProxyCell;
 
   /**
    * ProxyBodyIterator
@@ -219,6 +229,8 @@ struct ExactLET {
    * ProxyCell
    */
   class ProxyCell {
+    friend ProxyAttr;
+    
    public:
     // Export same type definitions as tapas::hot::Cell does.
     using KeyType = tapas::hot::ExactLET<TSP>::KeyType;
@@ -238,13 +250,25 @@ struct ExactLET {
 
     // ctor
     ProxyCell(KeyType key, const Data &data)
-        : key_(key), data_(data), marked_touched_(false), marked_split_(false), marked_body_(false),
-          is_local_(false), cell_(nullptr), bodies_(), body_attrs_(), attr_()
+        : key_(key), data_(data),
+          marked_touched_(false), marked_split_(false), marked_body_(false), marked_modified_(false),
+          is_local_(false), cell_(nullptr), bodies_(), body_attrs_(), attr_(this), children_()
     {
       if (data.ht_.count(key_) > 0) {
         is_local_ = true;
         cell_ = data.ht_.at(key_);
-        attr_ = ProxyAttr(cell_->attr());
+        attr_ = ProxyAttr(this, cell_->attr());
+      }
+    }
+    
+    ~ProxyCell() {
+      if (children_.size() > 0) {
+        for (ProxyCell *ch : children_) {
+          if (ch != nullptr) {
+            delete ch;
+          }
+        }
+        children_.clear();
       }
     }
 
@@ -302,6 +326,28 @@ struct ExactLET {
 
       f(cell, args...);
 
+      std::cout << "cell.marked_split_ = " << cell.marked_split_ << std::endl;
+
+      // if cell is modified
+      bool mod = cell.marked_modified_;
+      // if any of the children is modified
+      bool ch_mod = 0;
+
+      for (int i = 0; i < cell.nsubcells(); i++) {
+        ch_mod += cell.subcell(i).marked_modified_;
+      }
+
+      std::cout << "### lv0 Modified = " << mod << std::endl;
+      std::cout << "### lv1 Modified = " << ch_mod << std::endl;
+
+      if (mod && !ch_mod) {
+        // Upward
+        return MAP1_UP;
+      } else if (!mod && ch_mod) {
+        // Downward
+        return MAP1_DOWN;
+      }
+
       return MAP1_UNKNOWN;
     }
 
@@ -342,13 +388,17 @@ struct ExactLET {
       return Cell<TSP>::CalcRegion(key_, data_.region_).width(d);
     }
 
+    inline bool IsLeaf_real() const {
+      if (is_local_) return cell_->IsLeaf();
+      else           return data_.max_depth_ <= SFC::GetDepth(key_);
+    }
+
     /**
      * \fn bool ProxyCell::IsLeaf() const
      */
     inline bool IsLeaf() const {
       Touched();
-      if (is_local_) return cell_->IsLeaf();
-      else           return data_.max_depth_ <= SFC::GetDepth(key_);
+      return IsLeaf_real();
     }
 
     inline bool IsLocal() const {
@@ -376,13 +426,28 @@ struct ExactLET {
       return SubCellIterator<ProxyCell>(*this);
     }
 
-    inline ProxyCell &subcell(int) {
-      return *this;
+    inline ProxyCell &subcell(int nch) {
+      if (IsLeaf_real()) {
+        std::cerr << "Tapas ERROR: Cell::subcell(int) is called for a leaf cell (in inspector)" << std::endl;
+        abort();
+      }
+      
+      TAPAS_ASSERT(nch < nsubcells());
+      Split();
+
+      if (children_.size() == 0) {
+        int ns = nsubcells();
+        children_.resize(ns, nullptr);
+        for (int i = 0; i < ns; i++) {
+          children_[i] = new ProxyCell(SFC::Child(key_, i), data_);
+        }
+      }
+      return *children_[nch];
     }
 
     inline int nsubcells() const {
-      bool isleaf = is_local_ ? cell_->IsLeaf() : data_.max_depth_ <= SFC::GetDepth(key_);
-      return isleaf ? (1 << TSP::Dim) : 0;
+      Split();
+      return IsLeaf_real() ? 0 : (1 << TSP::Dim);
     }
 
     /**
@@ -446,8 +511,9 @@ struct ExactLET {
 
    protected:
     void Touched() const { marked_touched_ = true; }
-    void Split()   { marked_split_ = true; }
-    void Body()    { marked_body_ = true; }
+    void Split() const  { marked_split_ = true; }
+    void Body() const   { marked_body_ = true; }
+    void MarkModified() { marked_modified_ = true; }
 
     void InitBodies() {
       if (cell_ != nullptr && cell_->nb() > 0) {
@@ -468,8 +534,9 @@ struct ExactLET {
     const Data &data_;
 
     mutable bool marked_touched_;
-    bool marked_split_;
-    bool marked_body_;
+    mutable bool marked_split_;
+    mutable bool marked_body_;
+    bool marked_modified_;
 
     bool is_local_;
 
@@ -477,6 +544,7 @@ struct ExactLET {
     std::vector<ProxyBody*> bodies_;
     std::vector<ProxyBodyAttr*> body_attrs_;
     attr_type attr_;
+    std::vector<ProxyCell*> children_;
     Mapper mapper_; // FIXME: create Mapper for every ProxyCell is not efficient.
   }; // end of class ProxyCell
 

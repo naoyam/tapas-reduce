@@ -325,14 +325,14 @@ struct CPUMapper {
       if (c.data().mpi_rank_ == 0) {
         switch(dir) {
           case LET::MAP1_UP:
-            std::cout << "Determining 1-map direction (in upward) : UP => OK" << std::endl;
+            std::cout << "In Upward: Determining 1-map direction (in upward) : UP => OK" << std::endl;
             break;
           case LET::MAP1_DOWN:
-            std::cout << "Determining 1-map direction (in upward) : DOWN => Wrong" << std::endl;
+            std::cout << "In Upward: Determining 1-map direction (in upward) : DOWN => Wrong" << std::endl;
             //abort();
             break;
           case LET::MAP1_UNKNOWN:
-            std::cout << "Determining 1-map direction (in upward) : UNKNOWN => Wrong" << std::endl;
+            std::cout << "In Upward: Determining 1-map direction (in upward) : UNKNOWN => Wrong" << std::endl;
             //abort();
             break;
         }
@@ -343,6 +343,28 @@ struct CPUMapper {
 
   template<class Funct, class...Args>
   inline void DownwardMap(Funct f, Cell &c, Args...args) {
+#if 0
+    if (c.IsRoot()) {
+      auto dir = LET::FindMap1Direction(c, f, args...);
+
+      if (c.data().mpi_rank_ == 0) {
+        switch(dir) {
+          case LET::MAP1_UP:
+            std::cout << "In Downward: Determining 1-map direction (in upward) : UP => Wrong" << std::endl;
+            break;
+          case LET::MAP1_DOWN:
+            std::cout << "In Downward: Determining 1-map direction (in upward) : DOWN => OK" << std::endl;
+            //abort();
+            break;
+          case LET::MAP1_UNKNOWN:
+            std::cout << "In Downward: Determining 1-map direction (in upward) : UNKNOWN => Wrong" << std::endl;
+            //abort();
+            break;
+        }
+      }
+    }
+#endif
+    
     Cell::DownwardMap(f, c, args...);
   }
 

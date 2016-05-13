@@ -86,7 +86,7 @@ vec<DIM, FP> &asn(vec<DIM, FP> &dst, const tapas::Vec<DIM, FP> &src) {
 // UpDownPass::upwardPass
 struct FMM_Upward {
   template<class Cell>
-  inline void operator()(Cell &c, real_t /* theta */) {
+  inline void operator()(Cell &c, real_t theta) {
     // theta is not used now; to be deleted
     auto attr = c.attr();
     attr.R = 0;
@@ -106,6 +106,7 @@ struct FMM_Upward {
     if (c.IsLeaf()) {
       P2M(c);
     } else {
+      //tapas::Map(*this, c.subcells(), theta);
       M2M(c);
     }
 
@@ -120,13 +121,16 @@ struct FMM_Upward {
   }
 };
 
-static inline void FMM_Downward(TapasFMM::Cell &c) {
-  //if (c.nb() == 0) return;
-  if (!c.IsRoot()) L2L(c);
-  if (c.IsLeaf() && c.nb() > 0) {
-    tapas::Map(L2P, c.bodies(), &c);
+struct FMM_Downward {
+  template<class Cell>
+  inline void operator()(Cell &c) {
+    //if (c.nb() == 0) return;
+    if (!c.IsRoot()) L2L(c);
+    if (c.IsLeaf() && c.nb() > 0) {
+      tapas::Map(L2P, c.bodies(), &c);
+    }
   }
-}
+};
 
 #define RANK 0
 #define KEY 2522015791327477762
@@ -611,7 +615,7 @@ int main(int argc, char ** argv) {
       logger::startTimer("Downward pass");
       double bt = GetTime();
 
-      tapas::DownwardMap(FMM_Downward, *root);
+      tapas::DownwardMap(FMM_Downward(), *root);
 
       double et = GetTime();
       logger::stopTimer("Downward pass");

@@ -306,16 +306,19 @@ void L2P(Body &b, BodyAttr &ba, TapasFMM::Cell *c) { // c is a pointer here to a
   ba[3] += cartesian[2]; 
 }
 
-void L2L(TapasFMM::Cell &C) {
+template<class Cell>
+void L2L(Cell &C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
-  const TapasFMM::Cell &Cj = C.parent();
+  const Cell &Cj = C.parent();
   vec3 dX = tovec(C.center() - Cj.center());
   real_t rho, alpha, beta;
+
+  auto attr = C.attr();
 
   cart2sph(rho, alpha, beta, dX);
   evalMultipole(rho, alpha, beta, Ynm, YnmTheta);
 #if MASS
-  C.attr().L /= C.attr().M[0];
+  attr.L /= attr.M[0];
 #endif
   for (int j=0; j<P; j++) {
     for (int k=0; k<=j; k++) {
@@ -335,9 +338,10 @@ void L2L(TapasFMM::Cell &C) {
           }
         }
       }
-      C.attr().L[jks] += L;
+      attr.L[jks] += L;
     }
   }
+  C.attr() = attr;
 }
 
 } // anon namespace
