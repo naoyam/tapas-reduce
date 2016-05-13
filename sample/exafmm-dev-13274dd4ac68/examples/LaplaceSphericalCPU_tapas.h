@@ -135,8 +135,11 @@ void evalLocal(real_t rho, real_t alpha, real_t beta, complex_t * Ynm) {
 }
 
 
-void P2M(TapasFMM::Cell &C) {
+template<class Cell>
+void P2M(Cell &C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
+
+  auto attr = C.attr();
   
   for (size_t i = 0; i < C.nb(); ++i) {
     const Body &B = C.body(i);
@@ -151,18 +154,22 @@ void P2M(TapasFMM::Cell &C) {
       for (int m=0; m<=n; m++) {
         int nm  = n * n + n - m;
         int nms = n * (n + 1) / 2 + m;
-        C.attr().M[nms] += B.SRC * Ynm[nm]; // allow user to reduction ?
+        attr.M[nms] += B.SRC * Ynm[nm]; // allow user to reduction ?
       }
     }
   }
+  C.attr() = attr;
   //e.out() << std::setw(10) << Tapas::SFC::Simplify(C.key()) << "M=" << C.attr().M << std::endl;
 }
 
-void M2M(TapasFMM::Cell & C) {
+template<class Cell>
+void M2M(Cell &C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
 
+  auto attr = C.attr();
+
   for (int i = 0; i < C.nsubcells(); ++i) {
-    TapasFMM::Cell &Cj=C.subcell(i);
+    Cell &Cj=C.subcell(i);
     
     // Skip empty cell
     // NOTE: This is not allowed in
@@ -191,10 +198,11 @@ void M2M(TapasFMM::Cell & C) {
             M += std::conj(Cj.attr().M[jnkms]) * Ynm[nm] * real_t(ODDEVEN(k+n+m));
           }
         }
-        C.attr().M[jks] += M;
+        attr.M[jks] += M;
       }
     }
   }
+  C.attr() = attr;
 }
 
 template<class Cell>

@@ -40,6 +40,12 @@ struct ExactLET {
   using Vec = tapas::Vec<TSP::Dim, typename TSP::FP>;
   using Reg = Region<Dim, FP>;
 
+  enum {
+    MAP1_UP,
+    MAP1_DOWN,
+    MAP1_UNKNOWN
+  };
+
   class ProxyBodyAttr : public BodyAttrType {
    public:
     ProxyBodyAttr(BodyAttrType &rhs) : BodyAttrType(rhs) {
@@ -266,8 +272,9 @@ struct ExactLET {
       return key_ < rhs.key_;
     }
 
+    // Check if cells are split or not in 2-parameter Map
     template<class UserFunct, class...Args>
-    static SplitType Pred(KeyType trg_key, KeyType src_key, const Data &data, UserFunct f, Args...args) {
+    static SplitType PredSplit2(KeyType trg_key, KeyType src_key, const Data &data, UserFunct f, Args...args) {
       ProxyCell trg_cell(trg_key, data);
       ProxyCell src_cell(src_key, data);
 
@@ -286,6 +293,16 @@ struct ExactLET {
       } else {
         return SplitType::Approx;
       }
+    }
+
+    // Check direction (upward or downward) of 1-parameter Map
+    template<class UserFunct, class...Args>
+    static int PredDir1(KeyType key, const Data &data, UserFunct f, Args...args) {
+      ProxyCell cell(key, data);
+
+      f(cell, args...);
+
+      return MAP1_UNKNOWN;
     }
 
     // TODO
@@ -361,6 +378,11 @@ struct ExactLET {
 
     inline ProxyCell &subcell(int) {
       return *this;
+    }
+
+    inline int nsubcells() const {
+      bool isleaf = is_local_ ? cell_->IsLeaf() : data_.max_depth_ <= SFC::GetDepth(key_);
+      return isleaf ? (1 << TSP::Dim) : 0;
     }
 
     /**
@@ -608,7 +630,7 @@ struct ExactLET {
     // Approx/Split branch
     int depth = SFC::GetDepth(src_key);
     data.let_func_count[depth]++;
-    SplitType split = ExactLET<TSP>::ProxyCell::Pred(trg_key, src_key, data, f, args...); // automated predicator object
+    SplitType split = ExactLET<TSP>::ProxyCell::PredSplit2(trg_key, src_key, data, f, args...); // automated predicator object
 
     switch(split) {
       case SplitType::SplitBoth:
@@ -1128,7 +1150,17 @@ struct ExactLET {
         }
       }
     }
-#endif
+#endif /* TAPAS_DEBUG_DUMP */
+  }
+
+  /**
+   * \brief Inspect user function for 1-map and returns MAP1_UP, MAP1_DOWN, or MAP1_UNKNOWN
+   */ 
+  template<class Funct, class...Args>
+  static int FindMap1Direction(CellType &c, Funct f, Args...args) {
+    const KeyType kRoot = 0;
+
+    return ProxyCell::PredDir1(kRoot, c.data(), f, args...);
   }
 };
 

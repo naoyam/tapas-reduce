@@ -123,12 +123,14 @@ inline void Map(Funct f, Iterator iter, Args...args) {
 
 template<class Funct, class T, class...Args>
 inline void UpwardMap(Funct f, T &x, Args...args) {
-  T::UpwardMap(f, x, args...);
+  auto &c = x.cell();
+  c.mapper().UpwardMap(f, x, args...);
 }
 
 template<class Funct, class T, class...Args>
 inline void DownwardMap(Funct f, T &x, Args...args) {
-  T::DownwardMap(f, x, args...);
+  auto &c = x.cell();
+  c.mapper().DownwardMap(f, x, args...);
 }
 
 } // namespace tapas

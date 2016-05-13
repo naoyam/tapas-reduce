@@ -69,9 +69,6 @@ static void ProductMapImpl(Mapper &mapper,
     // Not to spawn tasks, run in serial
     // The two ranges (beg1,end1) and (beg2,end2) are fine enough to apply f in a serial manner.
 
-    // Create a function object to be given to the Container's Map function.
-    //typedef std::function<void(C1&, C2&)> Callback;
-    //Callback gn = [&args...](C1 &c1, C2 &c2) { f()(c1, c2, args...); };
     for (int i = beg1; i < end1; i++) {
       for (int j = beg2; j < end2; j++) {
         T1_Iter lhs = iter1 + i;
@@ -320,9 +317,34 @@ struct CPUMapper {
   }
 
   // 1-parameter map
-  //template<class Funct, class...Args>
-  //void UpwardMap(Funct f, Cell &c, Args...args) {
-  //}
+  template<class Funct, class...Args>
+  inline void UpwardMap(Funct f, Cell &c, Args...args) {
+    if (c.IsRoot()) {
+      auto dir = LET::FindMap1Direction(c, f, args...);
+
+      if (c.data().mpi_rank_ == 0) {
+        switch(dir) {
+          case LET::MAP1_UP:
+            std::cout << "Determining 1-map direction (in upward) : UP => OK" << std::endl;
+            break;
+          case LET::MAP1_DOWN:
+            std::cout << "Determining 1-map direction (in upward) : DOWN => Wrong" << std::endl;
+            //abort();
+            break;
+          case LET::MAP1_UNKNOWN:
+            std::cout << "Determining 1-map direction (in upward) : UNKNOWN => Wrong" << std::endl;
+            //abort();
+            break;
+        }
+      }
+    }
+    Cell::UpwardMap(f, c, args...);
+  }
+
+  template<class Funct, class...Args>
+  inline void DownwardMap(Funct f, Cell &c, Args...args) {
+    Cell::DownwardMap(f, c, args...);
+  }
 
   inline void Setup() {  }
 
