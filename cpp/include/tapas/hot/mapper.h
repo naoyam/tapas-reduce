@@ -344,7 +344,7 @@ struct CPUMapper {
   inline void Map(Funct f, Cell &c, Args...args) {
 
     if (c.IsRoot()) {
-      std::cout << "Map-1 is called." << std::endl;
+      if (c.data().mpi_rank_ == 0) std::cout << "Map-1 is called." << std::endl;
       // Map() has just started.
       // Find the direction of the function f (upward or downward)
       if (map1_dir_ != Map1Dir::None) {
@@ -356,16 +356,21 @@ struct CPUMapper {
 
       switch(dir) {
         case LET::MAP1_UP:
-          std::cout << "In Upward: Determining 1-map direction (in upward) : UP => OK" << std::endl;
+          if (c.data().mpi_rank_ == 0) std::cout << "In Upward: Determining 1-map direction (in upward) : UP => OK" << std::endl;
           map1_dir_ = Map1Dir::Upward;
           
           StartUpwardMap(f, c, args...); // Run local upward first
+          f(c, args...);
           
           map1_dir_ = Map1Dir::None;
-          break;
+          return;
+        case LET::MAP1_DOWN:
+          if (c.data().mpi_rank_ == 0) std::cout << "Downward is detected." << std::endl;
+          MPI_Finalize();
+          exit(0);
         default:
-          std::cout << "In Upward: Determining 1-map direction (in upward) : NOT UP => Wrong !!!" << std::endl;
-          TAPAS_ASSERT(0);
+          if (c.data().mpi_rank_ == 0) std::cout << "In Map-1: Determining 1-map direction (in upward) : NOT UP => Wrong !!!" << std::endl;
+          return;
       }
     } else {
       auto &data = c.data();

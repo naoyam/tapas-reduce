@@ -615,6 +615,7 @@ int main(int argc, char ** argv) {
       logger::startTimer("Downward pass");
       double bt = GetTime();
 
+      tapas::Map(FMM_Downward(), *root);
       tapas::DownwardMap(FMM_Downward(), *root);
 
       double et = GetTime();

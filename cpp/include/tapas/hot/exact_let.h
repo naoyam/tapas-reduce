@@ -252,7 +252,7 @@ struct ExactLET {
     ProxyCell(KeyType key, const Data &data)
         : key_(key), data_(data),
           marked_touched_(false), marked_split_(false), marked_body_(false), marked_modified_(false),
-          is_local_(false), cell_(nullptr), bodies_(), body_attrs_(), attr_(this), children_()
+          is_local_(false), cell_(nullptr), bodies_(), body_attrs_(), attr_(this), parent_(nullptr), children_()
     {
       if (data.ht_.count(key_) > 0) {
         is_local_ = true;
@@ -326,29 +326,60 @@ struct ExactLET {
 
       f(cell, args...);
 
-      std::cout << "cell.marked_split_ = " << cell.marked_split_ << std::endl;
-
       // if cell is modified
-      bool mod = cell.marked_modified_;
+      bool lv0_mod = cell.marked_modified_;
       // if any of the children is modified
-      bool ch_mod = 0;
+      bool lv1_mod = 0;
 
       for (int i = 0; i < cell.nsubcells(); i++) {
-        ch_mod += cell.subcell(i).marked_modified_;
+        lv1_mod |= cell.subcell(i).marked_modified_;
       }
 
-      std::cout << "### lv0 Modified = " << mod << std::endl;
-      std::cout << "### lv1 Modified = " << ch_mod << std::endl;
+      if (data.mpi_rank_ == 0) {
+        std::cout << "\t\t### lv0 Modified = " << lv0_mod << std::endl;
+        std::cout << "\t\t### lv1 Modified = " << lv1_mod << std::endl;
+      }
 
-      if (mod && !ch_mod) {
+      if (lv0_mod && !lv1_mod) {
         // Upward
         return MAP1_UP;
-      } else if (!mod && ch_mod) {
+      } else if (!lv0_mod && lv1_mod) {
         // Downward
         return MAP1_DOWN;
       }
 
-      return MAP1_UNKNOWN;
+      if (!lv0_mod && !lv1_mod) {
+        // if cell and its children are all unmodified, try one more level.
+        // This happends when downward traversal routein is written like this:
+        // if (!cell.IsRoot()) {
+        //    Cell &parent = cell.parent();
+        //    // computation using parent.attr()
+        //    cell.attr() = ...;
+        // }
+
+        ProxyCell &ch = cell.subcell(0);
+        f(ch, args...);
+
+        bool lv2_mod = 0;
+        for (int i = 0; i < cell.nsubcells(); i++) {
+          lv2_mod |= cell.subcell(i).marked_modified_;
+        }
+        
+        if (data.mpi_rank_ == 0) {
+          std::cout << "-------------------------------------" << std::endl;
+          std::cout << "\t\t### Re-checking with key=1" << std::endl;
+          std::cout << "\t\t### lv0 Modified = " << lv0_mod << std::endl;
+          std::cout << "\t\t### lv1 Modified = " << lv1_mod << std::endl;
+          std::cout << "\t\t### lv2 Modified = " << lv2_mod << std::endl;
+        }
+
+        if (!lv1_mod && lv2_mod) {
+          // Downward
+          return MAP1_DOWN;
+        }
+      }
+
+      return MAP1_UNKNOWN; // Error
     }
 
     // TODO
@@ -360,7 +391,7 @@ struct ExactLET {
     /**
      * \fn Vec ProxyCell::center()
      */
-    inline Vec center() {
+    inline Vec center() const {
       Touched();
       return Cell<TSP>::CalcCenter(key_, data_.region_);
     }
@@ -406,6 +437,10 @@ struct ExactLET {
       //return data_.ht_.count(key_) > 0;
     }
 
+    inline bool IsRoot() const {
+      return key_ == 0;
+    }
+
     inline size_t local_nb() {
       return cell_ ? cell_->local_nb() : 0;
     }
@@ -443,6 +478,15 @@ struct ExactLET {
         }
       }
       return *children_[nch];
+    }
+
+    inline ProxyCell &parent() {
+      TAPAS_ASSERT(key_ != 0);
+      if (parent_ == nullptr) {
+        parent_ = new ProxyCell(SFC::Parent(key_), data_);
+      }
+
+      return *parent_;
     }
 
     inline int nsubcells() const {
@@ -544,6 +588,8 @@ struct ExactLET {
     std::vector<ProxyBody*> bodies_;
     std::vector<ProxyBodyAttr*> body_attrs_;
     attr_type attr_;
+    
+    ProxyCell *parent_;
     std::vector<ProxyCell*> children_;
     Mapper mapper_; // FIXME: create Mapper for every ProxyCell is not efficient.
   }; // end of class ProxyCell
