@@ -598,6 +598,12 @@ struct ExactLET {
       // empty
     }
 
+    // subcell iter X subcell iter
+    template <class Funct, class...Args>
+    inline void Map(Funct, SubCellIterator<ProxyCell> &, Args...) {
+      // empty
+    }
+
     /**
      * @brief Map function f over product of two iterators
      */

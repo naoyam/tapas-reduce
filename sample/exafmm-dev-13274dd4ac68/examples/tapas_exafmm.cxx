@@ -106,7 +106,7 @@ struct FMM_Upward {
     if (c.IsLeaf()) {
       P2M(c);
     } else {
-      //tapas::Map(*this, c.subcells(), theta);
+      tapas::Map(*this, c.subcells(), theta);
       M2M(c);
     }
 
@@ -574,7 +574,7 @@ int main(int argc, char ** argv) {
       logger::startTimer("Upward pass");
       double bt = GetTime();
 
-      tapas::UpwardMap(FMM_Upward(), *root, args.theta);
+      tapas::Map(FMM_Upward(), *root, args.theta);
 
       double et = GetTime();
       logger::stopTimer("Upward pass");

@@ -251,7 +251,6 @@ class Cell {
   bool IsRoot() const;
   bool IsLocalSubtree() const;
 
-  template<class Funct, class...Args> static void UpwardMap(Funct f, Cell<TSP> &c, Args...args);
   template<class Funct, class...Args> static void DownwardMap(Funct f, Cell<TSP> &c, Args...args);
 
   inline CellType &cell() { return *this; }
@@ -377,7 +376,9 @@ class Cell {
     // Todo
     return depth() < 4;
   }
-
+  
+  void static ExchangeGlobalLeafAttrs(CellHashTable &gtree, const KeySet &lroots);
+  
   static Reg CalcRegion(KeyType key, const Reg& R) {
     auto ret = R;
     SFC::template CalcRegion<FP>(key, R.max(), R.min(), ret.max(), ret.min());
@@ -675,8 +676,8 @@ void LocalUpwardTraversal(Cell<TSP> &c, Funct f, Args...args) {
  * \brief Exchange cell attrs of global leaves
  */
 template<class TSP>
-void ExchangeGlobalLeafAttrs(typename Cell<TSP>::CellHashTable &gtree,
-                             const typename Cell<TSP>::KeySet &lroots) {
+void Cell<TSP>::ExchangeGlobalLeafAttrs(typename Cell<TSP>::CellHashTable &gtree,
+                                        const typename Cell<TSP>::KeySet &lroots) {
   // data.gleaves_ is unnecessary?
   using KeyType = typename Cell<TSP>::KeyType;
   using AttrType = typename Cell<TSP>::AttrType;
@@ -752,51 +753,6 @@ void GlobalUpwardTraversal(Cell<TSP> &c, Funct f, Args...args) {
     code;                                             \
     ds.out() << std::endl;                            \
   } while(0)
-
-template<class TSP>
-template<class Funct, class ...Args>
-void Cell<TSP>::UpwardMap(Funct f, Cell<TSP> &c, Args...args) {
-  auto &data = c.data();
-
-  // perform post-order (upward) traverse
-  // algorithm:
-  //   if c is in the global tree:
-  //     for lr in local roots:
-  //       perform local upward up to lr
-  //     end for
-  //     exchange global leaves
-  //     perform global upward up to c
-  //   else
-  //     perform local upward up to c
-  //   end if
-
-
-  if (data.ht_gtree_.count(c.key()) > 0) {
-    // c is in the global tree. We need to
-    // 1. calculate local roots in each process,
-    // 2. allgatherv the results
-    // 3. culculate the global tree in each process
-
-    // compute upward towards all local roots
-    for (auto && key_lr : data.lroots_) {
-      TAPAS_ASSERT(data.ht_.count(key_lr) == 1);
-      auto *cell = data.ht_[key_lr];
-      LocalUpwardTraversal(*cell, f, args...);
-    }
-
-    ExchangeGlobalLeafAttrs<TSP>(data.ht_gtree_, data.lroots_);
-
-    GlobalUpwardTraversal(c, f, args...);
-  } else {
-
-    // c is not in the global tree, which means c's subtree is perfectly local.
-    // This means that the user called UpwardMap not from the root cell.
-    // We're not sure yet if such invocation is allowed in Tapas programming model.
-
-    assert(false); // for debug
-    LocalUpwardTraversal(c, f, args...);
-  }
-}
 
 template<class TSP>
 template<class Funct, class...Args>
