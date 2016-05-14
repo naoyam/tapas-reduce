@@ -664,21 +664,6 @@ struct ExactLET {
   // However, it is actually not possible because LET class is declared as 'friend' in the Cell class
   // only with TSP parameter. It's impossible to declare a partial specialization to be friend.
 
-  // Supporting routine for Traverse(KeyType, KeyType, Data, KeySet, KeySet);
-  template<class UserFunct, class...Args>
-  static void Traverse(KeyType trg_key, std::vector<KeyType> src_keys,
-                       Data &data, KeySet &list_attr, KeySet &list_body,
-                       std::mutex &list_attr_mutex, std::mutex &list_body_mutex,
-                       UserFunct f, Args...args) {
-    // Apply Traverse for each keys in src_keys.
-    // If interaction between trg_key and src_keys[i] is 'approximate', trg_keys[i+1...] will be all 'approximate'.
-    for (size_t i = 0; i < src_keys.size(); i++) {
-      Traverse(trg_key, src_keys[i], data, list_attr, list_body,
-               list_attr_mutex, list_body_mutex,
-               f, args...);
-    }
-  }
-
   /**
    * \brief Traverse a virtual global tree and collect cells to be requested to other processes.
    * \param p Traget particle
@@ -693,6 +678,8 @@ struct ExactLET {
                        std::mutex &list_attr_mutex, std::mutex &list_body_mutex,
                        UserFunct f, Args...args) {
     SCOREP_USER_REGION("LET-Traverse", SCOREP_USER_REGION_TYPE_FUNCTION);
+
+    using Th = typename CellType::Threading;
 
     // Traverse traverses the hypothetical global tree and constructs a list of
     // necessary cells required by the local process.
@@ -717,36 +704,70 @@ struct ExactLET {
       //tapas::debug::DebugStream("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " is_src_local_leaf" << std::endl;
       return; // SplitType::None;
     }
-
+    
     if (is_src_remote_leaf) {
       // If the source cell is a remote leaf, we need it (with it's bodies).
+      list_attr_mutex.lock();
       list_attr.insert(src_key);
+      list_attr_mutex.unlock();
+
+      list_body_mutex.lock();
       list_body.insert(src_key);
+      list_body_mutex.unlock();
       //tapas::debug::DebugStream("traverse_count").out() << SFC::Simplify(trg_key) << " " << SFC::Simplify(src_key) << " is_src_remote_leaf" << std::endl;
       return; // SplitType::Body;
     }
     TAPAS_ASSERT(SFC::GetDepth(src_key) <= SFC::MAX_DEPTH);
+    list_attr_mutex.lock();
     list_attr.insert(src_key);
+    list_attr_mutex.unlock();
 
     // Approx/Split branch
-    int depth = SFC::GetDepth(src_key);
-    data.let_func_count[depth]++;
     SplitType split = ExactLET<TSP>::ProxyCell::PredSplit2(trg_key, src_key, data, f, args...); // automated predicator object
+
+    const constexpr size_t kNspawn = 3;
+    bool to_spawn = SFC::GetDepth(trg_key) < kNspawn && SFC::GetDepth(src_key) < kNspawn;
+    
+    typename Th::TaskGroup tg;
 
     switch(split) {
       case SplitType::SplitBoth:
-        for (KeyType trg_ch : SFC::GetChildren(trg_key)) {
-          if (ht.count(trg_ch) > 0) {
-            for (KeyType src_ch : SFC::GetChildren(src_key)) {
-              Traverse(trg_ch, src_ch, data, list_attr, list_body, list_attr_mutex, list_body_mutex, f, args...);
+        if (to_spawn) {
+          for (KeyType trg_ch : SFC::GetChildren(trg_key)) {
+            if (ht.count(trg_ch) > 0) {
+              for (KeyType src_ch : SFC::GetChildren(src_key)) {
+                tg.createTask([&]() mutable {
+                    Traverse(trg_ch, src_ch, data, list_attr, list_body, list_attr_mutex, list_body_mutex, f, args...);
+                  });
+              }
+            }
+          }
+          tg.wait();
+        } else {
+          for (KeyType trg_ch : SFC::GetChildren(trg_key)) {
+            if (ht.count(trg_ch) > 0) {
+              for (KeyType src_ch : SFC::GetChildren(src_key)) {
+                Traverse(trg_ch, src_ch, data, list_attr, list_body, list_attr_mutex, list_body_mutex, f, args...);
+              }
             }
           }
         }
         break;
       case SplitType::SplitLeft:
-        for (KeyType ch : SFC::GetChildren(trg_key)) {
-          if (ht.count(ch) > 0) {
-            Traverse(ch, src_key, data, list_attr, list_body, list_attr_mutex, list_body_mutex, f, args...);
+        if (to_spawn) {
+          for (KeyType ch : SFC::GetChildren(trg_key)) {
+            if (ht.count(ch) > 0) {
+              tg.createTask([&]() mutable {
+                  Traverse(ch, src_key, data, list_attr, list_body, list_attr_mutex, list_body_mutex, f, args...);
+                });
+            }
+          }
+          tg.wait();
+        } else {
+          for (KeyType ch : SFC::GetChildren(trg_key)) {
+            if (ht.count(ch) > 0) {
+              Traverse(ch, src_key, data, list_attr, list_body, list_attr_mutex, list_body_mutex, f, args...);
+            }
           }
         }
         break;
@@ -755,11 +776,24 @@ struct ExactLET {
         break;
 
       case SplitType::SplitRight:
-        Traverse(trg_key, SFC::GetChildren(src_key), data, list_attr, list_body, list_attr_mutex, list_body_mutex, f, args...);
+        if (to_spawn) {
+          for (KeyType src_ch : SFC::GetChildren(src_key)) {
+            tg.createTask([&]() mutable {
+                Traverse(trg_key, src_ch, data, list_attr, list_body, list_attr_mutex, list_body_mutex, f, args...);
+              });
+          }
+          tg.wait();
+        } else {
+          for (KeyType src_ch : SFC::GetChildren(src_key)) {
+            Traverse(trg_key, src_ch, data, list_attr, list_body, list_attr_mutex, list_body_mutex, f, args...);
+          }
+        }
         break;
 
       case SplitType::Approx:
-        list_attr.insert(src_key); // <----- (4)
+        list_attr_mutex.lock();
+        list_attr.insert(src_key);
+        list_attr_mutex.unlock();
         break;
 
       default: assert(0); // Never happens
