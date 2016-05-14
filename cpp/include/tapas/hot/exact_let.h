@@ -335,11 +335,6 @@ struct ExactLET {
         lv1_mod |= cell.subcell(i).marked_modified_;
       }
 
-      if (data.mpi_rank_ == 0) {
-        std::cout << "\t\t### lv0 Modified = " << lv0_mod << std::endl;
-        std::cout << "\t\t### lv1 Modified = " << lv1_mod << std::endl;
-      }
-
       if (lv0_mod && !lv1_mod) {
         // Upward
         return MAP1_UP;
@@ -365,20 +360,14 @@ struct ExactLET {
           lv2_mod |= cell.subcell(i).marked_modified_;
         }
         
-        if (data.mpi_rank_ == 0) {
-          std::cout << "-------------------------------------" << std::endl;
-          std::cout << "\t\t### Re-checking with key=1" << std::endl;
-          std::cout << "\t\t### lv0 Modified = " << lv0_mod << std::endl;
-          std::cout << "\t\t### lv1 Modified = " << lv1_mod << std::endl;
-          std::cout << "\t\t### lv2 Modified = " << lv2_mod << std::endl;
-        }
-
         if (!lv1_mod && lv2_mod) {
           // Downward
           return MAP1_DOWN;
         }
       }
 
+      std::cerr << "Tapas [ERROR] Cannot detect directdion for 1-argument map" << std::endl;
+      exit(-1);
       return MAP1_UNKNOWN; // Error
     }
 

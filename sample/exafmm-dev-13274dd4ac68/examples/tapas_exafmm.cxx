@@ -125,9 +125,16 @@ struct FMM_Downward {
   template<class Cell>
   inline void operator()(Cell &c) {
     //if (c.nb() == 0) return;
-    if (!c.IsRoot()) L2L(c);
-    if (c.IsLeaf() && c.nb() > 0) {
-      tapas::Map(L2P, c.bodies(), &c);
+    if (!c.IsRoot()) {
+      L2L(c);
+    }
+    
+    if (c.IsLeaf()) {
+      if (c.nb() > 0) {
+        tapas::Map(L2P, c.bodies(), &c);
+      }
+    } else {
+      tapas::Map(*this, c.subcells());
     }
   }
 };
@@ -241,6 +248,7 @@ struct FMM_DTT {
 
   template<class Cell>
   inline void tapas_splitCell(Cell &Ci, Cell &Cj, real_t Ri, real_t Rj, int mutual, int nspawn, real_t theta) {
+    (void) Ri; (void) Rj;
     bool Ci_IsLeaf = Ci.IsLeaf();
     if (Cj.IsLeaf()) {
       assert(!Ci.IsLeaf());                                   //  Make sure Ci is not leaf
@@ -427,7 +435,7 @@ void PrintProcInfo() {
     }
   }
 
-  //sleep(10); // for gdb attach
+  sleep(10); // for gdb attach
   MPI_Barrier(MPI_COMM_WORLD);
 #else
   std::cout << "MPI Rank 0" << hostname << ":" << pid << std::endl;
@@ -616,7 +624,7 @@ int main(int argc, char ** argv) {
       double bt = GetTime();
 
       tapas::Map(FMM_Downward(), *root);
-      tapas::DownwardMap(FMM_Downward(), *root);
+      //tapas::DownwardMap(FMM_Downward(), *root);
 
       double et = GetTime();
       logger::stopTimer("Downward pass");

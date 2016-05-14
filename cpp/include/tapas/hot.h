@@ -845,7 +845,15 @@ Cell<TSP> &Cell<TSP>::subcell(int idx) {
       ss << "      "
          << SFC::Simplify(k) << " "
          << SFC::Decode(k) << " "
-         << k << std::endl;
+         << k << " ";
+
+      if (data_->lroots_.count(k) > 0) {
+        ss << "[lroot] ";
+      } else if (data_->ht_gtree_.count(k) > 0) {
+        ss << "[gtree] ";
+      }
+      
+      ss << std::endl;
     }
 
     TAPAS_LOG_ERROR() << ss.str(); abort();

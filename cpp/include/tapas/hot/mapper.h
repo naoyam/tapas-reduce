@@ -180,6 +180,9 @@ struct CPUMapper {
 
   Map1Dir map1_dir_;
 
+  using KeyType = typename Cell::KeyType;
+  using SFC = typename Cell::SFC;
+
   CPUMapper() : opt_mutual_(false), map1_dir_(Map1Dir::None) { }
 
   /**
@@ -206,7 +209,7 @@ struct CPUMapper {
   }
 
   /**
-   *
+   * CPUMapper::Map (SubcellIterator)
    */
   template <class Funct, class...Args>
   void Map(Funct f, tapas::iterator::SubCellIterator<Cell> iter, Args...args) {
@@ -215,7 +218,18 @@ struct CPUMapper {
 
     TAPAS_ASSERT(iter.index() == 0);
 
+    const auto &data = iter.cell().data();
+    KeyType k = iter.cell().key();
+    
     for (int i = 0; i < iter.size(); i++) {
+      // In downward mode, if the subcells are out of the local process
+      // (= the cell is a global leaf but not a local root)
+      // just skip if.
+      if (map1_dir_ == Map1Dir::Downward) {
+        KeyType ck = SFC::Child(iter.cell().key(), i);
+        if (data.ht_.count(ck) == 0) continue;
+      }
+      
       tg.createTask([=]() mutable { this->Map(f, *iter, args...); });
       iter++;
     }
@@ -344,7 +358,6 @@ struct CPUMapper {
   inline void Map(Funct f, Cell &c, Args...args) {
 
     if (c.IsRoot()) {
-      if (c.data().mpi_rank_ == 0) std::cout << "Map-1 is called." << std::endl;
       // Map() has just started.
       // Find the direction of the function f (upward or downward)
       if (map1_dir_ != Map1Dir::None) {
@@ -356,7 +369,9 @@ struct CPUMapper {
 
       switch(dir) {
         case LET::MAP1_UP:
+#ifdef TAPAS_DEBUG
           if (c.data().mpi_rank_ == 0) std::cout << "In Upward: Determining 1-map direction (in upward) : UP => OK" << std::endl;
+#endif
           map1_dir_ = Map1Dir::Upward;
           
           StartUpwardMap(f, c, args...); // Run local upward first
@@ -364,12 +379,22 @@ struct CPUMapper {
           
           map1_dir_ = Map1Dir::None;
           return;
+          
         case LET::MAP1_DOWN:
+#ifdef TAPAS_DEBUG
           if (c.data().mpi_rank_ == 0) std::cout << "Downward is detected." << std::endl;
-          MPI_Finalize();
-          exit(0);
+#endif
+          
+          map1_dir_ = Map1Dir::Downward;
+
+          f(c, args...);
+          
+          map1_dir_ = Map1Dir::None;
+          return;
+          
         default:
           if (c.data().mpi_rank_ == 0) std::cout << "In Map-1: Determining 1-map direction (in upward) : NOT UP => Wrong !!!" << std::endl;
+          TAPAS_ASSERT("Direction is Unknown.");
           return;
       }
     } else {
@@ -388,36 +413,22 @@ struct CPUMapper {
         if (data.gleaves_.count(c.key()) == 0) { // Stop traversal if c is a global leaf.
           f(c, args...);
         }
-      } else {
-        TAPAS_ASSERT(0);
+      } else if (map1_dir_ == Map1Dir::Downward) {
+        // non-local cells are eliminated in Map(SubcellIterator).
+        f(c, args...);
       }
     }
   }
   
 
+  /**
+   * CPUMapper::DownwardMap (deperecated)
+   */
   template<class Funct, class...Args>
   inline void DownwardMap(Funct f, Cell &c, Args...args) {
-#if 0
-    if (c.IsRoot()) {
-      auto dir = LET::FindMap1Direction(c, f, args...);
-
-      if (c.data().mpi_rank_ == 0) {
-        switch(dir) {
-          case LET::MAP1_UP:
-            std::cout << "In Downward: Determining 1-map direction (in upward) : UP => Wrong" << std::endl;
-            break;
-          case LET::MAP1_DOWN:
-            std::cout << "In Downward: Determining 1-map direction (in upward) : DOWN => OK" << std::endl;
-            //abort();
-            break;
-          case LET::MAP1_UNKNOWN:
-            std::cout << "In Downward: Determining 1-map direction (in upward) : UNKNOWN => Wrong" << std::endl;
-            //abort();
-            break;
-        }
-      }
-    }
-#endif
+    // This function is deprecated.
+    TAPAS_ASSERT(!"Deperecated function");
+    abort();
     
     Cell::DownwardMap(f, c, args...);
   }
@@ -503,7 +514,18 @@ struct GPUMapper {
 
     TAPAS_ASSERT(iter.index() == 0);
 
+    const auto &data = iter.cell().data();
+    KeyType k = iter.cell().key();
+      
     for (int i = 0; i < iter.size(); i++) {
+      // In downward mode, if the subcells are out of the local process
+      // (= the cell is a global leaf but not a local root)
+      // just skip if.
+      if (map1_dir_ == Map1Dir::Downward) {
+        KeyType ck = SFC::Child(iter.cell().key(), i);
+        if (data.ht_.count(ck) == 0) continue;
+      }
+      
       tg.createTask([=]() mutable { this->Map(f, *iter, args...); });
       iter++;
     }
