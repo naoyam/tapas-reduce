@@ -666,25 +666,16 @@ struct ExactLET {
 
   // Supporting routine for Traverse(KeyType, KeyType, Data, KeySet, KeySet);
   template<class UserFunct, class...Args>
-  static void Traverse(std::vector<KeyType> &trg_keys, KeyType src_key,
-                       Data &data, KeySet &list_attr, KeySet &list_body,
-                       UserFunct f, Args...args) {
-    // Apply Traverse for each keys in trg_keys. If interaction between trg_keys[i] and src_key is 'approximate',
-    // trg_keys[i+1...] will be all 'approximate'.
-    for (size_t i = 0; i < trg_keys.size(); i++) {
-      Traverse(trg_keys[i], src_key, data, list_attr, list_body, f, args...);
-    }
-  }
-
-  // Supporting routine for Traverse(KeyType, KeyType, Data, KeySet, KeySet);
-  template<class UserFunct, class...Args>
   static void Traverse(KeyType trg_key, std::vector<KeyType> src_keys,
                        Data &data, KeySet &list_attr, KeySet &list_body,
+                       std::mutex &list_attr_mutex, std::mutex &list_body_mutex,
                        UserFunct f, Args...args) {
     // Apply Traverse for each keys in src_keys.
     // If interaction between trg_key and src_keys[i] is 'approximate', trg_keys[i+1...] will be all 'approximate'.
     for (size_t i = 0; i < src_keys.size(); i++) {
-      Traverse(trg_key, src_keys[i], data, list_attr, list_body, f, args...);
+      Traverse(trg_key, src_keys[i], data, list_attr, list_body,
+               list_attr_mutex, list_body_mutex,
+               f, args...);
     }
   }
 
@@ -699,6 +690,7 @@ struct ExactLET {
   template<class UserFunct, class...Args>
   static void Traverse(KeyType trg_key, KeyType src_key, Data &data,
                        KeySet &list_attr, KeySet &list_body,
+                       std::mutex &list_attr_mutex, std::mutex &list_body_mutex,
                        UserFunct f, Args...args) {
     SCOREP_USER_REGION("LET-Traverse", SCOREP_USER_REGION_TYPE_FUNCTION);
 
@@ -746,7 +738,7 @@ struct ExactLET {
         for (KeyType trg_ch : SFC::GetChildren(trg_key)) {
           if (ht.count(trg_ch) > 0) {
             for (KeyType src_ch : SFC::GetChildren(src_key)) {
-              Traverse(trg_ch, src_ch, data, list_attr, list_body, f, args...);
+              Traverse(trg_ch, src_ch, data, list_attr, list_body, list_attr_mutex, list_body_mutex, f, args...);
             }
           }
         }
@@ -754,7 +746,7 @@ struct ExactLET {
       case SplitType::SplitLeft:
         for (KeyType ch : SFC::GetChildren(trg_key)) {
           if (ht.count(ch) > 0) {
-            Traverse(ch, src_key, data, list_attr, list_body, f, args...);
+            Traverse(ch, src_key, data, list_attr, list_body, list_attr_mutex, list_body_mutex, f, args...);
           }
         }
         break;
@@ -763,7 +755,7 @@ struct ExactLET {
         break;
 
       case SplitType::SplitRight:
-        Traverse(trg_key, SFC::GetChildren(src_key), data, list_attr, list_body, f, args...);
+        Traverse(trg_key, SFC::GetChildren(src_key), data, list_attr, list_body, list_attr_mutex, list_body_mutex, f, args...);
         break;
 
       case SplitType::Approx:
@@ -821,10 +813,12 @@ struct ExactLET {
     req_keys_attr.clear(); // cells of which attributes are to be transfered from remotes to local
     req_keys_body.clear(); // cells of which bodies are to be transfered from remotes to local
 
+    std::mutex list_attr_mutex, list_body_mutex;
+
     // Construct request lists of necessary cells
     req_keys_attr.insert(root.key());
 
-    Traverse(root.key(), root.key(), root.data(), req_keys_attr, req_keys_body, f, args...);
+    Traverse(root.key(), root.key(), root.data(), req_keys_attr, req_keys_body, list_attr_mutex, list_body_mutex, f, args...);
 
     double end = MPI_Wtime();
     MPI_Barrier(MPI_COMM_WORLD);
