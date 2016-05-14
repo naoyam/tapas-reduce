@@ -232,6 +232,7 @@ struct ExactLET {
     friend ProxyAttr;
     
    public:
+    static const constexpr bool Inspector = true;
     // Export same type definitions as tapas::hot::Cell does.
     using KeyType = tapas::hot::ExactLET<TSP>::KeyType;
     using SFC = tapas::hot::ExactLET<TSP>::SFC;
@@ -282,8 +283,6 @@ struct ExactLET {
 
     inline Mapper &mapper() { return mapper_; }
     inline const Mapper &mapper() const { return mapper_; }
-
-    static const constexpr bool Inspector = true;
 
     /**
      * bool ProxyCell::operator==(const ProxyCell &rhs) const

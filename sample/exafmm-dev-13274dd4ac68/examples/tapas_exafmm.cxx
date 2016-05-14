@@ -238,7 +238,9 @@ struct FMM_DTT {
     
     if (R2 > (Ri + Rj) * (Ri + Rj)) {                   // If distance is far enough
       // tapas::Apply(M2L, Ci, Cj, Xperiodic, mutual); // \todo
+      // if (!Cell::Inspector) M2L(Ci, Cj, Xperiodic, mutual);
       M2L(Ci, Cj, Xperiodic, mutual);                   //  M2L kernel
+      
     } else if (Ci.IsLeaf() && Cj.IsLeaf()) {            // Else if both cells are bodies
       tapas::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic, mutual);
     } else {                                                    // Else if cells are close but not bodies
