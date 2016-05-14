@@ -123,12 +123,18 @@ inline void Map(Funct f, Iterator iter, Args...args) {
 
 template<class Funct, class T, class...Args>
 inline void UpwardMap(Funct f, T &x, Args...args) {
+  // Deprecated:
+  TAPAS_ASSERT(!"tapas::UpwardMap() is deprecated.");
+  exit(-1);
   auto &c = x.cell();
   c.mapper().Map(f, x, args...);
 }
 
 template<class Funct, class T, class...Args>
 inline void DownwardMap(Funct f, T &x, Args...args) {
+  // Deprecated:
+  TAPAS_ASSERT(!"tapas::DownwardMap() is deprecated.");
+  exit(-1);
   auto &c = x.cell();
   c.mapper().DownwardMap(f, x, args...);
 }

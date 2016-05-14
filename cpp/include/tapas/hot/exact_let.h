@@ -513,7 +513,7 @@ struct ExactLET {
         TAPAS_ASSERT(!"Tapas internal eror: ProxyCell::body_attr() must not be called in LET mode.");
       }
 
-      TAPAS_ASSERT(idx < bodies_.size());
+      TAPAS_ASSERT(idx < (index_t)bodies_.size());
       return *bodies_[idx];
     }
 
