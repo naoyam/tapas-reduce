@@ -154,7 +154,7 @@ void P2M(Cell &C) {
       for (int m=0; m<=n; m++) {
         int nm  = n * n + n - m;
         int nms = n * (n + 1) / 2 + m;
-        attr.M[nms] += B.SRC * Ynm[nm]; // allow user to reduction ?
+        tapas::Accumulate(attr.M[nms], B.SRC * Ynm[nm]);
       }
     }
   }
@@ -165,7 +165,7 @@ void P2M(Cell &C) {
 template<class Cell>
 void M2M(Cell &C) {
   complex_t Ynm[P*P], YnmTheta[P*P];
-
+  
   auto attr = C.attr();
 
   for (int i = 0; i < C.nsubcells(); ++i) {

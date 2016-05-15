@@ -139,6 +139,11 @@ inline void DownwardMap(Funct f, T &x, Args...args) {
   c.mapper().DownwardMap(f, x, args...);
 }
 
+template<class T>
+void Accumulate(T& to_val, T val) {
+  to_val += val;
+}
+
 } // namespace tapas
 
 #endif // TAPAS_MAP_H_
