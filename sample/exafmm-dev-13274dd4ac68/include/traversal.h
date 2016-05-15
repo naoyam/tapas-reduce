@@ -196,6 +196,13 @@ private:
       for (C_iter cj=Cj0+Cj->ICHILD; cj!=Cj0+Cj->ICHILD+Cj->NCHILD; cj++) {// Loop over Cj's children
         traverse(Ci, cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
       }                                                         //  End loop over Cj's children
+#if 0
+		} else {
+      TraverseRange traverseRange(this, Ci0+Ci->ICHILD, Ci0+Ci->ICHILD+Ci->NCHILD,// Instantiate recursive functor
+																	Cj0+Cj->ICHILD, Cj0+Cj->ICHILD+Cj->NCHILD, Xperiodic, mutual, remote);
+      traverseRange();                                          //  Traverse for range of cell pairs
+    }
+#else
     } else if (Ci->NBODY + Cj->NBODY >= nspawn || (mutual && Ci == Cj)) {// Else if cells are still large
       TraverseRange traverseRange(this, Ci0+Ci->ICHILD, Ci0+Ci->ICHILD+Ci->NCHILD,// Instantiate recursive functor
 				  Cj0+Cj->ICHILD, Cj0+Cj->ICHILD+Cj->NCHILD, Xperiodic, mutual, remote);
@@ -209,6 +216,7 @@ private:
         traverse(Ci, cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
       }                                                         //  End loop over Cj's children
     }                                                           // End if for leafs and Ci Cj size
+#endif
   }
 
 public:
