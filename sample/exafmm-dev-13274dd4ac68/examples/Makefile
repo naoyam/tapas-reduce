@@ -53,8 +53,9 @@ parallel: parallel.cxx $(OBJECTS)
 	$(MPICXX) $^ $(LFLAGS) -o $@
 #	mpirun -np 9 ./a.out --ncrit 256 --distribution plummer
 
-tapas: serial_tapas parallel_tapas
+tapas: parallel_tapas
 
+# NOTE: Single node HOT code is no longer maintained.
 serial_tapas: .ALWAYS $(OBJECTS) #tapas_exafmm.cxx $(OBJECTS)
 	$(CXX) $(DEBUG) $(LOG) tapas_exafmm.cxx $(OBJECTS) $(LFLAGS) -o $@
 

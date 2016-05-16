@@ -199,24 +199,24 @@ fi
 SRC_DIR=$SRC_ROOT/sample/barnes-hut
 BIN=$SRC_DIR/bh_mpi
 
-echoCyan make CXX=\"${CXX}\" CC=\"${CC}\" MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" VERBOSE=1 MODE=debug -C $SRC_DIR clean all
-make CXX=${CXX} CC=${CC} MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=debug -C $SRC_DIR clean all
+echoCyan make CXX=\"${CXX}\" CC=\"${CC}\" MPICC=\"${MPICC}\" MPICXX=\"${MPICXX}\" VERBOSE=1 MODE=debug -C $SRC_DIR clean $(basename $BIN)
+make CXX=${CXX} CC=${CC} MPICC="${MPICC}" MPICXX="${MPICXX}" VERBOSE=1 MODE=debug -C $SRC_DIR clean $(basename $BIN)
 
 for np in ${NP[@]}; do
     for nb in ${NB[@]}; do
         echoCyan ${MPIEXEC} -n $np $SRC_DIR/bh_mpi -w $nb
         ${MPIEXEC} -n $np $SRC_DIR/bh_mpi -w $nb | tee $TMPFILE
 
-        PERR=$(grep "P ERR" $TMPFILE | grep -oE "[0-9.e+-]+")
-        FERR=$(grep "F ERR" $TMPFILE | grep -oE "[0-9.e+-]+")
+        PERR=$(grep "P ERR" $TMPFILE | grep -oE "[0-9.e+-]+|[+-]?nan")
+        FERR=$(grep "F ERR" $TMPFILE | grep -oE "[0-9.e+-]+|[+-]?nan")
 
-        if [[ $(python -c "print $PERR > $MAX_ERR") == "True" ]]; then
+        if [[ $(python -c "print float('$PERR') < $MAX_ERR") == "False" ]]; then
             echoRed "*** Error check failed. P ERR $PERR > $MAX_ERR"
             STATUS=$(expr $STATUS + 1)
         else
             echoGreen P ERR OK
         fi
-        if [[ $(python -c "print $FERR > $MAX_ERR") == "True" ]]; then
+        if [[ $(python -c "print float('$FERR') < $MAX_ERR") == "False" ]]; then
             echoRed "*** Error check failed. F ERR $FERR > $MAX_ERR"
             STATUS=$(expr $STATUS + 1)
         else
@@ -294,14 +294,14 @@ for nb in ${NB[@]}; do
                 rm -f $TMPFILE; sleep 1s
 
                 # We no longer check serial_tapas
-                echoCyan $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
-                $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
-                cat $TMPFILE
+                # echoCyan $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual
+                # $SRC_DIR/serial_tapas -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
+                # cat $TMPFILE
 
-                accuracyCheck $TMPFILE
+                # accuracyCheck $TMPFILE
 
-                echo
-                echo
+                # echo
+                # echo
 
                 for np in ${NP[@]}; do
                     # run Exact LET TapasFMM

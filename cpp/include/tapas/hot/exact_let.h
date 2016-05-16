@@ -724,7 +724,7 @@ struct ExactLET {
     // Approx/Split branch
     SplitType split = ExactLET<TSP>::ProxyCell::PredSplit2(trg_key, src_key, data, f, args...); // automated predicator object
 
-    const constexpr size_t kNspawn = 3;
+    const constexpr int kNspawn = 3;
     bool to_spawn = SFC::GetDepth(trg_key) < kNspawn && SFC::GetDepth(src_key) < kNspawn;
     
     typename Th::TaskGroup tg;

@@ -38,6 +38,8 @@
 #include "tapas/sfc_morton.h"
 #include "tapas/single_node_mapper.h"
 
+#error "Single node HOT is no longer maintained. Please use MPI HOT code."
+
 namespace {
 namespace iter = tapas::iterator;
 }

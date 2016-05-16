@@ -172,7 +172,7 @@ struct Approximate {
         assert(false);
       }
     } else {
-      //tapas::Map(approximate, c.subcells());
+      tapas::Map(*this, c.subcells());
       float4 center = {0.0, 0.0, 0.0, 0.0};
       for (int i = 0; i < c.nsubcells(); ++i) {
         Cell &sc = c.subcell(i);
