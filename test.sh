@@ -318,7 +318,7 @@ for nb in ${NB[@]}; do
                     #${MPIEXEC} -n $np $SRC_DIR/parallel_tapas_oneside -n $nb -c $ncrit -d $dist --mutual $mutual > $TMPFILE
                     #cat $TMPFILE
 
-                    accuracyCheck $TMPFILE
+                    #accuracyCheck $TMPFILE
                 done
 
                 echo
