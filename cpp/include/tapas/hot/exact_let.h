@@ -78,7 +78,7 @@ struct ExactLET {
 
     template<class T>
     inline ProxyAttr& operator=(const T&) {
-      cell_.MarkModified();
+      cell_->MarkModified();
       return *this;
     }
 
