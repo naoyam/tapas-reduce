@@ -23,25 +23,26 @@ struct P2P {
 
   P2P() {}
 
+  template<class _Body, class _BodyAttr>
 #ifdef __CUDACC__
   __host__ __device__ __forceinline__
 #endif
-  void operator() (Body* Bi, Body* Bj, kvec4 &biattr, vec3 Xperiodic, int /*mutual*/) {
-    vec3 dX = Bi->X - Bj->X - Xperiodic;
+  void operator() (_Body& Bi, _BodyAttr &Bi_attr, _Body& Bj, _BodyAttr &Bj_attr, vec3 Xperiodic, int /*mutual*/) {
+    vec3 dX = Bi.X - Bj.X - Xperiodic;
     real_t R2 = norm(dX) + EPS2;
     if (R2 != 0) {
       real_t invR2 = 1.0 / R2;
-      real_t invR = Bi->SRC * Bj->SRC * sqrt(invR2);
+      real_t invR = Bi.SRC * Bj.SRC * sqrt(invR2);
       dX *= invR2 * invR;
-      biattr[0] += invR;
-      biattr[1] -= dX[0];
-      biattr[2] -= dX[1];
-      biattr[3] -= dX[2];
+      Bi_attr[0] += invR;
+      Bi_attr[1] -= dX[0];
+      Bi_attr[2] -= dX[1];
+      Bi_attr[3] -= dX[2];
     }
   }
 };
 
-#else /* __CUDACC__ */
+#else /* not __CUDACC__ */
 
 struct P2P {
   template<class _Body, class _BodyAttr>

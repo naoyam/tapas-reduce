@@ -4,6 +4,8 @@
 #ifndef TAPAS_VECTORMAP_CPU_H_
 #define TAPAS_VECTORMAP_CPU_H_
 
+#include "vectormap_util.h"
+
 /** @file vectormap_cpu.h @brief A mock direct part working similar
     way to the GPU implementation. */
 
@@ -19,7 +21,7 @@
 
 namespace tapas {
 
-template<int _DIM, class _FP, class _BT, class _BT_ATTR>
+template<int _DIM, class _FP, class _BT, class _BT_ATTR, class _CELL_ATTR>
 struct Vectormap_CPU {
 
   template <typename T>

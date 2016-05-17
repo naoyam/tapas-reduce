@@ -30,7 +30,6 @@
 #include "tapas_exafmm.h"
 #include "LaplaceSphericalCPU_tapas.h"
 #include "LaplaceP2PCPU_tapas.h"
-#include "debug_tapas.h"
 
 #ifdef TBB
 # include <tbb/task_scheduler_init.h>
@@ -235,7 +234,7 @@ struct FMM_DTT {
     Rj = (Rj / 2 * 1.00001) / theta;
 
     //DebugWatchCell(Ci, Cj, Ri, Rj, R2);
-    
+
     if (R2 > (Ri + Rj) * (Ri + Rj)) {                   // If distance is far enough
       // tapas::Apply(M2L, Ci, Cj, Xperiodic, mutual); // \todo
       // if (!Cell::Inspector) M2L(Ci, Cj, Xperiodic, mutual);
@@ -284,7 +283,7 @@ struct FMM_DTT {
     } else {
       // Split both side
       tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
-    }
+  }
 #endif
   }
 };
@@ -474,17 +473,11 @@ int main(int argc, char ** argv) {
   task_scheduler_init init(args.threads);
 #endif
 
-  // Dummy CUDA call to initialize the runtime
-  // (for performance measurement)
-#ifdef __CUDACC__
-  {
-    std::cout << "Initializing CUDA..." << std::endl;
-    int *p = nullptr;
-    cudaMalloc(&p, sizeof(int));
-    cudaFree(p);
-  }
-#endif
-
+  // This function is called by Tapas automatically and user program doesn't need to call it.
+  // In this case, however, we want to exclude initialization cost of CUDA runtime from performance
+  // measurement.
+  tapas::SetGPU();
+  
   if (args.mpi_rank == 0) {
     std::cout << "Threading model " << FMM_Threading::name() << std::endl;
   }
@@ -511,7 +504,10 @@ int main(int argc, char ** argv) {
 
 #ifdef __CUDACC__
   if (args.mutual) {
-    std::cerr << "Mutual is not supported for CUDA implementation in this version." << std::endl;
+    std::cerr << "TapasFMM: [Error] Mutual is not supported for CUDA implementation in this version." << std::endl;
+#ifdef USE_MPI
+    MPI_Finalize();
+#endif
     exit(-1);
   }
 #endif

@@ -25,9 +25,8 @@ namespace tapas {
 
 static void rank_in_node(MPI_Comm comm, int &rankofnode, int &rankinnode,
                          int &nprocsinnode) {
-  int cc;
   int nprocs, rank;
-  cc = MPI_Comm_size(comm, &nprocs);
+  int cc = MPI_Comm_size(comm, &nprocs);
   assert(cc == MPI_SUCCESS);
   cc = MPI_Comm_rank(comm, &rank);
   assert(cc == MPI_SUCCESS);
@@ -98,6 +97,41 @@ static void rank_in_node(MPI_Comm comm, int &rankofnode, int &rankinnode,
 }
 
 #endif /* USE_MPI */
+
+
+void SetGPU() {
+  if (getenv("CUDA_VISIBLE_DEVICES") != nullptr) {
+    // if CUDA_VISIBLE_DEVICES is already set, it seems CUDA device initialization is done.
+    return;
+  }
+
+  int rank = 0;
+
+#ifdef USE_MPI
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+#endif
+
+  int rankofnode = 0, rankinnode = 0, nprocsinnode = 1;
+#ifdef USE_MPI
+  rank_in_node(MPI_COMM_WORLD, rankofnode, rankinnode, nprocsinnode);
+#endif
+
+  std::stringstream ss;
+  ss << rankinnode;
+  setenv("CUDA_VISIBLE_DEVICES", ss.str().c_str(), 1);
+
+  std::cout << "rank " << rank << " (rank in node = " << rankinnode << ", "
+            << "rank of node = " << rankofnode << ") "
+            << "CUDA_VISIBLE_DEVICES=" << getenv("CUDA_VISIBLE_DEVICES") << std::endl;
+
+  // explicitly initialize CUDA runtime by calling dummy cudaMalloc().
+  // Dummy CUDA API call to initialize the runtime (for performance measurement)
+#ifdef __CUDACC__
+  int *p = nullptr;
+  cudaMalloc(&p, sizeof(int));
+  cudaFree(p);
+#endif
+}
 
 }
 

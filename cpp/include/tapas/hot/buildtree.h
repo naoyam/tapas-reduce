@@ -18,6 +18,11 @@
 #include "tapas/mpi_util.h"
 #include "tapas/hot/global_tree.h"
 
+#ifdef __CUDACC__
+#include <nvToolsExtCuda.h>
+#include <nvToolsExtCudaRt.h>
+#endif
+
 namespace tapas {
 namespace hot {
 
@@ -56,7 +61,7 @@ class SamplingOctree {
   template<class T> using Vector = std::vector<T, Allocator<T>>;
 
  private:
-  Vector<BodyType> bodies_;
+  std::vector<BodyType> bodies_;
   std::vector<KeyType> body_keys_;
   std::vector<KeyType> proc_first_keys_; // first key of each process's region
   Reg region_;
@@ -121,7 +126,7 @@ class SamplingOctree {
       KeyType n = SFC::GetMSBits(key, bits);
       count[n]++;
     }
-    
+
     std::vector<int> recv_buf(num_classes);
     MPI_Reduce(&count[0], &recv_buf[0], count.size(), MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
@@ -134,7 +139,7 @@ class SamplingOctree {
       std::cout << std::endl;
     }
   }
-  
+
   void ExchangeRegion() {
     Vec<kDim, FP> new_max, new_min;
 
@@ -298,6 +303,7 @@ class SamplingOctree {
 
     // Exchange bodies according to proc_first_keys_
     // new_bodies is the received bodies
+
     bodies_ = ExchangeBodies(bodies_, proc_first_keys_, region_, MPI_COMM_WORLD);
     body_keys_ = BodiesToKeys(bodies_, region_);
 
@@ -306,11 +312,11 @@ class SamplingOctree {
 
     // todo: record bodies
 
-    data_->local_bodies_ = bodies_;
+    data_->local_bodies_.assign(bodies_.begin(), bodies_.end());
     data_->local_body_keys_ = body_keys_;
+
     data_->local_body_attrs_.resize(bodies_.size());
     bzero(data_->local_body_attrs_.data(), sizeof(BodyAttrType) * bodies_.size());
-
     data_->nb_after = data_->local_bodies_.size();
 
     double end = MPI_Wtime();
@@ -452,9 +458,9 @@ class SamplingOctree {
     }
   }
 
-  Vector<BodyType> ExchangeBodies(Vector<BodyType> bodies,
-                                  const std::vector<KeyType> proc_first_keys,
-                                  const Reg &reg, MPI_Comm comm) {
+  std::vector<BodyType> ExchangeBodies(std::vector<BodyType> bodies,
+                                       const std::vector<KeyType> proc_first_keys,
+                                       const Reg &reg, MPI_Comm comm) {
     std::vector<KeyType> body_keys = BodiesToKeys(bodies, reg);
     std::vector<int> dest(body_keys.size()); // destiantion of each body
 
@@ -468,8 +474,7 @@ class SamplingOctree {
 
     tapas::SortByKeys(dest, bodies);
 
-    // exchange bodies using Alltoallv
-    Vector<BodyType> recv_bodies;
+    std::vector<BodyType> recv_bodies;
     std::vector<int> src;
 
     tapas::mpi::Alltoallv2(bodies, dest, recv_bodies, src, data_->mpi_type_body_, comm);
