@@ -151,6 +151,62 @@ inline void DownwardMap(Funct f, T &x, Args...args) {
 
 #endif
 
+#ifdef __CUDACC__
+
+/**
+ * \breif Atomic-add code from cuda-c-programming-guide (double precision version)
+ */
+__device__
+static double _atomicAdd(double* address, double val) {
+  // Should we use uint64_t ?
+  static_assert(sizeof(unsigned long long int) == sizeof(double),   "sizeof(unsigned long long int) == sizeof(double)");
+  static_assert(sizeof(unsigned long long int) == sizeof(uint64_t), "sizeof(unsigned long long int) == sizeof(uint64_t)");
+
+  unsigned long long int* address1 = (unsigned long long int*)address;
+  unsigned long long int chk;
+  unsigned long long int old;
+  chk = *address1;
+  do {
+    old = chk;
+    chk = atomicCAS(address1, old,
+                    __double_as_longlong(val + __longlong_as_double(old)));
+  } while (old != chk);
+  return __longlong_as_double(old);
+}
+
+/**
+ * \breif Atomic-add code from cuda-c-programming-guide (double precision version)
+ */
+__device__
+static float _atomicAdd(float* address, float val) {
+  // Should we use uint32_t ?
+  static_assert(sizeof(int) == sizeof(float), "sizeof(int) == sizeof(float)");
+  static_assert(sizeof(uint32_t) == sizeof(float), "sizeof(int) == sizeof(float)");
+
+  int* address1 = (int*)address;
+  int chk;
+  int old;
+  chk = *address1;
+  do {
+    old = chk;
+    chk = atomicCAS(address1, old,
+                    __float_as_int(val + __int_as_float(old)));
+  } while (old != chk);
+  return __int_as_float(old);
+}
+
+__device__
+void Accumulate(double &to_val, double val) {
+  _atomicAdd(&to_val, val);
+}
+
+__device__
+void Accumulate(float &to_val, float val) {
+  _atomicAdd(&to_val, val);
+}
+
+#endif  // __CUDACC__
+
 template<class T>
 void Accumulate(T& to_val, T val) {
   to_val += val;

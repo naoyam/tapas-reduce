@@ -5,7 +5,7 @@ const real_t EPS2 = 0.0;                                        //!< Softening p
 
 extern uint64_t numP2P;
 
-#ifdef COUNT
+#if !defined(__CUDACC__) && defined(COUNT)
 # define INC_P2P do { numP2P++; } while(0)
 #else
 # define INC_P2P
@@ -18,6 +18,7 @@ extern uint64_t numP2P;
 #endif
 
 #ifdef __CUDACC__
+
 
 struct P2P {
 
@@ -34,10 +35,10 @@ struct P2P {
       real_t invR2 = 1.0 / R2;
       real_t invR = Bi.SRC * Bj.SRC * sqrt(invR2);
       dX *= invR2 * invR;
-      Bi_attr[0] += invR;
-      Bi_attr[1] -= dX[0];
-      Bi_attr[2] -= dX[1];
-      Bi_attr[3] -= dX[2];
+      tapas::Accumulate(Bi_attr[0], invR);
+      tapas::Accumulate(Bi_attr[1], -dX[0]);
+      tapas::Accumulate(Bi_attr[2], -dX[1]);
+      tapas::Accumulate(Bi_attr[3], -dX[2]);
     }
   }
 };
@@ -50,7 +51,6 @@ struct P2P {
     INC_P2P;
     SCOREP_USER_REGION("P2P", SCOREP_USER_REGION_TYPE_FUNCTION);
     
-    kreal_t pot = 0; 
     kreal_t ax = 0;
     kreal_t ay = 0;
     kreal_t az = 0;
@@ -58,28 +58,19 @@ struct P2P {
     real_t R2 = norm(dX) + EPS2;
 
     if (R2 != 0) {
-      auto attr = Bi_attr;
       real_t invR2 = 1.0 / R2;
       real_t invR = Bi.SRC * Bj.SRC * sqrt(invR2);
       dX *= invR2 * invR;
-      pot += invR;
-      ax += dX[0];
-      ay += dX[1];
-      az += dX[2];
-
-      attr[0] += pot;
-      attr[1] -= dX[0];
-      attr[2] -= dX[1];
-      attr[3] -= dX[2];
-      Bi_attr = attr; // Element-wise assignment to BodyAttribute is not allowed in Tapas
+      Bi_attr[0] += invR;
+      Bi_attr[1] -= dX[0];
+      Bi_attr[2] -= dX[1];
+      Bi_attr[3] -= dX[2];
 
       if (mutual && Bi.X != Bj.X) {
-        attr = Bj_attr;
-        attr[0] += invR;
-        attr[1] += dX[0];
-        attr[2] += dX[1];
-        attr[3] += dX[2];
-        Bj_attr = attr;
+        Bj_attr[0] += invR;
+        Bj_attr[1] += dX[0];
+        Bj_attr[2] += dX[1];
+        Bj_attr[3] += dX[2];
       }
     }
   }
