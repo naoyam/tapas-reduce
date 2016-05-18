@@ -328,11 +328,12 @@ for nb in ${NB[@]}; do
     done
 done
 
+
 if [[ $STATUS -eq 0 ]]; then
     echo OK.
 fi
+
 exit $STATUS
-#env CC=$CC CXX=$CXX python test.py
 
 # Check the GPU version if nvcc is available
 if which nvcc >/dev/null 2>&1; then

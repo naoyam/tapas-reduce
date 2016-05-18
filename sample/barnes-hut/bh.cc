@@ -75,7 +75,7 @@ struct BH_Params : public tapas::HOT<3, real_t, float4, kBodyCoordOffset, float4
 #endif
 };
 
-using Tapas = tapas::Tapas2<BH_Params>;
+using TapasBH = tapas::Tapas<BH_Params>;
 
 double get_time() {
   struct timeval tv;
@@ -172,7 +172,7 @@ struct Approximate {
         assert(false);
       }
     } else {
-      tapas::Map(*this, c.subcells());
+      TapasBH::Map(*this, c.subcells());
       float4 center = {0.0, 0.0, 0.0, 0.0};
       for (int i = 0; i < c.nsubcells(); ++i) {
         Cell &sc = c.subcell(i);
@@ -193,7 +193,7 @@ struct interact {
   template<class Cell>
   inline void operator()(Cell &c1, Cell &c2, real_t theta) {
     if (!c1.IsLeaf()) {
-      tapas::Map(*this, tapas::Product(c1.subcells(), c2), theta);
+      TapasBH::Map(*this, tapas::Product(c1.subcells(), c2), theta);
     } else if (c1.IsLeaf() && c1.nb() == 0) {
       return;
     } else if (c2.IsLeaf()) {
@@ -202,7 +202,7 @@ struct interact {
       } else {
         // Both of c1 and c2 are leaves.
         // c1 and c2 have only one particle each. Calculate direct force.
-        tapas::Map(ComputeForce(), c1.bodies(), c2.body(0), EPS2);
+        TapasBH::Map(ComputeForce(), c1.bodies(), c2.body(0), EPS2);
       }
     } else {
       assert(c1.IsLeaf() && !c2.IsLeaf());
@@ -215,9 +215,9 @@ struct interact {
       real_t s = c2.width(0);
     
       if ((s/ d) < theta) {
-        tapas::Map(ComputeForce(), c1.bodies(), c2.attr(), EPS2);
+        TapasBH::Map(ComputeForce(), c1.bodies(), c2.attr(), EPS2);
       } else {
-        tapas::Map(*this, tapas::Product(c1, c2.subcells()), theta);
+        TapasBH::Map(*this, tapas::Product(c1, c2.subcells()), theta);
       }
     }
   }
@@ -226,13 +226,13 @@ struct interact {
 typedef tapas::Vec<DIM, real_t> Vec3;
 
 f4vec calc(f4vec &source) {
-  Tapas::Region r(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 1.0, 1.0));
-  Tapas::Cell *root = Tapas::Partition(source.data(), source.size(), 1);
+  TapasBH::Region r(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 1.0, 1.0));
+  TapasBH::Cell *root = TapasBH::Partition(source.data(), source.size(), 1);
 
-  tapas::Map(Approximate(), *root); // or, simply: approximate(*root);
+  TapasBH::Map(Approximate(), *root); // or, simply: approximate(*root);
   
   real_t theta = 0.5;
-  tapas::Map(interact(), tapas::Product(*root, *root), theta);
+  TapasBH::Map(interact(), tapas::Product(*root, *root), theta);
 
   // Get the evaluation result from Tapas
   int nb = root->local_nb();

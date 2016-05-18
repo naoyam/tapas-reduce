@@ -169,6 +169,11 @@ class Cell {
   friend class Partitioner<TSP>;
   friend class iter::BodyIterator<Cell>;
 
+  //========================================================
+  // Typedefs
+  //========================================================
+ public: // public type usings
+  
 #ifdef TAPAS_ONESIDE_LET
   friend struct OptLET<TSP>;
   using LET = OptLET<TSP>;
@@ -177,10 +182,6 @@ class Cell {
   using LET = ExactLET<TSP>;
 #endif
 
-  //========================================================
-  // Typedefs
-  //========================================================
- public: // public type usings
   static const constexpr int Dim = TSP::Dim;
   using FP = typename TSP::FP;
   using SFC = typename TSP::SFC;
@@ -1303,7 +1304,7 @@ ProductIterator<tapas::iterator::CellIterator<hot::Cell<TSP>>,
       CellIterType(c1), CellIterType(c2));
 }
 
-// New Tapas Static Params base class
+// New Tapas Static Params base class (refereed as TSP in classes)
 template<int _DIM, class _FP, class _BODY_TYPE, size_t _BODY_COORD_OFST, class _BODY_ATTR, class _CELL_ATTR>
 struct HOT {
   static const constexpr int Dim = _DIM;
@@ -1329,7 +1330,7 @@ struct HOT {
 };
 
 template<class _TSP>
-struct Tapas2 {
+struct Tapas {
   using TSP = _TSP;
   static const constexpr int Dim = TSP::Dim;
   using FP = typename TSP::FP;
@@ -1338,6 +1339,8 @@ struct Tapas2 {
   using Cell = hot::Cell<TSP>;
   using BodyIterator = typename Cell::BodyIterator;
   using Body = typename TSP::Body;
+  using ProxyCell = typename Cell::LET::ProxyCell;
+  using ProxyBodyIterator = typename Cell::LET::ProxyBodyIterator;
   
   /**
    * @brief Partition and build an octree of the target space.
@@ -1346,6 +1349,50 @@ struct Tapas2 {
   static Cell *Partition(Body *b, index_t nb, int max_nb) {
     Partitioner part(max_nb);
     return part.Partition(b, nb);
+  }
+
+  template<class Funct, class T1_Iter, class T2_Iter, class...Args>
+  static inline void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
+    if (prod.size() > 0) {
+      auto &cell = *(prod.t1_);  // "Cell" may be Cell or ProxyCell
+      cell.mapper().MapP2(f, prod, args...);
+    }
+  }
+
+  template <class Funct, class T1_Iter, class...Args>
+  static inline void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
+    TAPAS_LOG_DEBUG() << "map product iterator size: "
+                      << prod.size() << std::endl;
+
+    if (prod.size() > 0) {
+      auto &cell = prod.t1_.cell(); // cell may be Cell or ProxyCell
+      cell.mapper().MapP1(f, prod, args...);
+    }
+  }
+
+  template <class Funct, class...Args>
+  static inline void Map(Funct f, tapas::iterator::SubCellIterator<Cell> iter, Args...args) {
+    iter.cell().mapper().Map(f, iter, args...);
+  }
+
+  template <class Funct, class...Args>
+  static inline void Map(Funct f, tapas::iterator::SubCellIterator<ProxyCell> iter, Args...args) {
+    iter.cell().mapper().Map(f, iter, args...);
+  }
+
+  template <class Funct, class ...Args>
+  static inline void Map(Funct f, tapas::iterator::BodyIterator<Cell> iter, Args...args) {
+    iter.cell().mapper().Map(f, iter, args...);
+  }
+
+  template <class Funct, class ...Args>
+  static inline void Map(Funct f, ProxyBodyIterator iter, Args...args) {
+    iter.cell().mapper().Map(f, iter, args...);
+  }
+
+  template <class Funct, class...Args>
+  static inline void Map(Funct f, Cell &c, Args...args) {
+    c.mapper().Map(f, c, args...);
   }
 };
 } // namespace tapas

@@ -70,7 +70,7 @@ struct FMM_Params : public tapas::HOT<3, real_t, Body, kBodyCoordOffset, kvec4, 
   using Threading = FMM_Threading;
 };
 
-using TapasFMM = tapas::Tapas2<FMM_Params>;
+using TapasFMM = tapas::Tapas<FMM_Params>;
 
 typedef TapasFMM::Region Region;
 

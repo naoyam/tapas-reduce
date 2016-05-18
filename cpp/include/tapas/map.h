@@ -80,46 +80,56 @@ struct IfCell<T,T,T,Iter1,Iter2> {
 /**
  * Map function f over product of two iterators
  */
-template <class Funct, class T1_Iter, class T2_Iter, class... Args>
-void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
-  using CellType = typename T1_Iter::CellType;
-  if (prod.size() > 0) {
-    CellType &c = *(prod.t1_);
-    c.mapper().MapP2(f, prod, args...);
-  }
-}
+// template <class Funct, class T1_Iter, class T2_Iter, class... Args>
+// void Map(Funct f, ProductIterator<T1_Iter, T2_Iter> prod, Args...args) {
+//   using CellType = typename T1_Iter::CellType;
+//   if (prod.size() > 0) {
+//     CellType &c = *(prod.t1_);
+//     c.mapper().MapP2(f, prod, args...);
+//   }
+// }
 
 
-template <class Funct, class T1_Iter, class...Args>
-inline void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
-  using CellType = typename T1_Iter::CellType;
+// template <class Funct, class T1_Iter, class...Args>
+// inline void Map(Funct f, ProductIterator<T1_Iter> prod, Args...args) {
+//   using CellType = typename T1_Iter::CellType;
 
-  TAPAS_LOG_DEBUG() << "map product iterator size: "
-                    << prod.size() << std::endl;
+//   TAPAS_LOG_DEBUG() << "map product iterator size: "
+//                     << prod.size() << std::endl;
   
-  if (prod.size() > 0) {
-    CellType &c = prod.t1_.cell();
-    c.mapper().MapP1(f, prod, args...);
-  }
-}
+//   if (prod.size() > 0) {
+//     CellType &c = prod.t1_.cell();
+//     c.mapper().MapP1(f, prod, args...);
+//   }
+// }
 
-template <class Funct, class CellType, class... Args>
-inline void Map(Funct f, tapas::iterator::SubCellIterator<CellType> iter, Args...args) {
-  CellType &c = iter.cell();
-  c.mapper().Map(f, iter, args...);
-}
+// template <class Funct, class CellType, class... Args>
+// inline void Map(Funct f, tapas::iterator::SubCellIterator<CellType> iter, Args...args) {
+//   CellType &c = iter.cell();
+//   c.mapper().Map(f, iter, args...);
+// }
 
-template <class Funct, class CellType, class... Args>
-inline void Map(Funct f, iter::BodyIterator<CellType> iter, Args...args) {
-  CellType &c = iter.cell();
-  c.mapper().Map(f, iter, args...);
-}
+// template <class Funct, class CellType, class... Args>
+// inline void Map(Funct f, iter::BodyIterator<CellType> iter, Args...args) {
+//   CellType &c = iter.cell();
+//   c.mapper().Map(f, iter, args...);
+// }
 
-template <class Funct, class Iterator, class...Args>
-inline void Map(Funct f, Iterator iter, Args...args) {
-  auto &c = iter.cell();
-  c.mapper().Map(f, iter, args...);
-}
+#if 0
+// template <class Funct, class Iterator, class...Args>
+// inline void Map(Funct f, typename std::remove_reference<Iterator>::type iter, Args...args) {
+//   auto &c = iter.cell();
+//   c.mapper().Map(f, iter, args...);
+// }
+#endif
+
+// template <class Funct, class T, class...Args>
+// inline void Map(Funct f, T &v, Args...args) {
+//   auto &c = v.cell();
+//   c.cell().mapper().Map(f, c, args...);
+// }
+
+#if 0
 
 template<class Funct, class T, class...Args>
 inline void UpwardMap(Funct f, T &x, Args...args) {
@@ -138,6 +148,8 @@ inline void DownwardMap(Funct f, T &x, Args...args) {
   auto &c = x.cell();
   c.mapper().DownwardMap(f, x, args...);
 }
+
+#endif
 
 template<class T>
 void Accumulate(T& to_val, T val) {

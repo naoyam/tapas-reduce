@@ -30,6 +30,7 @@
 #include "tapas_exafmm.h"
 #include "LaplaceSphericalCPU_tapas.h"
 #include "LaplaceP2PCPU_tapas.h"
+#include "debug_tapasfmm.h"
 
 #ifdef TBB
 # include <tbb/task_scheduler_init.h>
@@ -105,7 +106,7 @@ struct FMM_Upward {
     if (c.IsLeaf()) {
       P2M(c);
     } else {
-      tapas::Map(*this, c.subcells(), theta);
+      TapasFMM::Map(*this, c.subcells(), theta);
       M2M(c);
     }
 
@@ -130,10 +131,10 @@ struct FMM_Downward {
     
     if (c.IsLeaf()) {
       if (c.nb() > 0) {
-        tapas::Map(L2P, c.bodies(), &c);
+        TapasFMM::Map(L2P, c.bodies(), &c);
       }
     } else {
-      tapas::Map(*this, c.subcells());
+      TapasFMM::Map(*this, c.subcells());
     }
   }
 };
@@ -241,7 +242,7 @@ struct FMM_DTT {
       M2L(Ci, Cj, Xperiodic, mutual);                   //  M2L kernel
       
     } else if (Ci.IsLeaf() && Cj.IsLeaf()) {            // Else if both cells are bodies
-      tapas::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic, mutual);
+      TapasFMM::Map(P2P(), tapas::Product(Ci.bodies(), Cj.bodies()), Xperiodic, mutual);
     } else {                                                    // Else if cells are close but not bodies
       tapas_splitCell(Ci, Cj, Ri, Rj, mutual, nspawn, theta);   //  Split cell and call function recursively for child
     }                                                           // End if for multipole acceptance
@@ -257,7 +258,7 @@ struct FMM_DTT {
       //  traverse(ci, Cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
       //}                                                         //
       //End loop over Ci's children
-      tapas::Map(*this, tapas::Product(Ci.subcells(), Cj), mutual, nspawn, theta);
+      TapasFMM::Map(*this, tapas::Product(Ci.subcells(), Cj), mutual, nspawn, theta);
     } else if (Ci_IsLeaf) {                               // Else if Ci is leaf
       //} else if (Ci.IsLeaf()) {                               // Else if Ci is leaf
       assert(!Cj.IsLeaf());                                   //  Make sure Cj is not leaf
@@ -265,24 +266,24 @@ struct FMM_DTT {
       //  traverse(Ci, cj, Xperiodic, mutual, remote);            //   Traverse a single pair of cells
       //}                                                         //
       //End loop over Cj's children
-      tapas::Map(*this, tapas::Product(Ci, Cj.subcells()), mutual, nspawn, theta);
+      TapasFMM::Map(*this, tapas::Product(Ci, Cj.subcells()), mutual, nspawn, theta);
     } else if (mutual && Ci == Cj) {
-      tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
+      TapasFMM::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
 #if 0
     // } else if (Ci.local_nb() >= nspawn) {
     //   //split both
-    //   tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
+    //   TapasFMM::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
     } else if (Ri >= Rj) {                                // Else if Ci is larger than Cj
       // split target(left)
-      tapas::Map(*this, tapas::Product(Ci.subcells(), Cj), mutual, nspawn, theta);
+      TapasFMM::Map(*this, tapas::Product(Ci.subcells(), Cj), mutual, nspawn, theta);
     } else {                                                    // Else if Cj is larger than Ci
       // split source(right)
-      tapas::Map(*this, tapas::Product(Ci, Cj.subcells()), mutual, nspawn, theta);
+      TapasFMM::Map(*this, tapas::Product(Ci, Cj.subcells()), mutual, nspawn, theta);
     }
 #else
     } else {
       // Split both side
-      tapas::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
+      TapasFMM::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
   }
 #endif
   }
@@ -580,8 +581,9 @@ int main(int argc, char ** argv) {
       logger::startTimer("Upward pass");
       double bt = GetTime();
 
-      tapas::Map(FMM_Upward(), *root, args.theta);
-
+      TapasFMM::Cell &c = *root;
+      TapasFMM::Map(FMM_Upward(), c, args.theta);
+      
       double et = GetTime();
       logger::stopTimer("Upward pass");
 
@@ -600,7 +602,7 @@ int main(int argc, char ** argv) {
       double bt = GetTime();
       ResetCount();
 
-      tapas::Map(FMM_DTT(), tapas::Product(*root, *root), args.mutual, args.nspawn, args.theta);
+      TapasFMM::Map(FMM_DTT(), tapas::Product(*root, *root), args.mutual, args.nspawn, args.theta);
 
       double et = GetTime();
       logger::stopTimer("Traverse");
@@ -621,7 +623,7 @@ int main(int argc, char ** argv) {
       logger::startTimer("Downward pass");
       double bt = GetTime();
 
-      tapas::Map(FMM_Downward(), *root);
+      TapasFMM::Map(FMM_Downward(), *root);
       //tapas::DownwardMap(FMM_Downward(), *root);
 
       double et = GetTime();

@@ -27,7 +27,7 @@ static void rank_in_node(MPI_Comm comm, int &rankofnode, int &rankinnode,
                          int &nprocsinnode) {
   int nprocs, rank;
   int cc = MPI_Comm_size(comm, &nprocs);
-  assert(cc == MPI_SUCCESS);
+  assert(cc == MPI_SUCCESS); (void)cc;
   cc = MPI_Comm_rank(comm, &rank);
   assert(cc == MPI_SUCCESS);
   int namelen;

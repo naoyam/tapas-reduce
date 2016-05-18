@@ -354,6 +354,9 @@ struct CPUMapper {
     Cell::ExchangeGlobalLeafAttrs(data.ht_gtree_, data.lroots_);
   }
 
+  /**
+   * CPUMapper::Map  (1-parameter)
+   */
   template<class Funct, class...Args>
   inline void Map(Funct f, Cell &c, Args...args) {
 
@@ -366,7 +369,7 @@ struct CPUMapper {
       }
       
       auto dir = LET::FindMap1Direction(c, f, args...);
-
+      
       switch(dir) {
         case LET::MAP1_UP:
 #ifdef TAPAS_DEBUG
@@ -502,7 +505,6 @@ struct GPUMapper : CPUMapper<Cell, Body, LET> {
   
   GPUMapper() : CPUMapper<Cell, Body, LET>() { }
 
-
   /**
    * \brief Specialization of Map() over body x body product for GPU
    */
@@ -529,34 +531,6 @@ struct GPUMapper : CPUMapper<Cell, Body, LET> {
   inline void Finish() {
     //std::cout << "*** Finish()" << std::endl;
     vmap_.Finish2();
-  }
-  
-  /**
-   *
-   */
-  template <class Funct, class... Args>
-  inline void Map(Funct f, tapas::iterator::SubCellIterator<Cell> iter, Args...args) {
-    using Th = typename Cell::Threading;
-    typename Th::TaskGroup tg;
-
-    TAPAS_ASSERT(iter.index() == 0);
-
-    const auto &data = iter.cell().data();
-    KeyType k = iter.cell().key();
-      
-    for (int i = 0; i < iter.size(); i++) {
-      // In downward mode, if the subcells are out of the local process
-      // (= the cell is a global leaf but not a local root)
-      // just skip if.
-      if (map1_dir_ == Map1Dir::Downward) {
-        KeyType ck = SFC::Child(iter.cell().key(), i);
-        if (data.ht_.count(ck) == 0) continue;
-      }
-      
-      tg.createTask([=]() mutable { this->Map(f, *iter, args...); });
-      iter++;
-    }
-    tg.wait();
   }
 
   /**
@@ -688,6 +662,20 @@ struct GPUMapper : CPUMapper<Cell, Body, LET> {
 #else
     vmap_.map1(f, iter, args...);
 #endif
+  }
+
+  template<class Funct, class...Args>
+  inline void Map(Funct f, Cell &c, Args...args) {
+    Base::Map(f, c, args...);
+  }
+  
+  /**
+   * GPUMapper::Map (subcelliterator)
+   */
+  template <class Funct, class... Args>
+  inline void Map(Funct f, tapas::iterator::SubCellIterator<Cell> iter, Args...args) {
+    // nvcc cannot find this function in the Base (=CPUMapper) class, so it's explicitly written
+    Base::Map(f, iter, args...);
   }
 
   template<class Funct, class...Args>
