@@ -51,9 +51,6 @@ struct P2P {
     INC_P2P;
     SCOREP_USER_REGION("P2P", SCOREP_USER_REGION_TYPE_FUNCTION);
     
-    kreal_t ax = 0;
-    kreal_t ay = 0;
-    kreal_t az = 0;
     vec3 dX = Bi.X - Bj.X - Xperiodic;
     real_t R2 = norm(dX) + EPS2;
 
