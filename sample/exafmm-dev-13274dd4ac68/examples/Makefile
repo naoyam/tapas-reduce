@@ -59,8 +59,8 @@ tapas: parallel_tapas
 serial_tapas: .ALWAYS $(OBJECTS) #tapas_exafmm.cxx $(OBJECTS)
 	$(CXX) $(DEBUG) $(LOG) tapas_exafmm.cxx $(OBJECTS) $(LFLAGS) -o $@
 
-parallel_tapas: .ALWAYS $(OBJECTS) # tapas_exafmm.cxx $(OBJECTS)
-	$(MPICXX) $(DEBUG) $(LOG) -DUSE_MPI tapas_exafmm.cxx $(OBJECTS) $(LFLAGS) -o $@
+parallel_tapas: tapas_exafmm.cxx
+	$(MPICXX) $(DEBUG) $(LOG) -DUSE_MPI tapas_exafmm.cxx $(LFLAGS) -o $@
 
 # Checking O(N) complexity
 complexity: serial.o $(OBJECTS)

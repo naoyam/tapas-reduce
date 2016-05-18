@@ -338,7 +338,12 @@ void CheckResult(Bodies &bodies, int numSamples, real_t cycle, int images) {
             Xperiodic[0] = ix * cycle;
             Xperiodic[1] = iy * cycle;
             Xperiodic[2] = iz * cycle;
-            kernel::P2P(Ci, Cj, Xperiodic, false);
+
+            for (int i = 0; i < Ci->NBODY; i++) {
+              for (int j = 0; j < Cj->NBODY; j++) {
+                P2P()(Ci->BODY[i], Ci->BODY[i].TRG, Cj->BODY[j], Cj->BODY[j].TRG, Xperiodic, false);
+              }
+            }
           }
         }
       }
