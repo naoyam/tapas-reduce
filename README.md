@@ -50,9 +50,9 @@ A. Check the version of underlying g++. icpc/mpicxx uses g++ as a backend. If it
 
 |Name                   | Possible values  | Default value | Description                                               |
 |:----------------------|:-----------------|:--------------|:----------------------------------------------------------|
-|TAPAS_DEBUG            | unset, 0, or 1   | unset         | Enable verbose debug output. Serious performance slowdown |
-|USE_MPI                | unset/any        | unset         | Use MPI version of Tapas (in ExaFMM example)              | 
-|TAPAS_REPORT_PREFIX    | filename prefix  | unset         | Prefix of performance report file names                   |
+|TAPAS_DEBUG            | unset, 0, or 1   | unset         | Enable verbose debug output. Minor performance slowdown   |
+|TAPAS_DEBUG_DUMP       | unset, 0, or 1   | unset         | Enable verbose debug output. Serious performance slowdown |
+|TAPAS_REPORT_PREFIX    | filename prefix  | unset         | Prefix of performance report file names (*.csv)           |
 |TAPAS_REPORT_SUFFIX    | part of filename | unset         | Suffix of performance report file names                   |
 |TAPAS_DEBUG_COMM_MATRIX| unset/any        | unset         | Print Communication Matrix in MPI_Alltoallv()             |
 |TAPAS_DEBUG_HISTOGRAM  | unset/any        | unset         | Print depth histogram of the tree                         |
