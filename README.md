@@ -19,7 +19,7 @@ Tapas requires C++11 compiler. Recommended compiler versions are:
 
 ### The FMM example 
 
-The most basic compilation
+The most basic compilation:
 
     $ # Non-MPI, serial version
     $ cd sample/exafmm-dev-13274dd4ac68/examples
