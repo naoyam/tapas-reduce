@@ -30,7 +30,7 @@
 #include "tapas_exafmm.h"
 #include "LaplaceSphericalCPU_tapas.h"
 #include "LaplaceP2PCPU_tapas.h"
-#include "debug_tapasfmm.h"
+#include "tapasfmm_debug.h"
 
 #ifdef TBB
 # include <tbb/task_scheduler_init.h>
@@ -269,20 +269,16 @@ struct FMM_DTT {
       TapasFMM::Map(*this, tapas::Product(Ci, Cj.subcells()), mutual, nspawn, theta);
     } else if (mutual && Ci == Cj) {
       TapasFMM::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
-#if 0
-    // } else if (Ci.local_nb() >= nspawn) {
-    //   //split both
-    //   TapasFMM::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
-    } else if (Ri >= Rj) {                                // Else if Ci is larger than Cj
-      // split target(left)
+#if 1
+    } else if (Ri >= Rj) {
+      // 1-side split
       TapasFMM::Map(*this, tapas::Product(Ci.subcells(), Cj), mutual, nspawn, theta);
     } else {                                                    // Else if Cj is larger than Ci
-      // split source(right)
       TapasFMM::Map(*this, tapas::Product(Ci, Cj.subcells()), mutual, nspawn, theta);
     }
 #else
     } else {
-      // Split both side
+      // 2-side split
       TapasFMM::Map(*this, tapas::Product(Ci.subcells(), Cj.subcells()), mutual, nspawn, theta);
   }
 #endif
