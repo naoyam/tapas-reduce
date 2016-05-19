@@ -33,6 +33,11 @@ ifneq (,$(COUNT))
 	MPICXX += -DCOUNT
 endif
 
+ifneq (,$(PAPI))
+	CXX += -DPAPI -lpapi
+	MPICXX += -DPAPI -lpapi
+endif
+
 #CXX += -DTAPAS_DEBUG_HISTOGRAM
 #MPICXX += -DTAPAS_DEBUG_HISTOGRAM
 
