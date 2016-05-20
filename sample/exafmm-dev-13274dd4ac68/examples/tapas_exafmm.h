@@ -38,11 +38,7 @@ const constexpr size_t kBodyCoordOffset = MemberOffset(&Body::X);
 #endif
 
 // Select MPI or single-process
-#ifdef USE_MPI
 #include "tapas/hot.h"
-#else
-#include "tapas/single_node_hot.h"
-#endif /* USE_MPI */
 
 #ifdef MTHREADS
 #warning "MTHREADS is defined. Do you mean \"MTHREAD\"?"
