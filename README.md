@@ -21,6 +21,7 @@ Tapas requires C++11 compiler. Recommended compiler versions are:
 
 Basic compilation:
 
+    $ cd sample/exafmm-dev-13274dd4ac68/examples
     $ mpicxx -std=c++11 -O2 -lrt tapas_exafmm.cxx -I../include -I../../../cpp/include -DUSE_MPI -DSpherical -DEXPANSION=10 -DFP64 -o parallel_tapas
 
 * `USE_MPI` definition is for Tapas. Compiling without `USE_MPI` is deprecated. 
@@ -36,7 +37,6 @@ In such a case, you can speicfy the underlying C++ compiler via environment vari
     
 For advanced optimization with Intel Compiler,
 
-    $ cd sample/exafmm-dev-13274dd4ac68/examples
     $ mpicxx -std=c++11 -O2 -lrt tapas_exafmm.cxx -I../include -I../../../cpp/include -DUSE_MPI -DSpherical -DEXPANSION=10 -DFP64 -o parallel_tapas \
         -funroll-loops -xHOST -O3 -no-prec-div -fp-model fast=2 -no-inline-max-per-routine -no-inline-max-per-compile 
         
